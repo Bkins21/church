@@ -1,0 +1,103 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net: Default Deny All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- REUSABLE HELPER PRIMITIVES ---
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isAdmin() {
+      // Bootstrapped admin check using user email from runtime or an admins collection lookup
+      return isSignedIn() && (
+        request.auth.token.email == 'boluakintola@gmail.com' || 
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- REGISTRATION VALIDATION BLUEPRINT ---
+
+    function isValidRegistration(data) {
+      return data.keys().hasAll(['id', 'eventId', 'eventTitle', 'userName', 'userEmail', 'userPhone', 'ticketCode']) &&
+        data.keys().size() <= 14 &&
+        data.id is string && data.id.size() <= 128 &&
+        data.eventId is string && data.eventId.size() <= 128 &&
+        data.eventTitle is string && data.eventTitle.size() <= 256 &&
+        data.userName is string && data.userName.size() <= 256 &&
+        data.userEmail is string && data.userEmail.size() <= 256 &&
+        data.userPhone is string && data.userPhone.size() <= 128 &&
+        data.ticketCode is string && data.ticketCode.size() <= 128 &&
+        (!('userBranch' in data) || (data.userBranch is string && data.userBranch.size() <= 256)) &&
+        (!('eventDate' in data) || (data.eventDate is string && data.eventDate.size() <= 128)) &&
+        (!('eventLocation' in data) || (data.eventLocation is string && data.eventLocation.size() <= 256)) &&
+        (!('registrationDate' in data) || (data.registrationDate is string && data.registrationDate.size() <= 128)) &&
+        (!('mode' in data) || (data.mode == 'physical' || data.mode == 'virtual'));
+    }
+
+    // --- COLLECTIONS ---
+
+    // Admins Collection: Only system/existing admins or those with the correct passcode can read/write
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && adminId == request.auth.uid && incoming().passcode == 'admin';
+      allow delete: if isSignedIn() && adminId == request.auth.uid;
+      allow write: if isAdmin();
+    }
+
+    // Registrations Collection
+    match /registrations/{registrationId} {
+      // Allow single document get if the ID is valid (anyone can read their own ticket if they know the document ID)
+      allow get: if isValidId(registrationId);
+      
+      // Only authenticated Admins can list/query all registrations
+      allow list: if isAdmin();
+
+      // Anyone can submit a registration form (Create)
+      allow create: if isValidId(registrationId) && isValidRegistration(incoming());
+
+      // Only Admins can modify or delete registrations
+      allow update, delete: if isAdmin();
+    }
+
+    // --- SUBSCRIBERS VALIDATION & RULES ---
+
+    function isValidSubscriber(data) {
+      return data.keys().hasAll(['id', 'email', 'subscribedAt']) &&
+        data.keys().size() <= 4 &&
+        data.id is string && data.id.size() <= 128 &&
+        data.email is string && data.email.size() <= 256 &&
+        data.subscribedAt is string && data.subscribedAt.size() <= 128;
+    }
+
+    // Subscribers Collection: Anyone can subscribe with a valid format, only Admins can read or delete subscribers
+    match /subscribers/{subscriberId} {
+      allow read: if isAdmin();
+      allow create: if isValidId(subscriberId) && isValidSubscriber(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // Teachings (Audio sermons) Collection: Anyone can read, only Admins can create or delete
+    match /teachings/{teachingId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}

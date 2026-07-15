@@ -1,0 +1,40 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700;800&family=Poppins:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.cdnfonts.com/css/lemon-milk');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Lemon Milk", sans-serif;
+  --font-church: "Cinzel", serif;
+  --font-mono: "JetBrains Mono", monospace;
+  
+  /* Custom requested palette colors */
+  --color-rich-black: #0E1013;
+  --color-charcoal: #28303D;
+  --color-midnight-blue: #071940;
+  --color-royal-blue: #0A3584;
+  --color-electric-blue: #076EC5;
+  --color-soft-white: #ECECEC;
+  --color-medium-gray: #585B64;
+  --color-light-gray: #9B9EA6;
+
+  /* Remapping GEC/CCI legacy variables to the new premium palette */
+  --color-cci-blue-950: #0E1013; /* Rich Black (Main Background) */
+  --color-cci-blue-900: #28303D; /* Charcoal (Cards, Panels) */
+  --color-cci-blue-800: #071940; /* Midnight Blue (Dark Overlays) */
+  --color-cci-blue-700: #0A3584; /* Royal Blue (Primary Accent) */
+  --color-cci-gold-300: #ECECEC; /* Soft White */
+  --color-cci-gold-400: #076EC5; /* Electric Blue (Light Accent/Glow) */
+  --color-cci-gold-500: #0A3584; /* Royal Blue (Primary Accent) */
+  --color-cci-gold-600: #076EC5; /* Electric Blue (Glow) */
+  --color-cci-gold-700: #071940; /* Midnight Blue */
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    background-color: #0E1013; /* Rich Black */
+    color: #ECECEC; /* Soft White */
+    -webkit-font-smoothing: antialiased;
+  }
+}
