@@ -21,7 +21,12 @@ import AdminLogin from './components/AdminLogin';
 import { supabase, isSupabaseConfigured } from './supabase';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('home');
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    const path = window.location.pathname;
+    if (path === '/crosswordmedia') return 'crosswordmedia';
+    if (path === '/admin') return 'admin';
+    return 'home';
+  });
   const [prefilledReg, setPrefilledReg] = useState<{ firstName: string; surname: string; email: string; eventId: string } | null>(null);
 
   // Admin and Dynamic Catalog States
