@@ -62,12 +62,20 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
       return;
     }
 
+    const redirectToLogin = () => {
+      if (window.location.pathname !== '/crosswordmedia') {
+        window.history.pushState(null, '', '/crosswordmedia');
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      }
+    };
+
     supabase?.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session?.user) {
         verifyAdminAccess(session.user.id, session.user.email);
       } else {
         setCheckingAuth(false);
+        redirectToLogin();
       }
     });
 
@@ -78,6 +86,7 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
       } else {
         setIsAdminUser(false);
         setCheckingAuth(false);
+        redirectToLogin();
       }
     }) || { data: { subscription: null } };
 
@@ -226,6 +235,10 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
       await supabase.auth.signOut();
       setSession(null);
       setIsAdminUser(false);
+      if (window.location.pathname !== '/crosswordmedia') {
+        window.history.pushState(null, '', '/crosswordmedia');
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      }
     }
   };
 

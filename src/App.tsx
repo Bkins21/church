@@ -17,6 +17,7 @@ import { Play, Pause, X, Radio, MessageSquare, Send, Heart, Users, Sparkles, Arr
 import { motion, AnimatePresence } from 'motion/react';
 
 import CrosswordMedia from './components/CrosswordMedia';
+import AdminLogin from './components/AdminLogin';
 import { supabase, isSupabaseConfigured } from './supabase';
 
 export default function App() {
@@ -127,11 +128,13 @@ export default function App() {
     };
   }, []);
 
-  // Listen to popstate and initial URL path for our hidden admin route (/crosswordmedia)
+  // Listen to popstate and initial URL path for our hidden admin routes (/crosswordmedia, /admin)
   useEffect(() => {
     const handlePath = () => {
       if (window.location.pathname === '/crosswordmedia') {
         setActiveTab('crosswordmedia');
+      } else if (window.location.pathname === '/admin') {
+        setActiveTab('admin');
       }
     };
     handlePath();
@@ -143,6 +146,8 @@ export default function App() {
     setActiveTab(tab);
     if (tab === 'crosswordmedia') {
       window.history.pushState(null, '', '/crosswordmedia');
+    } else if (tab === 'admin') {
+      window.history.pushState(null, '', '/admin');
     } else {
       window.history.pushState(null, '', '/');
     }
@@ -332,6 +337,15 @@ export default function App() {
   }, [activeTab]);
 
   if (activeTab === 'crosswordmedia') {
+    return (
+      <AdminLogin
+        onLoginSuccess={() => handleTabChange('admin')}
+        onNavigateHome={() => handleTabChange('home')}
+      />
+    );
+  }
+
+  if (activeTab === 'admin') {
     return (
       <CrosswordMedia
         onClose={() => handleTabChange('home')}
