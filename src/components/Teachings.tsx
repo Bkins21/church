@@ -295,7 +295,7 @@ export default function Teachings({
       {/* Page Header */}
       <div className="text-center max-w-3xl mx-auto mb-16">
         <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight text-white mb-4">
-          GEC Media Center & Audio Teachings
+          Crossword Media Center
         </h2>
         <div className="w-16 h-1 bg-gradient-to-r from-cci-gold-600 to-cci-gold-400 mx-auto mb-5 rounded-full" />
         <p className="text-sm sm:text-base text-slate-300">

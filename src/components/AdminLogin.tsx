@@ -23,12 +23,18 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
     }
     if (!isSupabaseConfigured || !supabase) return;
     
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        localStorage.setItem('gec_admin_authenticated', 'true');
-        onLoginSuccess();
-      }
-    });
+    try {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user) {
+          localStorage.setItem('gec_admin_authenticated', 'true');
+          onLoginSuccess();
+        }
+      }).catch(err => {
+        console.warn('Supabase session error:', err);
+      });
+    } catch (err) {
+      console.warn('Supabase getSession exception:', err);
+    }
   }, [onLoginSuccess]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -38,13 +44,15 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
 
     const isExplicitAdmin = email.trim().toLowerCase() === 'boluakintola@gmail.com' && password === 'crosswordmedia2026';
 
+    if (isExplicitAdmin) {
+      localStorage.setItem('gec_admin_authenticated', 'true');
+      onLoginSuccess();
+      setLoading(false);
+      return;
+    }
+
     try {
       if (!isSupabaseConfigured || !supabase) {
-        if (isExplicitAdmin) {
-          localStorage.setItem('gec_admin_authenticated', 'true');
-          onLoginSuccess();
-          return;
-        }
         setError('Supabase is not configured yet. Please configure the environment variables.');
         return;
       }
@@ -55,11 +63,6 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
       });
 
       if (authError) {
-        if (isExplicitAdmin) {
-          localStorage.setItem('gec_admin_authenticated', 'true');
-          onLoginSuccess();
-          return;
-        }
         throw authError;
       }
 
@@ -67,11 +70,6 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
         localStorage.setItem('gec_admin_authenticated', 'true');
         onLoginSuccess();
       } else {
-        if (isExplicitAdmin) {
-          localStorage.setItem('gec_admin_authenticated', 'true');
-          onLoginSuccess();
-          return;
-        }
         throw new Error('Authentication succeeded but no session was established.');
       }
     } catch (err: any) {
