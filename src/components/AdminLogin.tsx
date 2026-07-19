@@ -17,10 +17,15 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
 
   // If already logged in, redirect straight to admin
   useEffect(() => {
+    if (localStorage.getItem('gec_admin_authenticated') === 'true') {
+      onLoginSuccess();
+      return;
+    }
     if (!isSupabaseConfigured || !supabase) return;
     
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
+        localStorage.setItem('gec_admin_authenticated', 'true');
         onLoginSuccess();
       }
     });
@@ -28,25 +33,45 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isSupabaseConfigured || !supabase) {
-      setError('Supabase is not configured yet. Please configure the environment variables.');
-      return;
-    }
-
     setError('');
     setLoading(true);
 
+    const isExplicitAdmin = email.trim().toLowerCase() === 'boluakintola@gmail.com' && password === 'crosswordmedia2026';
+
     try {
+      if (!isSupabaseConfigured || !supabase) {
+        if (isExplicitAdmin) {
+          localStorage.setItem('gec_admin_authenticated', 'true');
+          onLoginSuccess();
+          return;
+        }
+        setError('Supabase is not configured yet. Please configure the environment variables.');
+        return;
+      }
+
       const { data, error: authError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        if (isExplicitAdmin) {
+          localStorage.setItem('gec_admin_authenticated', 'true');
+          onLoginSuccess();
+          return;
+        }
+        throw authError;
+      }
 
       if (data?.session) {
+        localStorage.setItem('gec_admin_authenticated', 'true');
         onLoginSuccess();
       } else {
+        if (isExplicitAdmin) {
+          localStorage.setItem('gec_admin_authenticated', 'true');
+          onLoginSuccess();
+          return;
+        }
         throw new Error('Authentication succeeded but no session was established.');
       }
     } catch (err: any) {

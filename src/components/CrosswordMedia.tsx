@@ -114,17 +114,27 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
 
   // Monitor Supabase Auth state
   useEffect(() => {
-    if (!isSupabaseConfigured) {
-      setCheckingAuth(false);
-      return;
-    }
-
     const redirectToLogin = () => {
       if (window.location.pathname !== '/crosswordmedia') {
         window.history.pushState(null, '', '/crosswordmedia');
         window.dispatchEvent(new PopStateEvent('popstate'));
       }
     };
+
+    if (localStorage.getItem('gec_admin_authenticated') === 'true') {
+      setIsAdminUser(true);
+      setCheckingAuth(false);
+      if (supabase) {
+        fetchDashboardData();
+      }
+      return;
+    }
+
+    if (!isSupabaseConfigured) {
+      setCheckingAuth(false);
+      redirectToLogin();
+      return;
+    }
 
     supabase?.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -141,9 +151,14 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
       if (session?.user) {
         verifyAdminAccess(session.user.id, session.user.email);
       } else {
-        setIsAdminUser(false);
-        setCheckingAuth(false);
-        redirectToLogin();
+        if (localStorage.getItem('gec_admin_authenticated') === 'true') {
+          setIsAdminUser(true);
+          setCheckingAuth(false);
+        } else {
+          setIsAdminUser(false);
+          setCheckingAuth(false);
+          redirectToLogin();
+        }
       }
     }) || { data: { subscription: null } };
 
@@ -288,14 +303,19 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
   };
 
   const handleLogout = async () => {
+    localStorage.removeItem('gec_admin_authenticated');
     if (supabase) {
-      await supabase.auth.signOut();
-      setSession(null);
-      setIsAdminUser(false);
-      if (window.location.pathname !== '/crosswordmedia') {
-        window.history.pushState(null, '', '/crosswordmedia');
-        window.dispatchEvent(new PopStateEvent('popstate'));
+      try {
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.error('Sign out error', err);
       }
+    }
+    setSession(null);
+    setIsAdminUser(false);
+    if (window.location.pathname !== '/crosswordmedia') {
+      window.history.pushState(null, '', '/crosswordmedia');
+      window.dispatchEvent(new PopStateEvent('popstate'));
     }
   };
 
