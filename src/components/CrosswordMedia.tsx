@@ -53,6 +53,10 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
   const [songCoverUrl, setSongCoverUrl] = useState('');
   const [songLyrics, setSongLyrics] = useState('');
   const [songAudioUrl, setSongAudioUrl] = useState('');
+  const [songFile, setSongFile] = useState<File | null>(null);
+  const [uploadingSong, setUploadingSong] = useState(false);
+  const [songUploadProgress, setSongUploadProgress] = useState(0);
+  const songFileInputRef = useRef<HTMLInputElement>(null);
 
   // Gallery states
   const [galleryList, setGalleryList] = useState<GalleryItem[]>(() => {
@@ -486,21 +490,65 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
   };
 
   // Add Song Handler
-  const handleAddSong = (e: React.FormEvent) => {
+  const handleAddSong = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!songTitle) {
-      alert('Sermon/Song title is required.');
+      alert('Song title is required.');
       return;
     }
+
+    setUploadingSong(true);
+    setSongUploadProgress(10);
+
+    let finalAudioUrl = songAudioUrl.trim();
+
+    try {
+      if (songFile) {
+        if (isSupabaseConfigured && supabase) {
+          setSongUploadProgress(30);
+          const fileExt = songFile.name.split('.').pop();
+          const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+          const filePath = `songs/${fileName}`;
+
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('sermons')
+            .upload(filePath, songFile, {
+              cacheControl: '3600',
+              upsert: false
+            });
+
+          if (uploadError) throw uploadError;
+          setSongUploadProgress(70);
+
+          const { data: { publicUrl } } = supabase.storage
+            .from('sermons')
+            .getPublicUrl(filePath);
+
+          finalAudioUrl = publicUrl;
+          setSongUploadProgress(90);
+        } else {
+          // Fallback to local blob URL if Supabase is not configured
+          finalAudioUrl = URL.createObjectURL(songFile);
+        }
+      }
+    } catch (err: any) {
+      console.error('Song upload failed:', err);
+      alert(`Upload Failed: ${err.message || 'Error uploading file to Supabase'}`);
+      setUploadingSong(false);
+      setSongUploadProgress(0);
+      return;
+    }
+
     const newSong: Song = {
       id: `user-song-${Date.now()}`,
       title: songTitle.trim(),
       artist: songArtist.trim() || 'Crossworship',
       album: songAlbum.trim() || 'Single',
       duration: '4:30',
-      audioUrl: songAudioUrl.trim() || 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+      audioUrl: finalAudioUrl || 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
       coverUrl: songCoverUrl.trim() || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&auto=format&fit=crop',
-      lyrics: songLyrics.trim() || '[00:00] Worship the Lord in the beauty of holiness...'
+      lyrics: songLyrics.trim() || '[00:00] Worship the Lord in the beauty of holiness...',
+      uploadedByUser: true
     };
 
     const updated = [newSong, ...songsList];
@@ -514,6 +562,13 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
     setSongCoverUrl('');
     setSongLyrics('');
     setSongAudioUrl('');
+    setSongFile(null);
+    if (songFileInputRef.current) {
+      songFileInputRef.current.value = '';
+    }
+    setUploadingSong(false);
+    setSongUploadProgress(100);
+    setTimeout(() => setSongUploadProgress(0), 1000);
     alert('Song uploaded successfully!');
   };
 
@@ -1168,10 +1223,32 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
-                            Audio Stream URL (Optional, fallback provided)
+                            Upload Audio File from Device
+                          </label>
+                          <input
+                            type="file"
+                            accept="audio/*"
+                            ref={songFileInputRef}
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                setSongFile(e.target.files[0]);
+                              }
+                            }}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-2 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all file:mr-4 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-mono file:font-semibold file:bg-cci-gold-600 file:text-black hover:file:bg-cci-gold-500 cursor-pointer"
+                          />
+                          {songFile && (
+                            <p className="text-[10px] text-cci-gold-400 mt-1.5 font-mono">
+                              ✓ Selected: {songFile.name} ({(songFile.size / (1024 * 1024)).toFixed(2)} MB)
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                            OR: Audio Stream URL (Fallback if no file chosen)
                           </label>
                           <input
                             type="text"
@@ -1196,11 +1273,37 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
                         />
                       </div>
 
+                      {uploadingSong && (
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-[10px] font-mono text-cci-gold-400">
+                            <span>Uploading audio dynamic files...</span>
+                            <span>{songUploadProgress}%</span>
+                          </div>
+                          <div className="w-full bg-rich-black h-1.5 rounded-full overflow-hidden border border-midnight-blue">
+                            <div 
+                              className="bg-gradient-to-r from-cci-gold-600 to-cci-gold-400 h-full rounded-full transition-all duration-300"
+                              style={{ width: `${songUploadProgress}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
                       <button
                         type="submit"
-                        className="py-2.5 px-6 rounded-xl bg-gradient-to-r from-royal-blue to-electric-blue text-xs font-bold uppercase tracking-wider text-white hover:opacity-95 transition-all flex items-center gap-1.5 shadow-md"
+                        disabled={uploadingSong}
+                        className="py-2.5 px-6 rounded-xl bg-gradient-to-r from-royal-blue to-electric-blue text-xs font-bold uppercase tracking-wider text-white hover:opacity-95 transition-all flex items-center gap-1.5 shadow-md disabled:opacity-50"
                       >
-                        <Plus className="h-4 w-4" /> Add Song
+                        {uploadingSong ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>Uploading files and recording...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="h-4 w-4" />
+                            <span>Add Song</span>
+                          </>
+                        )}
                       </button>
                     </form>
                   </div>
