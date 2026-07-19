@@ -3,10 +3,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Lock, User, Mail, Database, Trash2, LogOut, CheckCircle2, 
   AlertCircle, Upload, Loader2, Plus, Search, FileText, Music, 
-  Settings, Key, Eye, EyeOff, LayoutDashboard, Users, MessageSquare, Clipboard, ArrowLeft
+  Settings, Key, Eye, EyeOff, LayoutDashboard, Users, MessageSquare, Clipboard, ArrowLeft,
+  Image as ImageIcon, Calendar
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured, checkIfAdmin } from '../supabase';
-import { Teaching, Registration, Subscriber } from '../types';
+import { Teaching, Registration, Subscriber, Song, GalleryItem, ChurchEvent } from '../types';
+import { upcomingMeetings, galleryItems } from '../data';
 
 interface CrosswordMediaProps {
   onClose: () => void;
@@ -28,13 +30,68 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   
   // Dashboard states
-  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'teachings' | 'registrations' | 'subscribers' | 'database'>('overview');
+  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'songs' | 'teachings' | 'gallery' | 'events' | 'registrations' | 'subscribers' | 'settings' | 'database'>('overview');
   
   // Data lists
   const [teachings, setTeachings] = useState<Teaching[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [dataLoading, setDataLoading] = useState<boolean>(false);
+
+  // Songs states
+  const [songsList, setSongsList] = useState<Song[]>(() => {
+    try {
+      const saved = localStorage.getItem('gec_user_uploaded_songs');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [songTitle, setSongTitle] = useState('');
+  const [songArtist, setSongArtist] = useState('');
+  const [songAlbum, setSongAlbum] = useState('');
+  const [songCoverUrl, setSongCoverUrl] = useState('');
+  const [songLyrics, setSongLyrics] = useState('');
+  const [songAudioUrl, setSongAudioUrl] = useState('');
+
+  // Gallery states
+  const [galleryList, setGalleryList] = useState<GalleryItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('gec_user_uploaded_gallery');
+      return saved ? JSON.parse(saved) : galleryItems;
+    } catch {
+      return galleryItems;
+    }
+  });
+  const [galleryTitle, setGalleryTitle] = useState('');
+  const [galleryDesc, setGalleryDesc] = useState('');
+  const [galleryCategory, setGalleryCategory] = useState<'Worship' | 'Preaching' | 'Outreach' | 'Community' | 'Reboot Camp'>('Worship');
+  const [galleryImageUrl, setGalleryImageUrl] = useState('');
+
+  // Events states
+  const [eventsList, setEventsList] = useState<ChurchEvent[]>(() => {
+    try {
+      const saved = localStorage.getItem('gec_upcoming_meetings');
+      return saved ? JSON.parse(saved) : upcomingMeetings;
+    } catch {
+      return upcomingMeetings;
+    }
+  });
+  const [eventTitleInput, setEventTitleInput] = useState('');
+  const [eventDateInput, setEventDateInput] = useState('');
+  const [eventTimeInput, setEventTimeInput] = useState('');
+  const [eventLocationInput, setEventLocationInput] = useState('');
+  const [eventModeInput, setEventModeInput] = useState<'physical' | 'virtual' | 'hybrid'>('physical');
+  const [eventBannerInput, setEventBannerInput] = useState('');
+  const [eventDescriptionInput, setEventDescriptionInput] = useState('');
+  const [eventSpeakerInput, setEventSpeakerInput] = useState('');
+
+  // Site Settings states
+  const [churchNameSetting, setChurchNameSetting] = useState(() => localStorage.getItem('gec_setting_church_name') || "God's Edifice Church");
+  const [residentPastorSetting, setResidentPastorSetting] = useState(() => localStorage.getItem('gec_setting_pastor') || "Pastor Abiodun Adebayo");
+  const [pastorPhotoSetting, setPastorPhotoSetting] = useState(() => localStorage.getItem('gec_setting_pastor_photo') || "https://images.unsplash.com/photo-1560250097-0b93528c311a?q=80&w=400&auto=format&fit=crop");
+  const [contactEmailSetting, setContactEmailSetting] = useState(() => localStorage.getItem('gec_setting_email') || "contact@godsedifice.org");
+  const [contactPhoneSetting, setContactPhoneSetting] = useState(() => localStorage.getItem('gec_setting_phone') || "+234 803 111 2222");
   
   // Form states for uploading sermon
   const [sermonTitle, setSermonTitle] = useState('');
@@ -381,6 +438,137 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
     }
   };
 
+  // Add Song Handler
+  const handleAddSong = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!songTitle) {
+      alert('Sermon/Song title is required.');
+      return;
+    }
+    const newSong: Song = {
+      id: `user-song-${Date.now()}`,
+      title: songTitle.trim(),
+      artist: songArtist.trim() || 'Crossworship',
+      album: songAlbum.trim() || 'Single',
+      duration: '4:30',
+      audioUrl: songAudioUrl.trim() || 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+      coverUrl: songCoverUrl.trim() || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&auto=format&fit=crop',
+      lyrics: songLyrics.trim() || '[00:00] Worship the Lord in the beauty of holiness...'
+    };
+
+    const updated = [newSong, ...songsList];
+    setSongsList(updated);
+    localStorage.setItem('gec_user_uploaded_songs', JSON.stringify(updated));
+
+    // Reset Form
+    setSongTitle('');
+    setSongArtist('');
+    setSongAlbum('');
+    setSongCoverUrl('');
+    setSongLyrics('');
+    setSongAudioUrl('');
+    alert('Song uploaded successfully!');
+  };
+
+  // Delete Song Handler
+  const handleDeleteSong = (id: string) => {
+    if (!confirm('Are you sure you want to delete this song?')) return;
+    const updated = songsList.filter(s => s.id !== id);
+    setSongsList(updated);
+    localStorage.setItem('gec_user_uploaded_songs', JSON.stringify(updated));
+  };
+
+  // Add Gallery Handler
+  const handleAddGallery = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!galleryTitle || !galleryImageUrl) {
+      alert('Title and Image URL are required.');
+      return;
+    }
+    const newItem: GalleryItem = {
+      id: `gallery-${Date.now()}`,
+      title: galleryTitle.trim(),
+      description: galleryDesc.trim() || 'God’s Edifice Church dynamic moment.',
+      category: galleryCategory,
+      imageUrl: galleryImageUrl.trim(),
+      date: new Date().toISOString().split('T')[0]
+    };
+
+    const updated = [newItem, ...galleryList];
+    setGalleryList(updated);
+    localStorage.setItem('gec_user_uploaded_gallery', JSON.stringify(updated));
+
+    // Reset Form
+    setGalleryTitle('');
+    setGalleryDesc('');
+    setGalleryCategory('Worship');
+    setGalleryImageUrl('');
+    alert('Gallery image uploaded successfully!');
+  };
+
+  // Delete Gallery Handler
+  const handleDeleteGallery = (id: string) => {
+    if (!confirm('Are you sure you want to delete this gallery image?')) return;
+    const updated = galleryList.filter(item => item.id !== id);
+    setGalleryList(updated);
+    localStorage.setItem('gec_user_uploaded_gallery', JSON.stringify(updated));
+  };
+
+  // Add Event Handler
+  const handleAddEvent = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!eventTitleInput || !eventDateInput) {
+      alert('Event title and date are required.');
+      return;
+    }
+    const newEvent: ChurchEvent = {
+      id: `event-${Date.now()}`,
+      title: eventTitleInput.trim(),
+      date: eventDateInput.trim(),
+      time: eventTimeInput.trim() || '06:00 PM',
+      location: eventLocationInput.trim() || 'GEC Lekki HQ',
+      mode: eventModeInput,
+      banner: eventBannerInput.trim() || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1200&auto=format&fit=crop',
+      description: eventDescriptionInput.trim() || 'GEC centerpiece apostolic meeting.',
+      speaker: eventSpeakerInput.trim() || 'Pastor Abiodun Adebayo',
+      registeredCount: 0
+    };
+
+    const updated = [newEvent, ...eventsList];
+    setEventsList(updated);
+    localStorage.setItem('gec_upcoming_meetings', JSON.stringify(updated));
+
+    // Reset Form
+    setEventTitleInput('');
+    setEventDateInput('');
+    setEventTimeInput('');
+    setEventLocationInput('');
+    setEventModeInput('physical');
+    setEventBannerInput('');
+    setEventDescriptionInput('');
+    setEventSpeakerInput('');
+    alert('Meeting created successfully!');
+  };
+
+  // Delete Event Handler
+  const handleDeleteEvent = (id: string) => {
+    if (!confirm('Are you sure you want to delete this event?')) return;
+    const updated = eventsList.filter(ev => ev.id !== id);
+    setEventsList(updated);
+    localStorage.setItem('gec_upcoming_meetings', JSON.stringify(updated));
+  };
+
+  // Save Site Settings Handler
+  const handleSaveSettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    localStorage.setItem('gec_setting_church_name', churchNameSetting.trim());
+    localStorage.setItem('gec_setting_pastor', residentPastorSetting.trim());
+    localStorage.setItem('gec_setting_pastor_photo', pastorPhotoSetting.trim());
+    localStorage.setItem('gec_setting_email', contactEmailSetting.trim());
+    localStorage.setItem('gec_setting_phone', contactPhoneSetting.trim());
+    alert('Site settings saved successfully!');
+  };
+
   // SQL Script text to render
   const sqlSetupScript = `-- 1. Create a Public "sermons" bucket in Storage
 -- (Go to Storage in Supabase Dashboard, create a new bucket named "sermons" and make it Public)
@@ -690,6 +878,18 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
                   </button>
 
                   <button
+                    onClick={() => setActiveSubTab('songs')}
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono tracking-wider flex items-center gap-3 transition-all ${
+                      activeSubTab === 'songs' 
+                        ? 'bg-gradient-to-r from-royal-blue to-electric-blue text-white border-l-4 border-cci-gold-400' 
+                        : 'text-light-gray hover:bg-midnight-blue/40 hover:text-white'
+                    }`}
+                  >
+                    <Music className="h-4 w-4" />
+                    <span>UPLOAD SONGS ({songsList.length})</span>
+                  </button>
+
+                  <button
                     onClick={() => setActiveSubTab('teachings')}
                     className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono tracking-wider flex items-center gap-3 transition-all ${
                       activeSubTab === 'teachings' 
@@ -697,8 +897,32 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
                         : 'text-light-gray hover:bg-midnight-blue/40 hover:text-white'
                     }`}
                   >
-                    <Music className="h-4 w-4" />
-                    <span>UPLOAD & SERMONS ({teachings.length})</span>
+                    <FileText className="h-4 w-4" />
+                    <span>UPLOAD TEACHINGS ({teachings.length})</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveSubTab('gallery')}
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono tracking-wider flex items-center gap-3 transition-all ${
+                      activeSubTab === 'gallery' 
+                        ? 'bg-gradient-to-r from-royal-blue to-electric-blue text-white border-l-4 border-cci-gold-400' 
+                        : 'text-light-gray hover:bg-midnight-blue/40 hover:text-white'
+                    }`}
+                  >
+                    <ImageIcon className="h-4 w-4" />
+                    <span>UPLOAD GALLERY ({galleryList.length})</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveSubTab('events')}
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono tracking-wider flex items-center gap-3 transition-all ${
+                      activeSubTab === 'events' 
+                        ? 'bg-gradient-to-r from-royal-blue to-electric-blue text-white border-l-4 border-cci-gold-400' 
+                        : 'text-light-gray hover:bg-midnight-blue/40 hover:text-white'
+                    }`}
+                  >
+                    <Calendar className="h-4 w-4" />
+                    <span>MANAGE EVENTS ({eventsList.length})</span>
                   </button>
 
                   <button
@@ -723,6 +947,18 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
                   >
                     <MessageSquare className="h-4 w-4" />
                     <span>SUBSCRIBERS ({subscribers.length})</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveSubTab('settings')}
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono tracking-wider flex items-center gap-3 transition-all ${
+                      activeSubTab === 'settings' 
+                        ? 'bg-gradient-to-r from-royal-blue to-electric-blue text-white border-l-4 border-cci-gold-400' 
+                        : 'text-light-gray hover:bg-midnight-blue/40 hover:text-white'
+                    }`}
+                  >
+                    <Settings className="h-4 w-4" />
+                    <span>SITE SETTINGS</span>
                   </button>
 
                   <button
@@ -811,6 +1047,146 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
                         <Database className="h-4 w-4" /> Schema Management
                       </button>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Songs Tab */}
+              {activeSubTab === 'songs' && (
+                <div className="space-y-6">
+                  {/* Upload Song Form */}
+                  <div className="bg-charcoal/45 border border-midnight-blue rounded-2xl p-6 sm:p-8">
+                    <div className="flex items-center gap-2 mb-6 border-b border-midnight-blue pb-4">
+                      <Music className="h-5 w-5 text-cci-gold-400" />
+                      <h3 className="font-display font-bold text-lg text-white">
+                        Upload & Publish New Song / Chants
+                      </h3>
+                    </div>
+
+                    <form onSubmit={handleAddSong} className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                            Song / Chant Title *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="E.g., Apostolic Chants: Flowing in the Spirit"
+                            value={songTitle}
+                            onChange={(e) => setSongTitle(e.target.value)}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                            Artist / Leader
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="E.g., Crossworship (Default)"
+                            value={songArtist}
+                            onChange={(e) => setSongArtist(e.target.value)}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                            Album / Collection Name
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="E.g., Spirit-Led Chants Vol. 1"
+                            value={songAlbum}
+                            onChange={(e) => setSongAlbum(e.target.value)}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                            Cover Image URL (Optional)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="https://images.unsplash.com/..."
+                            value={songCoverUrl}
+                            onChange={(e) => setSongCoverUrl(e.target.value)}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                            Audio Stream URL (Optional, fallback provided)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="E.g., https://example.com/audio.mp3"
+                            value={songAudioUrl}
+                            onChange={(e) => setSongAudioUrl(e.target.value)}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                          Lyrics (Optional)
+                        </label>
+                        <textarea
+                          rows={3}
+                          placeholder="[00:00] We lift our voice to praise..."
+                          value={songLyrics}
+                          onChange={(e) => setSongLyrics(e.target.value)}
+                          className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="py-2.5 px-6 rounded-xl bg-gradient-to-r from-royal-blue to-electric-blue text-xs font-bold uppercase tracking-wider text-white hover:opacity-95 transition-all flex items-center gap-1.5 shadow-md"
+                      >
+                        <Plus className="h-4 w-4" /> Add Song
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* List of Custom Songs */}
+                  <div className="bg-charcoal/45 border border-midnight-blue rounded-2xl p-6">
+                    <h3 className="font-display font-bold text-lg text-white mb-4">
+                      My Uploaded Songs ({songsList.length})
+                    </h3>
+
+                    {songsList.length === 0 ? (
+                      <p className="text-xs text-light-gray">No custom songs uploaded yet. Standard preloaded hymns are displayed on the public website.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {songsList.map((song) => (
+                          <div key={song.id} className="bg-rich-black/50 border border-midnight-blue rounded-xl p-4 flex justify-between items-center">
+                            <div className="flex items-center gap-3 overflow-hidden">
+                              <img src={song.coverUrl} className="w-12 h-12 rounded-lg object-cover border border-midnight-blue shrink-0" alt={song.title} referrerPolicy="no-referrer" />
+                              <div className="overflow-hidden">
+                                <h4 className="text-xs font-bold text-white truncate">{song.title}</h4>
+                                <p className="text-[10px] text-slate-400 truncate">{song.artist} • {song.album}</p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleDeleteSong(song.id)}
+                              className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-all"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -1061,6 +1437,281 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
                 </div>
               )}
 
+              {/* Gallery Tab */}
+              {activeSubTab === 'gallery' && (
+                <div className="space-y-6">
+                  {/* Upload Gallery Image Form */}
+                  <div className="bg-charcoal/45 border border-midnight-blue rounded-2xl p-6 sm:p-8">
+                    <div className="flex items-center gap-2 mb-6 border-b border-midnight-blue pb-4">
+                      <ImageIcon className="h-5 w-5 text-cci-gold-400" />
+                      <h3 className="font-display font-bold text-lg text-white">
+                        Upload & Publish New Gallery Moment
+                      </h3>
+                    </div>
+
+                    <form onSubmit={handleAddGallery} className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                            Moment / Event Title *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="E.g., Praise Night Worship Session"
+                            value={galleryTitle}
+                            onChange={(e) => setGalleryTitle(e.target.value)}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                            Category *
+                          </label>
+                          <select
+                            value={galleryCategory}
+                            onChange={(e) => setGalleryCategory(e.target.value as any)}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white focus:outline-none transition-all"
+                          >
+                            <option value="Worship">Worship</option>
+                            <option value="Preaching">Preaching</option>
+                            <option value="Outreach">Outreach</option>
+                            <option value="Community">Community</option>
+                            <option value="Reboot Camp">Reboot Camp</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                          Image URL *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="E.g., https://images.unsplash.com/photo-..."
+                          value={galleryImageUrl}
+                          onChange={(e) => setGalleryImageUrl(e.target.value)}
+                          className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                          Brief Description
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="E.g., Congregation lifting holy hands during worship ministration."
+                          value={galleryDesc}
+                          onChange={(e) => setGalleryDesc(e.target.value)}
+                          className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="py-2.5 px-6 rounded-xl bg-gradient-to-r from-royal-blue to-electric-blue text-xs font-bold uppercase tracking-wider text-white hover:opacity-95 transition-all flex items-center gap-1.5 shadow-md"
+                      >
+                        <Plus className="h-4 w-4" /> Add Gallery Image
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* List of Gallery Images */}
+                  <div className="bg-charcoal/45 border border-midnight-blue rounded-2xl p-6">
+                    <h3 className="font-display font-bold text-lg text-white mb-4">
+                      My Gallery Catalogue ({galleryList.length})
+                    </h3>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                      {galleryList.map((item) => (
+                        <div key={item.id} className="bg-rich-black/50 border border-midnight-blue rounded-xl p-2 relative group overflow-hidden flex flex-col justify-between">
+                          <img src={item.imageUrl} className="w-full h-32 object-cover rounded-lg border border-midnight-blue/50" alt={item.title} referrerPolicy="no-referrer" />
+                          <div className="mt-2">
+                            <h4 className="text-[11px] font-bold text-white truncate">{item.title}</h4>
+                            <span className="text-[9px] font-mono text-cci-gold-400 uppercase tracking-wider block">{item.category}</span>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteGallery(item.id)}
+                            className="absolute top-4 right-4 p-1.5 bg-rich-black/85 text-red-400 hover:text-red-300 rounded-lg transition-all border border-midnight-blue/50"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Events Tab */}
+              {activeSubTab === 'events' && (
+                <div className="space-y-6">
+                  {/* Create Event Form */}
+                  <div className="bg-charcoal/45 border border-midnight-blue rounded-2xl p-6 sm:p-8">
+                    <div className="flex items-center gap-2 mb-6 border-b border-midnight-blue pb-4">
+                      <Calendar className="h-5 w-5 text-cci-gold-400" />
+                      <h3 className="font-display font-bold text-lg text-white">
+                        Create & Publish New Church Event / Meeting
+                      </h3>
+                    </div>
+
+                    <form onSubmit={handleAddEvent} className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                            Event Title *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="E.g., Reboot Camp: Apostolic Expansion"
+                            value={eventTitleInput}
+                            onChange={(e) => setEventTitleInput(e.target.value)}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                            Meeting Dates / Schedule *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="E.g., November 12th to 15th, 2026"
+                            value={eventDateInput}
+                            onChange={(e) => setEventDateInput(e.target.value)}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                            Time Slot
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="E.g., 05:00 PM Daily"
+                            value={eventTimeInput}
+                            onChange={(e) => setEventTimeInput(e.target.value)}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                            Location / Venue
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="E.g., GEC Main Auditorium"
+                            value={eventLocationInput}
+                            onChange={(e) => setEventLocationInput(e.target.value)}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                            Meeting Type
+                          </label>
+                          <select
+                            value={eventModeInput}
+                            onChange={(e) => setEventModeInput(e.target.value as any)}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white focus:outline-none transition-all"
+                          >
+                            <option value="physical">Physical Attendance</option>
+                            <option value="virtual">Virtual Streamed</option>
+                            <option value="hybrid">Hybrid (Both)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                            Speaker / Minister
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="E.g., Pastor Abiodun Adebayo"
+                            value={eventSpeakerInput}
+                            onChange={(e) => setEventSpeakerInput(e.target.value)}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                            Banner Image URL
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="https://images.unsplash.com/..."
+                            value={eventBannerInput}
+                            onChange={(e) => setEventBannerInput(e.target.value)}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                          Meeting Details / Description
+                        </label>
+                        <textarea
+                          rows={3}
+                          placeholder="Enter key topics, seminar outlines, and who should attend."
+                          value={eventDescriptionInput}
+                          onChange={(e) => setEventDescriptionInput(e.target.value)}
+                          className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="py-2.5 px-6 rounded-xl bg-gradient-to-r from-royal-blue to-electric-blue text-xs font-bold uppercase tracking-wider text-white hover:opacity-95 transition-all flex items-center gap-1.5 shadow-md"
+                      >
+                        <Plus className="h-4 w-4" /> Save Event
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* List of Events */}
+                  <div className="bg-charcoal/45 border border-midnight-blue rounded-2xl p-6">
+                    <h3 className="font-display font-bold text-lg text-white mb-4">
+                      My Church Events Calendar ({eventsList.length})
+                    </h3>
+
+                    <div className="space-y-4">
+                      {eventsList.map((event) => (
+                        <div key={event.id} className="bg-rich-black/50 border border-midnight-blue rounded-2xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                          <div className="flex items-start gap-4 overflow-hidden">
+                            <img src={event.banner} className="w-24 h-16 rounded-xl object-cover border border-midnight-blue shrink-0" alt={event.title} referrerPolicy="no-referrer" />
+                            <div className="overflow-hidden">
+                              <h4 className="text-sm font-bold text-white">{event.title}</h4>
+                              <p className="text-xs text-slate-400 font-mono mt-0.5">{event.date} • {event.time}</p>
+                              <p className="text-[10px] text-cci-gold-400 font-mono uppercase tracking-wider mt-1">{event.location} • {event.mode}</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteEvent(event.id)}
+                            className="p-2.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl border border-midnight-blue/50 transition-all self-end sm:self-auto shrink-0"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Event Registrations Tab */}
               {activeSubTab === 'registrations' && (
                 <div className="bg-charcoal/45 border border-midnight-blue rounded-2xl p-6">
@@ -1203,6 +1854,96 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
                       </tbody>
                     </table>
                   </div>
+                </div>
+              )}
+
+              {/* Site Settings Tab */}
+              {activeSubTab === 'settings' && (
+                <div className="bg-charcoal/45 border border-midnight-blue rounded-2xl p-6 sm:p-8">
+                  <div className="flex items-center gap-2 mb-6 border-b border-midnight-blue pb-4">
+                    <Settings className="h-5 w-5 text-cci-gold-400" />
+                    <h3 className="font-display font-bold text-lg text-white">
+                      Edit Site Preferences & Branding
+                    </h3>
+                  </div>
+
+                  <form onSubmit={handleSaveSettings} className="space-y-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                          Church Name
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={churchNameSetting}
+                          onChange={(e) => setChurchNameSetting(e.target.value)}
+                          className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                          Head / Resident Pastor
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={residentPastorSetting}
+                          onChange={(e) => setResidentPastorSetting(e.target.value)}
+                          className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                        Resident Pastor Photo URL
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={pastorPhotoSetting}
+                        onChange={(e) => setPastorPhotoSetting(e.target.value)}
+                        className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                          Contact Support Email
+                        </label>
+                        <input
+                          type="email"
+                          required
+                          value={contactEmailSetting}
+                          onChange={(e) => setContactEmailSetting(e.target.value)}
+                          className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                          Contact Phone Number
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={contactPhoneSetting}
+                          onChange={(e) => setContactPhoneSetting(e.target.value)}
+                          className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="py-2.5 px-6 rounded-xl bg-gradient-to-r from-royal-blue to-electric-blue text-xs font-bold uppercase tracking-wider text-white hover:opacity-95 transition-all flex items-center gap-1.5 shadow-md"
+                    >
+                      <CheckCircle2 className="h-4 w-4" /> Save Configuration
+                    </button>
+                  </form>
                 </div>
               )}
 
