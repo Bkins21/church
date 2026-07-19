@@ -6,7 +6,6 @@ import Teachings from './components/Teachings';
 import Publications from './components/Publications';
 import Branches from './components/Branches';
 import Gallery from './components/Gallery';
-import Portal from './components/Portal';
 import Footer from './components/Footer';
 import Cells from './components/Cells';
 import Songs from './components/Songs';
@@ -14,13 +13,11 @@ import { teachingsCatalog } from './data';
 import Newsletter from './components/Newsletter';
 
 import { Registration, Publication, Teaching, Song, Subscriber } from './types';
-import { Play, Pause, X, Radio, MessageSquare, Send, Heart, Users, Sparkles } from 'lucide-react';
+import { Play, Pause, X, Radio, MessageSquare, Send, Heart, Users, Sparkles, ArrowUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-// Firebase Firestore Imports
-import { collection, setDoc, doc, getDocs, deleteDoc } from 'firebase/firestore';
-import { signInAnonymously } from 'firebase/auth';
-import { db, auth, handleFirestoreError, OperationType } from './firebase';
+import CrosswordMedia from './components/CrosswordMedia';
+import { supabase, isSupabaseConfigured } from './supabase';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('home');
@@ -40,10 +37,19 @@ export default function App() {
   const [userSongDownloads, setUserSongDownloads] = useState<Song[]>([]);
   const [allBackendRegistrations, setAllBackendRegistrations] = useState<Registration[]>([]);
   const [allSubscribers, setAllSubscribers] = useState<Subscriber[]>([]);
+  const [showBackToTop, setShowBackToTop] = useState(false);
 
   // Load state from local storage on mount
   useEffect(() => {
     try {
+      // Clear registrations once based on a run-once flag to clear previous history
+      const hasClearedOnce = localStorage.getItem('gec_reg_cleared_by_ai_v2');
+      if (!hasClearedOnce) {
+        localStorage.removeItem('gec_user_registrations');
+        localStorage.removeItem('cci_user_registrations');
+        localStorage.setItem('gec_reg_cleared_by_ai_v2', 'true');
+      }
+
       const savedRegs = localStorage.getItem('gec_user_registrations') || localStorage.getItem('cci_user_registrations');
       const savedLib = localStorage.getItem('gec_user_library') || localStorage.getItem('cci_user_library');
       const savedDownloads = localStorage.getItem('gec_user_downloads') || localStorage.getItem('cci_user_downloads');
@@ -58,146 +64,89 @@ export default function App() {
     }
   }, []);
 
-  // Clear teachings and delete from Firestore on mount
+  // Handle scrolling to toggle Back to Top floating visibility
   useEffect(() => {
-    let active = true;
-    const clearAllTeachings = async () => {
-      try {
-        localStorage.removeItem('gec_teachings_catalog');
-        localStorage.removeItem('gec_user_downloads');
-        setTeachings([]);
-
-        const querySnapshot = await getDocs(collection(db, 'teachings'));
-        querySnapshot.forEach(async (docSnap) => {
-          try {
-            await deleteDoc(doc(db, 'teachings', docSnap.id));
-          } catch (e) {
-            console.error('Failed to delete doc', docSnap.id, e);
-          }
-        });
-      } catch (err) {
-        console.error('Failed to clear teachings from Firestore on mount', err);
-      }
-    };
-
-    clearAllTeachings();
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  // Sign in anonymously on mount
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        await signInAnonymously(auth);
-        console.log('Signed in anonymously to Firebase Auth successfully.');
-      } catch (err) {
-        console.warn('Firebase Anonymous Auth is not enabled in your Firebase Console. Local storage will be used for persistence, which is fully functional.', err);
-      }
-    };
-    initAuth();
-  }, []);
-
-  // Synchronize admin status with Firestore rules based on anonymous UID and local passcode
-  const [isFirebaseAdminSynced, setIsFirebaseAdminSynced] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    const syncAdminStatus = async () => {
-      if (!auth.currentUser) {
-        setIsFirebaseAdminSynced(false);
-        return;
-      }
-
-      const uid = auth.currentUser.uid;
-      if (isAdmin) {
-        try {
-          await setDoc(doc(db, 'admins', uid), { passcode: 'admin' });
-          console.log('Synchronized Admin status with Firestore successfully');
-          if (active) {
-            setIsFirebaseAdminSynced(true);
-          }
-        } catch (err) {
-          console.error('Failed to sync Admin status with Firestore', err);
-          if (active) {
-            setIsFirebaseAdminSynced(false);
-          }
-        }
+    const handleScroll = () => {
+      if (window.scrollY > 400) {
+        setShowBackToTop(true);
       } else {
-        try {
-          await deleteDoc(doc(db, 'admins', uid));
-          console.log('Removed Admin status from Firestore');
-        } catch (err) {
-          // Fine if already deleted or doesn't exist
-        }
-        if (active) {
-          setIsFirebaseAdminSynced(false);
-        }
+        setShowBackToTop(false);
       }
     };
 
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (active) {
-        syncAdminStatus();
-      }
-    });
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
-    if (auth.currentUser) {
-      syncAdminStatus();
-    }
-
-    return () => {
-      active = false;
-      unsubscribe();
-    };
-  }, [isAdmin]);
-
-  // Fetch collected registrations and subscribers from Firestore when Admin logs in and syncing completes
+  // Load teachings from Supabase or localStorage on mount
   useEffect(() => {
     let active = true;
-    const fetchAllRegistrations = async () => {
+    const loadTeachings = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, 'registrations'));
-        const regs: Registration[] = [];
-        querySnapshot.forEach((d) => {
-          regs.push(d.data() as Registration);
-        });
-        if (active) {
-          setAllBackendRegistrations(regs);
+        if (supabase) {
+          const { data, error } = await supabase
+            .from('teachings')
+            .select('*')
+            .order('date', { ascending: false });
+          
+          if (!error && data && active) {
+            const mapped: Teaching[] = data.map((t: any) => ({
+              id: t.id,
+              title: t.title,
+              preacher: t.preacher || t.speaker || 'Pastor Abiodun Adebayo',
+              series: t.series || t.category || 'Sermon',
+              duration: t.duration || '45 mins',
+              date: t.date,
+              description: t.description || 'Systematic theological sermon.',
+              audioUrl: t.audio_url || t.audioUrl || '',
+              coverUrl: t.cover_url || t.coverUrl || 'https://images.unsplash.com/photo-1507679799987-c73779587ccf?q=80&w=600&auto=format&fit=crop',
+              downloadCount: t.download_count || t.downloadCount || 0,
+              size: t.size || '15 MB'
+            }));
+            setTeachings(mapped);
+            localStorage.setItem('gec_teachings_catalog', JSON.stringify(mapped));
+            return;
+          }
+        }
+        
+        // Fallback to localStorage if unconfigured or error
+        const saved = localStorage.getItem('gec_teachings_catalog');
+        if (saved && active) {
+          setTeachings(JSON.parse(saved));
+        } else if (active) {
+          setTeachings([]);
         }
       } catch (err) {
-        console.error('Failed to fetch collected registration forms from backend', err);
+        console.error('Failed to load teachings on mount', err);
       }
     };
 
-    const fetchAllSubscribers = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, 'subscribers'));
-        const subs: Subscriber[] = [];
-        querySnapshot.forEach((d) => {
-          subs.push(d.data() as Subscriber);
-        });
-        subs.sort((a, b) => new Date(b.subscribedAt).getTime() - new Date(a.subscribedAt).getTime());
-        if (active) {
-          setAllSubscribers(subs);
-        }
-      } catch (err) {
-        console.error('Failed to fetch newsletter subscribers from backend', err);
-      }
-    };
-
-    if (isAdmin && isFirebaseAdminSynced) {
-      fetchAllRegistrations();
-      fetchAllSubscribers();
-    } else {
-      setAllBackendRegistrations([]);
-      setAllSubscribers([]);
-    }
+    loadTeachings();
     return () => {
       active = false;
     };
-  }, [isAdmin, isFirebaseAdminSynced]);
+  }, []);
+
+  // Listen to popstate and initial URL path for our hidden admin route (/crosswordmedia)
+  useEffect(() => {
+    const handlePath = () => {
+      if (window.location.pathname === '/crosswordmedia') {
+        setActiveTab('crosswordmedia');
+      }
+    };
+    handlePath();
+    window.addEventListener('popstate', handlePath);
+    return () => window.removeEventListener('popstate', handlePath);
+  }, []);
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    if (tab === 'crosswordmedia') {
+      window.history.pushState(null, '', '/crosswordmedia');
+    } else {
+      window.history.pushState(null, '', '/');
+    }
+  };
 
   // Save states to local storage on changes
   const updateIsAdmin = (value: boolean) => {
@@ -211,10 +160,25 @@ export default function App() {
     localStorage.setItem('gec_teachings_catalog', JSON.stringify(updated));
 
     try {
-      await setDoc(doc(db, 'teachings', newTeaching.id), newTeaching);
-      console.log('Sermon uploaded to Firestore successfully');
+      if (supabase) {
+        const { error } = await supabase
+          .from('teachings')
+          .insert([{
+            id: newTeaching.id,
+            title: newTeaching.title,
+            speaker: newTeaching.preacher,
+            category: newTeaching.series,
+            duration: newTeaching.duration,
+            date: newTeaching.date,
+            audio_url: newTeaching.audioUrl,
+            cover_url: newTeaching.coverUrl,
+            created_at: new Date().toISOString()
+          }]);
+        if (error) throw error;
+        console.log('Sermon uploaded to Supabase successfully');
+      }
     } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, `teachings/${newTeaching.id}`);
+      console.error('Failed to save teaching to Supabase', err);
     }
   };
 
@@ -224,10 +188,16 @@ export default function App() {
     localStorage.setItem('gec_teachings_catalog', JSON.stringify(updated));
 
     try {
-      await deleteDoc(doc(db, 'teachings', id));
-      console.log('Sermon deleted from Firestore successfully');
+      if (supabase) {
+        const { error } = await supabase
+          .from('teachings')
+          .delete()
+          .eq('id', id);
+        if (error) throw error;
+        console.log('Sermon deleted from Supabase successfully');
+      }
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `teachings/${id}`);
+      console.error('Failed to delete teaching from Supabase', err);
     }
   };
 
@@ -259,33 +229,56 @@ export default function App() {
     }
 
     try {
-      await setDoc(doc(db, 'registrations', registration.id), {
-        ...registration,
-        createdAt: new Date().toISOString()
-      });
-      if (isAdmin) {
-        setAllBackendRegistrations(prev => [registration, ...prev]);
+      if (supabase) {
+        const { error } = await supabase
+          .from('registrations')
+          .insert([{
+            id: registration.id,
+            event_id: registration.eventId,
+            event_name: registration.eventTitle,
+            first_name: registration.userName.split(' ')[1] || registration.userName || '',
+            surname: registration.userName.split(' ')[0] || '',
+            email: registration.userEmail,
+            phone: registration.userPhone || '',
+            location: registration.userBranch || '',
+            status: 'Registered',
+            created_at: new Date().toISOString()
+          }]);
+        if (error) throw error;
+        console.log('Registration saved to Supabase successfully');
       }
     } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, `registrations/${registration.id}`);
+      console.error('Failed to save registration to Supabase', err);
     }
   };
 
   const handleDeleteBackendRegistration = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'registrations', id));
+      if (supabase) {
+        const { error } = await supabase
+          .from('registrations')
+          .delete()
+          .eq('id', id);
+        if (error) throw error;
+      }
       setAllBackendRegistrations(prev => prev.filter(reg => reg.id !== id));
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `registrations/${id}`);
+      console.error('Failed to delete registration from Supabase', err);
     }
   };
 
   const handleDeleteSubscriber = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'subscribers', id));
+      if (supabase) {
+        const { error } = await supabase
+          .from('subscribers')
+          .delete()
+          .eq('id', id);
+        if (error) throw error;
+      }
       setAllSubscribers(prev => prev.filter(sub => sub.id !== id));
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `subscribers/${id}`);
+      console.error('Failed to delete subscriber from Supabase', err);
     }
   };
 
@@ -338,13 +331,22 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [activeTab]);
 
+  if (activeTab === 'crosswordmedia') {
+    return (
+      <CrosswordMedia
+        onClose={() => handleTabChange('home')}
+        onNavigateHome={() => handleTabChange('home')}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-rich-black flex flex-col justify-between" id="app-root-container">
       
       {/* Dynamic Header / Navigation */}
       <Navbar
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={handleTabChange}
         registeredCount={userRegistrations.length}
       />
 
@@ -437,33 +439,32 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'portal' && (
-              <Portal
-                userRegistrations={userRegistrations}
-                userLibrary={userLibrary}
-                userDownloads={userDownloads}
-                userSongDownloads={userSongDownloads}
-                onRemoveRegistration={handleRemoveRegistration}
-                onRemoveLibrary={handleRemoveLibrary}
-                onRemoveDownload={handleRemoveDownload}
-                onRemoveSongDownload={handleRemoveSongDownload}
-                onNavigate={setActiveTab}
-                isAdmin={isAdmin}
-                onToggleAdmin={updateIsAdmin}
-                onAddTeaching={handleAddTeaching}
-                allBackendRegistrations={allBackendRegistrations}
-                onDeleteBackendRegistration={handleDeleteBackendRegistration}
-                allSubscribers={allSubscribers}
-                onDeleteSubscriber={handleDeleteSubscriber}
-                onClearRegistrations={handleClearRegistrations}
-              />
-            )}
+
           </motion.div>
         </AnimatePresence>
       </main>
 
       {/* Footer Details */}
       <Footer />
+
+      {/* Floating Back to Top Button */}
+      <AnimatePresence>
+        {showBackToTop && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            whileHover={{ y: -4 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="fixed bottom-6 right-6 z-50 p-3.5 rounded-full bg-gradient-to-r from-cci-gold-600 to-cci-gold-400 text-[#040814] shadow-xl shadow-cci-gold-500/20 hover:from-cci-gold-500 hover:to-cci-gold-300 border border-cci-gold-400/25 transition-all duration-300 cursor-pointer flex items-center justify-center"
+            id="floating-back-to-top"
+            title="Scroll to top"
+          >
+            <ArrowUp className="h-5 w-5 stroke-[2.5]" />
+          </motion.button>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

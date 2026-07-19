@@ -36,8 +36,7 @@ export default function Navbar({ activeTab, setActiveTab, registeredCount }: Nav
     { id: 'publications', label: 'Publications', icon: BookOpen },
     { id: 'branches', label: 'Branches', icon: MapPin },
     { id: 'cells', label: 'Join a Cell', icon: Users },
-    { id: 'gallery', label: 'Gallery', icon: Image },
-    { id: 'portal', label: 'My Portal', icon: User, special: true }
+    { id: 'gallery', label: 'Gallery', icon: Image }
   ];
 
   const handleNavClick = (tabId: string) => {
@@ -75,9 +74,8 @@ export default function Navbar({ activeTab, setActiveTab, registeredCount }: Nav
                 <path d="M1036.645,1345.993l-93.983,0l0,-324.713l93.983,-49.462l0,65.929l-24.071,0l0,-26.058l-45.842,24.125l0,286.108l45.842,0l0,-234.5l24.071,0l0,258.571Z" />
               </svg>
             </div>
-            <div className="flex items-baseline gap-1">
-              <span className="font-display font-black text-[24px] tracking-tighter text-white leading-none">GOD'S EDIFICE</span>
-              <span className="font-display font-black text-[22px] tracking-tighter text-white leading-none">CHURCH</span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="font-display font-black text-[32px] tracking-tighter text-white leading-none">GOD'S EDIFICE CHURCH</span>
             </div>
           </motion.div>
 
@@ -136,9 +134,8 @@ export default function Navbar({ activeTab, setActiveTab, registeredCount }: Nav
                 <path d="M1036.645,1345.993l-93.983,0l0,-324.713l93.983,-49.462l0,65.929l-24.071,0l0,-26.058l-45.842,24.125l0,286.108l45.842,0l0,-234.5l24.071,0l0,258.571Z" />
               </svg>
             </div>
-            <div className="flex items-baseline gap-0.5">
-              <span className="font-display font-black text-[13px] tracking-tighter text-white leading-none">GOD'S EDIFICE</span>
-              <span className="font-display font-black text-[11px] tracking-tighter text-white leading-none">CHURCH</span>
+            <div className="flex items-baseline gap-1">
+              <span className="font-display font-black text-[17px] tracking-tighter text-white leading-none">GOD'S EDIFICE CHURCH</span>
             </div>
           </motion.div>
 

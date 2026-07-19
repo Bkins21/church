@@ -1,8 +1,7 @@
 import { useState, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Mail, CheckCircle, ArrowRight, Loader2, Sparkles, Bell } from 'lucide-react';
-import { doc, setDoc } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { supabase, isSupabaseConfigured } from '../supabase';
 import { Subscriber } from '../types';
 
 export default function Newsletter() {
@@ -33,16 +32,27 @@ export default function Newsletter() {
     };
 
     try {
-      await setDoc(doc(db, 'subscribers', subscriberId), subscriberData);
+      if (supabase) {
+        const { error } = await supabase
+          .from('subscribers')
+          .insert([{
+            id: subscriberId,
+            email: email.trim().toLowerCase(),
+            subscribed_at: subscriberData.subscribedAt
+          }]);
+        if (error) throw error;
+      } else {
+        // Fallback to local storage if supabase is not configured yet
+        const localSubs = JSON.parse(localStorage.getItem('gec_local_subscribers') || '[]');
+        localSubs.push(subscriberData);
+        localStorage.setItem('gec_local_subscribers', JSON.stringify(localSubs));
+        console.log('Saved subscriber locally (Supabase not configured yet)');
+      }
       setIsSuccess(true);
       setEmail('');
     } catch (err) {
       console.error('Failed to subscribe:', err);
-      try {
-        handleFirestoreError(err, OperationType.CREATE, `subscribers/${subscriberId}`);
-      } catch (firestoreErr) {
-        setErrorMsg('An error occurred. Please try again.');
-      }
+      setErrorMsg('Failed to subscribe. Please verify your Supabase setup and database tables.');
     } finally {
       setIsSubmitting(false);
     }

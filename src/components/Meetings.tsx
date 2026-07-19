@@ -21,6 +21,7 @@ export default function Meetings({
 }: MeetingsProps) {
   const [selectedEvent, setSelectedEvent] = useState<ChurchEvent | null>(null);
   const [activeTicket, setActiveTicket] = useState<Registration | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   // Form Fields
   const [firstName, setFirstName] = useState('');
@@ -724,14 +725,18 @@ export default function Meetings({
                   {onClearRegistrations && (
                     <button
                       onClick={() => {
-                        if (confirm('Are you sure you want to clear your entire registration history? This will delete all active passes.')) {
+                        if (showClearConfirm) {
                           onClearRegistrations();
+                          setShowClearConfirm(false);
+                        } else {
+                          setShowClearConfirm(true);
                         }
                       }}
+                      onMouseLeave={() => setShowClearConfirm(false)}
                       className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-rose-400 hover:text-rose-300 border border-rose-500/20 hover:border-rose-500/40 bg-rose-500/5 hover:bg-rose-500/10 transition-colors self-start sm:self-auto"
                     >
                       <Trash2 className="h-4 w-4" />
-                      <span>Clear Registration History</span>
+                      <span>{showClearConfirm ? 'Are you sure? Click again' : 'Clear Registration History'}</span>
                     </button>
                   )}
                 </div>

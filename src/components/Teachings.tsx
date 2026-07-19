@@ -304,8 +304,8 @@ export default function Teachings({
       </div>
 
       {/* Admin Quick Action Bar */}
-      <div className="max-w-3xl mx-auto -mt-10 mb-12 flex items-center justify-center gap-3" id="teachings-admin-bar">
-        {isAdmin ? (
+      {isAdmin && (
+        <div className="max-w-3xl mx-auto -mt-10 mb-12 flex items-center justify-center gap-3" id="teachings-admin-bar">
           <div className="flex items-center gap-2 bg-emerald-950/40 border border-emerald-500/30 rounded-full py-1.5 px-4 animate-fade-in shadow-lg">
             <ShieldCheck className="h-4 w-4 text-emerald-400 animate-pulse" />
             <span className="text-xs font-mono font-bold text-emerald-400 uppercase tracking-wider">Admin Status: Authorized</span>
@@ -327,19 +327,8 @@ export default function Teachings({
               Logout Admin
             </button>
           </div>
-        ) : (
-          <button
-            onClick={() => setIsAdminLoginModalOpen(true)}
-            className="flex items-center gap-2 bg-[#0a1128] hover:bg-cci-blue-800/40 border border-cci-blue-800/80 rounded-full py-2 px-4 transition-all shadow-md group cursor-pointer"
-            id="btn-teachings-admin-gateway"
-          >
-            <Key className="h-3.5 w-3.5 text-cci-gold-400 group-hover:rotate-12 transition-transform" />
-            <span className="text-xs font-semibold text-slate-300 group-hover:text-cci-gold-400 transition-colors">
-              Are you an Administrator? <span className="text-cci-gold-400 font-bold ml-1">Unlock Audio Uploader</span>
-            </span>
-          </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Series Filter Tabs & Search Bar */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-10">
