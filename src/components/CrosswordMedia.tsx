@@ -372,11 +372,11 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
       // 1. Upload audio file to Supabase Storage
       const fileExt = audioFile.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
-      const filePath = `sermons/${fileName}`;
+      const filePath = fileName;
 
       setUploadProgress(20);
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('sermons')
+        .from('Teachings')
         .upload(filePath, audioFile, {
           cacheControl: '3600',
           upsert: false
@@ -387,7 +387,7 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
 
       // 2. Get Public URL of uploaded file
       const { data: { publicUrl } } = supabase.storage
-        .from('sermons')
+        .from('Teachings')
         .getPublicUrl(filePath);
 
       setUploadProgress(80);
@@ -427,7 +427,7 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
 
     } catch (err: any) {
       console.error('Upload failed:', err);
-      setFormError(`Upload Failed: ${err.message || 'Make sure the "sermons" bucket is public and the "teachings" table exists.'}`);
+      setFormError(`Upload Failed: ${err.message || 'Make sure the "Teachings" bucket is public and the "teachings" table exists.'}`);
     } finally {
       setUploadingSermon(false);
       setTimeout(() => setUploadProgress(0), 1000);
@@ -441,7 +441,13 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
 
     try {
       // 1. Delete from storage if URL matches our storage domain
-      if (audioUrl.includes('/storage/v1/object/public/sermons/')) {
+      if (audioUrl.includes('/storage/v1/object/public/Teachings/')) {
+        const parts = audioUrl.split('/Teachings/');
+        if (parts.length > 1) {
+          const filePath = parts[1];
+          await supabase.storage.from('Teachings').remove([filePath]);
+        }
+      } else if (audioUrl.includes('/storage/v1/object/public/sermons/')) {
         const parts = audioUrl.split('/sermons/');
         if (parts.length > 1) {
           const filePath = `sermons/${parts[1]}`;
@@ -508,10 +514,10 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
           setSongUploadProgress(30);
           const fileExt = songFile.name.split('.').pop();
           const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
-          const filePath = `songs/${fileName}`;
+          const filePath = fileName;
 
           const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('sermons')
+            .from('Teachings')
             .upload(filePath, songFile, {
               cacheControl: '3600',
               upsert: false
@@ -521,7 +527,7 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
           setSongUploadProgress(70);
 
           const { data: { publicUrl } } = supabase.storage
-            .from('sermons')
+            .from('Teachings')
             .getPublicUrl(filePath);
 
           finalAudioUrl = publicUrl;
@@ -533,10 +539,21 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
       }
     } catch (err: any) {
       console.error('Song upload failed:', err);
-      alert(`Upload Failed: ${err.message || 'Error uploading file to Supabase'}`);
-      setUploadingSong(false);
-      setSongUploadProgress(0);
-      return;
+      
+      const proceedWithLocal = confirm(
+        `Supabase Storage Upload Failed: ${err.message || 'Bucket not found or permission denied'}.\n\n` +
+        `This typically happens if the 'Teachings' bucket hasn't been created in your Supabase storage, or if the Row Level Security (RLS) policy doesn't allow public/anonymous uploads.\n\n` +
+        `To fix this permanently, please run the SQL script under the 'DATABASE SETUP' tab, or make sure the Teachings bucket is set to 'Public' and has upload policies enabled.\n\n` +
+        `Would you like to load this song locally in your current browser session instead?`
+      );
+
+      if (proceedWithLocal && songFile) {
+        finalAudioUrl = URL.createObjectURL(songFile);
+      } else {
+        setUploadingSong(false);
+        setSongUploadProgress(0);
+        return;
+      }
     }
 
     const newSong: Song = {
@@ -672,8 +689,8 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
   };
 
   // SQL Script text to render
-  const sqlSetupScript = `-- 1. Create a Public "sermons" bucket in Storage
--- (Go to Storage in Supabase Dashboard, create a new bucket named "sermons" and make it Public)
+  const sqlSetupScript = `-- 1. Create a Public "Teachings" bucket in Storage
+-- (Go to Storage in Supabase Dashboard, create a new bucket named "Teachings" and make it Public)
 
 -- 2. Create the Database Tables
 
@@ -738,6 +755,21 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- 3. STORAGE POLICIES (Run this to enable unauthenticated uploads to the Teachings bucket)
+-- This permits anyone to upload and view media files directly in the Teachings storage bucket.
+-- Ensure the "Teachings" bucket is created and marked "Public" in the Supabase Storage Dashboard first!
+CREATE POLICY "Allow public storage inserts" 
+ON storage.objects 
+FOR INSERT 
+TO public 
+WITH CHECK (bucket_id = 'Teachings');
+
+CREATE POLICY "Allow public storage select" 
+ON storage.objects 
+FOR SELECT 
+TO public 
+USING (bucket_id = 'Teachings');
 `;
 
   const copyToClipboard = () => {
