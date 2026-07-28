@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, ChangeEvent, FormEvent } from 'react';
-import { Search, Play, Pause, Download, Volume2, Music, Clock, User, Disc, Check, Flame, ChevronRight, VolumeX, ShieldAlert, ShieldCheck, Lock, Unlock, Plus, FileAudio, X, Key, CheckCircle, Trash2 } from 'lucide-react';
+import { Search, Play, Pause, Download, Volume2, Music, Clock, User, Disc, Check, Flame, ChevronRight, VolumeX, ShieldAlert, ShieldCheck, Lock, Unlock, Plus, FileAudio, X, Key, CheckCircle, Trash2, Loader2 } from 'lucide-react';
 import { Teaching } from '../types';
 import { teachingsCatalog } from '../data';
 import { motion, AnimatePresence } from 'motion/react';
+import { supabase } from '../supabase';
 
 interface TeachingsProps {
   onDownloadSuccess: (teaching: Teaching) => void;
@@ -228,50 +229,90 @@ export default function Teachings({
     }
   }, [volume, isMuted]);
 
-  // Download simulation
-  const triggerDownload = (teaching: Teaching) => {
+  // Download handler
+  const triggerDownload = async (teaching: Teaching) => {
     if (isDownloading[teaching.id]) return;
 
     setIsDownloading(prev => ({ ...prev, [teaching.id]: true }));
-    setDownloadProgress(prev => ({ ...prev, [teaching.id]: 0 }));
+    if (onDownloadSuccess) onDownloadSuccess(teaching);
 
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 10;
-      setDownloadProgress(prev => ({ ...prev, [teaching.id]: progress }));
+    try {
+      const song = {
+        ...teaching,
+        audio_url: (teaching as any).audio_url || teaching.audioUrl || ""
+      };
 
-      if (progress >= 100) {
-        clearInterval(interval);
-        setIsDownloading(prev => ({ ...prev, [teaching.id]: false }));
-        onDownloadSuccess(teaching);
+      // Extract the file path from the Supabase public URL
+      let marker = "/storage/v1/object/public/sermons/";
+      let bucket = "sermons";
 
-        // Perform actual browser download of the uploaded audio or a detailed receipt
-        try {
-          const isUploadedUrl = teaching.audioUrl.startsWith('blob:') || teaching.audioUrl.startsWith('data:');
-          const link = document.createElement('a');
-          
-          if (isUploadedUrl) {
-            link.href = teaching.audioUrl;
-            link.download = `${teaching.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3`;
-          } else {
-            const content = `GOD'S EDIFICE CHURCH\nSermon Teaching Download Receipt\n\nTitle: ${teaching.title}\nPreacher: ${teaching.preacher}\nSeries: ${teaching.series}\nDate Released: ${teaching.date}\nSize: ${teaching.size}\n\nThank you for downloading teachings from GEC. Access and listen on the portal anytime!\nTo see all men saved and come to the knowledge of truth.`;
-            const blob = new Blob([content], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            link.href = url;
-            link.download = `${teaching.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_details.txt`;
-          }
-          
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          if (!isUploadedUrl) {
-            URL.revokeObjectURL(link.href);
-          }
-        } catch (e) {
-          console.error('Download trigger failed', e);
-        }
+      if (!song.audio_url.includes(marker) && song.audio_url.includes("/storage/v1/object/public/Teachings/")) {
+        marker = "/storage/v1/object/public/Teachings/";
+        bucket = "Teachings";
       }
-    }, 200);
+
+      if (supabase && song.audio_url.includes(marker)) {
+        const filePath = song.audio_url.split(marker)[1];
+
+        // Download the actual file from Supabase Storage
+        const { data, error } = await supabase.storage
+          .from(bucket)
+          .download(filePath);
+
+        if (error) {
+          throw error;
+        }
+
+        // Get the file extension
+        const extension =
+          filePath.split(".").pop()?.split("?")[0] || "mp3";
+
+        // Create a browser download
+        const downloadUrl = URL.createObjectURL(data);
+
+        const link = document.createElement("a");
+        link.href = downloadUrl;
+        link.download = `${song.title}.${extension}`;
+
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // Clean up after the browser starts the download
+        setTimeout(() => {
+          URL.revokeObjectURL(downloadUrl);
+        }, 1000);
+      } else {
+        if (!song.audio_url) {
+          throw new Error("Invalid audio URL");
+        }
+        const response = await fetch(song.audio_url);
+        if (!response.ok) {
+          throw new Error("Failed to download audio");
+        }
+        const blob = await response.blob();
+        const urlWithoutQuery = song.audio_url.split("?")[0];
+        const extension = urlWithoutQuery.split(".").pop() || "mp3";
+        const downloadUrl = URL.createObjectURL(blob);
+
+        const link = document.createElement("a");
+        link.href = downloadUrl;
+        link.download = `${song.title}.${extension}`;
+
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        setTimeout(() => {
+          URL.revokeObjectURL(downloadUrl);
+        }, 1000);
+      }
+    } catch (error: any) {
+      console.error("Download error:", error);
+      alert(`Download failed: ${error.message}`);
+    } finally {
+      setIsDownloading(prev => ({ ...prev, [teaching.id]: false }));
+    }
   };
 
   const formatTime = (timeInSecs: number) => {

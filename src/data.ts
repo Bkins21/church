@@ -6,11 +6,11 @@ export const upcomingMeetings: ChurchEvent[] = [
     title: 'Edifice Conference',
     date: 'October 1st to 4th, 2026',
     time: '09:00 AM - 08:00 PM Daily',
-    location: 'GEC Lekki HQ',
+    location: 'Peter Akinola Foundation, Abeokuta',
     mode: 'physical',
     banner: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1200&auto=format&fit=crop',
     description: 'Our annual centerpiece conference building a solid, unshakeable foundation in Christian theology, ministry leadership, and doctrinal clarity.',
-    speaker: 'Pastor Abiodun Adebayo & Guest Ministers',
+    speaker: 'Pastor Abiodun Adebayo',
     registeredCount: 0
   },
   {
@@ -127,7 +127,7 @@ export const ministryBranches: Branch[] = [
     residentPastor: 'Pastor Kola Asaolu',
     pastorPhoto: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?q=80&w=400&auto=format&fit=crop',
     contactEmail: 'yaba@godsedifice.org',
-    contactPhone: '+234 802 333 4444',
+    contactPhone: '+234 812 789 4081',
     serviceTimes: {
       sunday: ['01:00 PM'],
       midweek: ['06:00 PM (Wednesday)']
@@ -138,14 +138,7 @@ export const ministryBranches: Branch[] = [
 ];
 
 export const galleryItems: GalleryItem[] = [
-  {
-    id: 'g-worship-1',
-    title: 'Surrendered Hearts',
-    description: 'Dynamic atmosphere of prayers and worship during our monthly Supernatural Outpouring Service.',
-    category: 'Worship',
-    imageUrl: 'https://images.unsplash.com/photo-1515162305285-0293e4767cc2?q=80&w=800&auto=format&fit=crop',
-    date: '2026-06-25'
-  },
+  
   {
     id: 'g-preach-1',
     title: 'Sound Exposition',

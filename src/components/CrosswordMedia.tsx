@@ -572,6 +572,25 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
     setSongsList(updated);
     localStorage.setItem('gec_user_uploaded_songs', JSON.stringify(updated));
 
+    // Also sync to Supabase database so mobile devices fetch the song automatically
+    if (isSupabaseConfigured && supabase && finalAudioUrl.startsWith('http')) {
+      try {
+        await supabase.from('teachings').insert([{
+          id: newSong.id,
+          title: newSong.title,
+          speaker: newSong.artist,
+          category: 'Song',
+          duration: newSong.duration,
+          date: new Date().toISOString().split('T')[0],
+          audio_url: finalAudioUrl,
+          cover_url: newSong.coverUrl,
+          description: newSong.lyrics
+        }]);
+      } catch (dbErr) {
+        console.error('Database sync for song failed:', dbErr);
+      }
+    }
+
     // Reset Form
     setSongTitle('');
     setSongArtist('');
@@ -590,11 +609,36 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
   };
 
   // Delete Song Handler
-  const handleDeleteSong = (id: string) => {
+  const handleDeleteSong = async (id: string) => {
     if (!confirm('Are you sure you want to delete this song?')) return;
     const updated = songsList.filter(s => s.id !== id);
     setSongsList(updated);
     localStorage.setItem('gec_user_uploaded_songs', JSON.stringify(updated));
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('teachings').delete().eq('id', id);
+      } catch (err) {
+        console.error('Failed to delete song from Supabase:', err);
+      }
+    }
+  };
+
+  // Delete All Songs Handler
+  const handleDeleteAllSongs = async () => {
+    if (!confirm('Are you sure you want to delete ALL songs? This action cannot be undone.')) return;
+    setSongsList([]);
+    localStorage.removeItem('gec_user_uploaded_songs');
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('teachings').delete().eq('category', 'Song');
+      } catch (err) {
+        console.error('Failed to delete all songs from Supabase:', err);
+      }
+    }
+
+    alert('All songs deleted successfully.');
   };
 
   // Add Gallery Handler
@@ -1342,9 +1386,20 @@ USING (bucket_id = 'Teachings');
 
                   {/* List of Custom Songs */}
                   <div className="bg-charcoal/45 border border-midnight-blue rounded-2xl p-6">
-                    <h3 className="font-display font-bold text-lg text-white mb-4">
-                      My Uploaded Songs ({songsList.length})
-                    </h3>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-display font-bold text-lg text-white">
+                        My Uploaded Songs ({songsList.length})
+                      </h3>
+                      {songsList.length > 0 && (
+                        <button
+                          onClick={handleDeleteAllSongs}
+                          className="px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-all flex items-center gap-1.5"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          <span>Delete All Songs</span>
+                        </button>
+                      )}
+                    </div>
 
                     {songsList.length === 0 ? (
                       <p className="text-xs text-light-gray">No custom songs uploaded yet. Standard preloaded hymns are displayed on the public website.</p>

@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, DragEvent, ChangeEvent, MouseEvent, FormEvent } from 'react';
-import { Play, Pause, Music, Upload, Search, Trash2, Volume2, VolumeX, SkipBack, SkipForward, Disc, RefreshCw, Shuffle, FileAudio, FileText, CheckCircle, Flame, Sparkles, AlertCircle, Download, Check } from 'lucide-react';
+import { Play, Pause, Music, Upload, Search, Trash2, Volume2, VolumeX, SkipBack, SkipForward, Disc, RefreshCw, Shuffle, FileAudio, FileText, CheckCircle, Flame, Sparkles, AlertCircle, Download, Check, Globe, Laptop, Smartphone, Loader2 } from 'lucide-react';
 import { Song } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
+import { supabase, isSupabaseConfigured } from '../supabase';
 
 interface SongsProps {
   userSongDownloads?: Song[];
@@ -23,6 +24,8 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess }:
   // Drag and drop / upload state
   const [isDragging, setIsDragging] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isUploadingToCloud, setIsUploadingToCloud] = useState(false);
+  const [cloudSongs, setCloudSongs] = useState<Song[]>([]);
   const [uploadedSongs, setUploadedSongs] = useState<Song[]>(() => {
     try {
       const saved = localStorage.getItem('gec_user_uploaded_songs');
@@ -32,6 +35,71 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess }:
     }
   });
 
+  // Default Crossworship songs catalog
+  const crossworshipCatalog: Song[] = [];
+
+  // Fetch songs from Supabase Cloud on mount (for cross-device mobile/desktop sync)
+  useEffect(() => {
+    let isSubscribed = true;
+    const fetchCloudSongs = async () => {
+      if (!supabase) return;
+      try {
+        // Fetch from teachings with category='Song' or songs table
+        const { data, error } = await supabase
+          .from('teachings')
+          .select('*')
+          .eq('category', 'Song')
+          .order('created_at', { ascending: false });
+
+        if (!error && data && isSubscribed) {
+          const mapped: Song[] = data.map((t: any) => ({
+            id: t.id,
+            title: t.title,
+            artist: t.speaker || t.preacher || 'Crossworship',
+            album: t.series || 'Single',
+            duration: t.duration || '4:30',
+            audioUrl: t.audio_url || t.audioUrl || '',
+            coverUrl: t.cover_url || t.coverUrl || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&auto=format&fit=crop',
+            lyrics: t.description || '[00:00] Worship anthem recorded at God\'s Edifice Church.',
+            uploadedByUser: true
+          }));
+          setCloudSongs(mapped);
+        }
+      } catch (err) {
+        console.error('Failed to load cloud songs:', err);
+      }
+    };
+
+    fetchCloudSongs();
+    return () => { isSubscribed = false; };
+  }, []);
+
+  // Function to delete all songs across local storage, cloud database, and local state
+  const handleDeleteAllSongs = async () => {
+    if (!confirm('Are you sure you want to delete ALL songs? This action cannot be undone.')) return;
+
+    // 1. Clear local state and localStorage
+    setUploadedSongs([]);
+    setCloudSongs([]);
+    setCurrentSong(null);
+    setIsPlaying(false);
+    localStorage.removeItem('gec_user_uploaded_songs');
+
+    // 2. Delete songs from Supabase if configured
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase
+          .from('teachings')
+          .delete()
+          .eq('category', 'Song');
+      } catch (err) {
+        console.error('Failed to delete songs from Supabase:', err);
+      }
+    }
+
+    alert('All songs have been deleted successfully.');
+  };
+
   // Form and pending upload state
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [metaTitle, setMetaTitle] = useState('');
@@ -40,76 +108,113 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess }:
   const [metaCoverUrl, setMetaCoverUrl] = useState('https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&auto=format&fit=crop');
   const [metaLyrics, setMetaLyrics] = useState('');
 
-  // Download simulation states
+  // Download states
   const [isDownloading, setIsDownloading] = useState<Record<string, boolean>>({});
-  const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
 
-  const triggerSongDownload = (song: Song, e?: MouseEvent) => {
+  const triggerSongDownload = async (songItem: Song, e?: MouseEvent) => {
     if (e) e.stopPropagation();
-    if (isDownloading[song.id]) return;
+    if (isDownloading[songItem.id]) return;
 
-    setIsDownloading(prev => ({ ...prev, [song.id]: true }));
-    setDownloadProgress(prev => ({ ...prev, [song.id]: 0 }));
+    setIsDownloading(prev => ({ ...prev, [songItem.id]: true }));
 
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 10;
-      setDownloadProgress(prev => ({ ...prev, [song.id]: progress }));
-
-      if (progress >= 100) {
-        clearInterval(interval);
-        setIsDownloading(prev => ({ ...prev, [song.id]: false }));
-        
-        if (onSongDownloadSuccess) {
-          onSongDownloadSuccess(song);
-        } else {
-          try {
-            const saved = localStorage.getItem('gec_user_song_downloads');
-            const currentSaved: Song[] = saved ? JSON.parse(saved) : [];
-            if (!currentSaved.some(s => s.id === song.id)) {
-              localStorage.setItem('gec_user_song_downloads', JSON.stringify([...currentSaved, song]));
-            }
-          } catch (err) {
-            console.error('Local download save failed', err);
-          }
+    if (onSongDownloadSuccess) {
+      onSongDownloadSuccess(songItem);
+    } else {
+      try {
+        const saved = localStorage.getItem('gec_user_song_downloads');
+        const currentSaved: Song[] = saved ? JSON.parse(saved) : [];
+        if (!currentSaved.some(s => s.id === songItem.id)) {
+          localStorage.setItem('gec_user_song_downloads', JSON.stringify([...currentSaved, songItem]));
         }
-
-        // Native file download trigger
-        try {
-          if (song.uploadedByUser && song.audioUrl.startsWith('blob:')) {
-            const link = document.createElement('a');
-            link.href = song.audioUrl;
-            link.download = `${song.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.mp3`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-          } else {
-            const content = `========================================================\nGOD'S EDIFICE CHURCH - CROSSWORSHIP MINISTRY\nOfficial Worship Anthem Digital Download Packet\n========================================================\n\nTrack Information:\n------------------\nTitle: ${song.title}\nArtist: ${song.artist}\nAlbum: ${song.album}\nDuration: ${song.duration}\nDepartment: Crossworship (GEC Worship Department)\n\nLyrics Sheet:\n-------------\n${song.lyrics || 'No lyrics available.'}\n\n--------------------------------------------------------\nThank you for supporting Crossworship Ministry. All anthems are copyrighted under God's Edifice Church.\nTo see all men saved and come to the knowledge of truth.\n========================================================`;
-            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `${song.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_worship_anthem.txt`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-          }
-        } catch (downloadErr) {
-          console.error('Song download trigger failed', downloadErr);
-        }
+      } catch (err) {
+        console.error('Local download save failed', err);
       }
-    }, 150);
+    }
+
+    try {
+      const song = {
+        ...songItem,
+        audio_url: (songItem as any).audio_url || songItem.audioUrl || ""
+      };
+
+      // Extract the file path from the Supabase public URL
+      let marker = "/storage/v1/object/public/sermons/";
+      let bucket = "sermons";
+
+      if (!song.audio_url.includes(marker) && song.audio_url.includes("/storage/v1/object/public/Teachings/")) {
+        marker = "/storage/v1/object/public/Teachings/";
+        bucket = "Teachings";
+      }
+
+      if (supabase && song.audio_url.includes(marker)) {
+        const filePath = song.audio_url.split(marker)[1];
+
+        // Download the actual file from Supabase Storage
+        const { data, error } = await supabase.storage
+          .from(bucket)
+          .download(filePath);
+
+        if (error) {
+          throw error;
+        }
+
+        // Get the file extension
+        const extension =
+          filePath.split(".").pop()?.split("?")[0] || "mp3";
+
+        // Create a browser download
+        const downloadUrl = URL.createObjectURL(data);
+
+        const link = document.createElement("a");
+        link.href = downloadUrl;
+        link.download = `${song.title}.${extension}`;
+
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // Clean up after the browser starts the download
+        setTimeout(() => {
+          URL.revokeObjectURL(downloadUrl);
+        }, 1000);
+      } else {
+        if (!song.audio_url) {
+          throw new Error("Invalid audio URL");
+        }
+        const response = await fetch(song.audio_url);
+        if (!response.ok) {
+          throw new Error("Failed to download audio");
+        }
+        const blob = await response.blob();
+        const urlWithoutQuery = song.audio_url.split("?")[0];
+        const extension = urlWithoutQuery.split(".").pop() || "mp3";
+        const downloadUrl = URL.createObjectURL(blob);
+
+        const link = document.createElement("a");
+        link.href = downloadUrl;
+        link.download = `${song.title}.${extension}`;
+
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        setTimeout(() => {
+          URL.revokeObjectURL(downloadUrl);
+        }, 1000);
+      }
+    } catch (error: any) {
+      console.error("Download error:", error);
+      alert(`Download failed: ${error.message}`);
+    } finally {
+      setIsDownloading(prev => ({ ...prev, [songItem.id]: false }));
+    }
   };
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Default Crossworship songs catalog
-  const crossworshipCatalog: Song[] = [];
-
-  // Combine default catalog + user uploads
-  const fullPlaylist = [...crossworshipCatalog, ...uploadedSongs];
+  // Combine default catalog + cloud songs + user local uploads
+  const fullPlaylist = [...crossworshipCatalog, ...cloudSongs, ...uploadedSongs];
 
   // Filter list
   const filteredPlaylist = fullPlaylist.filter(song => {
@@ -124,7 +229,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess }:
     if (!currentSong && fullPlaylist.length > 0) {
       setCurrentSong(fullPlaylist[0]);
     }
-  }, []);
+  }, [fullPlaylist.length]);
 
   // Set up audio object & event listeners
   useEffect(() => {
@@ -288,36 +393,88 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess }:
     }
   };
 
-  // Save the custom song with full metadata details
-  const handleSaveSongMetadata = (e: FormEvent) => {
+  // Save the custom song with full metadata details & Supabase Cloud Sync
+  const handleSaveSongMetadata = async (e: FormEvent) => {
     e.preventDefault();
     if (!pendingFile) return;
 
-    try {
-      const localAudioUrl = URL.createObjectURL(pendingFile);
-      const newSong: Song = {
-        id: `user-song-${Date.now()}`,
-        title: metaTitle.trim() || pendingFile.name.replace(/\.[^/.]+$/, ""),
-        artist: metaArtist.trim() || 'Unknown Singer',
-        album: metaAlbum.trim() || 'Single',
-        duration: 'Loading...', // Read dynamically during play
-        audioUrl: localAudioUrl,
-        coverUrl: metaCoverUrl.trim() || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&auto=format&fit=crop',
-        lyrics: metaLyrics.trim() || `[00:00] (This is your uploaded song: "${pendingFile.name}")\n[00:10] Enjoy full, responsive playback in our GEC custom player!`,
-        uploadedByUser: true
-      };
+    setIsUploadingToCloud(true);
+    setUploadError(null);
 
-      const updatedUploads = [newSong, ...uploadedSongs];
-      setUploadedSongs(updatedUploads);
-      localStorage.setItem('gec_user_uploaded_songs', JSON.stringify(updatedUploads));
-      
-      // Auto-play the uploaded song
-      setCurrentSong(newSong);
-      setIsPlaying(true);
-      setPendingFile(null);
+    let finalAudioUrl = '';
+
+    try {
+      // 1. If Supabase is configured, upload to cloud storage
+      if (isSupabaseConfigured && supabase) {
+        const fileExt = pendingFile.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+        const filePath = fileName;
+
+        const { error: uploadError } = await supabase.storage
+          .from('Teachings')
+          .upload(filePath, pendingFile, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (!uploadError) {
+          const { data: { publicUrl } } = supabase.storage
+            .from('Teachings')
+            .getPublicUrl(filePath);
+          finalAudioUrl = publicUrl;
+        }
+      }
     } catch (err) {
-      setUploadError('Failed to save audio with details.');
+      console.warn('Supabase cloud storage upload fallback:', err);
     }
+
+    // Fallback if cloud upload was skipped or failed
+    if (!finalAudioUrl) {
+      finalAudioUrl = URL.createObjectURL(pendingFile);
+    }
+
+    const songId = `user-song-${Date.now()}`;
+    const newSong: Song = {
+      id: songId,
+      title: metaTitle.trim() || pendingFile.name.replace(/\.[^/.]+$/, ""),
+      artist: metaArtist.trim() || 'Crossworship Singer',
+      album: metaAlbum.trim() || 'Single',
+      duration: '4:30',
+      audioUrl: finalAudioUrl,
+      coverUrl: metaCoverUrl.trim() || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&auto=format&fit=crop',
+      lyrics: metaLyrics.trim() || `[00:00] (This is your uploaded song: "${pendingFile.name}")\n[00:10] Enjoy full, responsive playback in our GEC custom player!`,
+      uploadedByUser: true
+    };
+
+    // 2. Sync to Supabase Database if configured (so mobile phone gets it automatically)
+    if (isSupabaseConfigured && supabase && finalAudioUrl.startsWith('http')) {
+      try {
+        await supabase.from('teachings').insert([{
+          id: songId,
+          title: newSong.title,
+          speaker: newSong.artist,
+          category: 'Song',
+          duration: newSong.duration,
+          date: new Date().toISOString().split('T')[0],
+          audio_url: finalAudioUrl,
+          cover_url: newSong.coverUrl,
+          description: newSong.lyrics
+        }]);
+        setCloudSongs(prev => [newSong, ...prev]);
+      } catch (dbErr) {
+        console.error('Database sync failed:', dbErr);
+      }
+    }
+
+    const updatedUploads = [newSong, ...uploadedSongs];
+    setUploadedSongs(updatedUploads);
+    localStorage.setItem('gec_user_uploaded_songs', JSON.stringify(updatedUploads));
+    
+    // Auto-play the uploaded song
+    setCurrentSong(newSong);
+    setIsPlaying(true);
+    setPendingFile(null);
+    setIsUploadingToCloud(false);
   };
 
   // Delete uploaded song
@@ -354,7 +511,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess }:
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Page Header */}
-        <div className="text-center max-w-3xl mx-auto mb-16">
+        <div className="text-center max-w-3xl mx-auto mb-12">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-cci-gold-500/10 text-cci-gold-400 rounded-full text-[10px] font-bold uppercase tracking-widest mb-4 border border-cci-gold-500/20">
             <Sparkles className="h-3.5 w-3.5" /> GEC Worship Ministry
           </div>
@@ -362,9 +519,36 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess }:
             Crossworship Anthems
           </h2>
           <div className="w-16 h-1 bg-gradient-to-r from-cci-gold-600 to-cci-gold-400 mx-auto mb-5 rounded-full" />
-          <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
+          <p className="text-sm sm:text-base text-slate-300 leading-relaxed mb-6">
             Curated by <strong>Crossworship</strong>, the official worship department of God's Edifice Church. Experience intense spiritual devotion, corporate alignment, and apostolic fire through music.
           </p>
+
+          {/* Sync Status Info Banner */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <div className="inline-flex items-center gap-3 bg-[#0a1128]/80 border border-cci-blue-800/60 rounded-2xl px-4 py-2.5 text-xs text-slate-300 backdrop-blur">
+              {isSupabaseConfigured ? (
+                <>
+                  <Globe className="h-4 w-4 text-emerald-400 shrink-0" />
+                  <span><strong className="text-emerald-400">Cloud Database Synced:</strong> Anthems & sermons uploaded here automatically sync across all your desktop and mobile devices.</span>
+                </>
+              ) : (
+                <>
+                  <Laptop className="h-4 w-4 text-amber-400 shrink-0" />
+                  <span><strong className="text-amber-400">Device Local Mode:</strong> Browser local storage active. Run the SQL script under Admin to enable Supabase Cloud cross-device sync.</span>
+                </>
+              )}
+            </div>
+
+            {fullPlaylist.length > 0 && (
+              <button
+                onClick={handleDeleteAllSongs}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-all shrink-0"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Delete All Songs ({fullPlaylist.length})</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Master Layout Grid */}
@@ -523,14 +707,12 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess }:
                                 ? 'bg-cci-blue-800/40 border-cci-blue-700/50 text-slate-400 cursor-not-allowed'
                                 : 'bg-[#040814]/60 border-[#1e293b] hover:border-cci-gold-500/40 text-slate-400 hover:text-white'
                             }`}
-                          title={userSongDownloads.some(s => s.id === song.id) ? 'Saved in Vault' : isDownloading[song.id] ? `Downloading ${downloadProgress[song.id]}%` : 'Download Anthem'}
+                          title={userSongDownloads.some(s => s.id === song.id) ? 'Saved in Vault' : isDownloading[song.id] ? 'Downloading...' : 'Download Anthem'}
                         >
                           {userSongDownloads.some(s => s.id === song.id) ? (
                             <Check className="h-3.5 w-3.5" />
                           ) : isDownloading[song.id] ? (
-                            <span className="text-[9px] font-mono font-bold leading-none text-cci-gold-400">
-                              {downloadProgress[song.id]}%
-                            </span>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-cci-gold-400" />
                           ) : (
                             <Download className="h-3.5 w-3.5" />
                           )}
@@ -726,7 +908,10 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess }:
                           <span>Saved</span>
                         </>
                       ) : isDownloading[currentSong.id] ? (
-                        <span>Downloading {downloadProgress[currentSong.id]}%</span>
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>Downloading...</span>
+                        </>
                       ) : (
                         <>
                           <Download className="h-3.5 w-3.5" />
