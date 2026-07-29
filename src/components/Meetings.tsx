@@ -9,6 +9,7 @@ interface MeetingsProps {
   userRegistrations: Registration[];
   prefilledReg: { firstName: string; surname: string; email: string; eventId: string } | null;
   onClearPrefilled: () => void;
+  onRemoveRegistration?: (id: string) => void;
   onClearRegistrations?: () => void;
 }
 
@@ -17,6 +18,7 @@ export default function Meetings({
   userRegistrations,
   prefilledReg,
   onClearPrefilled,
+  onRemoveRegistration,
   onClearRegistrations
 }: MeetingsProps) {
   const [selectedEvent, setSelectedEvent] = useState<ChurchEvent | null>(null);
@@ -138,6 +140,8 @@ export default function Meetings({
       eventDate: selectedEvent.date,
       eventLocation: selectedEvent.location,
       userName: `${firstName.trim()} ${surname.trim()}`,
+      firstName: firstName.trim(),
+      surname: surname.trim(),
       userEmail: email.trim().toLowerCase(),
       userPhone: phone.trim(),
       userBranch: branch,
@@ -193,13 +197,29 @@ export default function Meetings({
                 <ChevronLeft className="h-4 w-4" />
                 <span>Back to Meetings</span>
               </button>
-              <button
-                onClick={handlePrint}
-                className="flex items-center gap-2 bg-cci-blue-800 hover:bg-cci-blue-700 border border-cci-blue-700/60 px-4 py-2 rounded-xl text-xs font-bold text-cci-gold-400 transition-colors"
-              >
-                <Printer className="h-4 w-4" />
-                <span>Print Pass</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {onRemoveRegistration && (
+                  <button
+                    onClick={() => {
+                      if (confirm('Are you sure you want to cancel and delete this registration information?')) {
+                        onRemoveRegistration(activeTicket.id);
+                        setActiveTicket(null);
+                      }
+                    }}
+                    className="flex items-center gap-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 px-3.5 py-2 rounded-xl text-xs font-bold text-rose-400 transition-colors"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>Delete Registration</span>
+                  </button>
+                )}
+                <button
+                  onClick={handlePrint}
+                  className="flex items-center gap-2 bg-cci-blue-800 hover:bg-cci-blue-700 border border-cci-blue-700/60 px-4 py-2 rounded-xl text-xs font-bold text-cci-gold-400 transition-colors"
+                >
+                  <Printer className="h-4 w-4" />
+                  <span>Print Pass</span>
+                </button>
+              </div>
             </div>
 
             {/* Skeuomorphic Boarding Pass / Ticket */}

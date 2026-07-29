@@ -69,6 +69,8 @@ export interface Registration {
   eventDate: string;
   eventLocation: string;
   userName: string;
+  firstName?: string;
+  surname?: string;
   userEmail: string;
   userPhone: string;
   userBranch: string;

@@ -48,20 +48,21 @@ export default function App() {
   // Load state from local storage on mount
   useEffect(() => {
     try {
-      // Clear registrations once based on a run-once flag to clear previous history
-      const hasClearedOnce = localStorage.getItem('gec_reg_cleared_by_ai_v2');
-      if (!hasClearedOnce) {
-        localStorage.removeItem('gec_user_registrations');
-        localStorage.removeItem('cci_user_registrations');
-        localStorage.setItem('gec_reg_cleared_by_ai_v2', 'true');
+      // Delete user registration information for Edifice Conference as requested
+      const savedRegs = localStorage.getItem('gec_user_registrations') || localStorage.getItem('cci_user_registrations');
+      if (savedRegs) {
+        const parsed: Registration[] = JSON.parse(savedRegs);
+        const filtered = parsed.filter(r => r.eventId !== 'edifice-conference-2026' && !r.eventTitle?.toLowerCase().includes('edifice'));
+        setUserRegistrations(filtered);
+        localStorage.setItem('gec_user_registrations', JSON.stringify(filtered));
+      } else {
+        setUserRegistrations([]);
       }
 
-      const savedRegs = localStorage.getItem('gec_user_registrations') || localStorage.getItem('cci_user_registrations');
       const savedLib = localStorage.getItem('gec_user_library') || localStorage.getItem('cci_user_library');
       const savedDownloads = localStorage.getItem('gec_user_downloads') || localStorage.getItem('cci_user_downloads');
       const savedSongDownloads = localStorage.getItem('gec_user_song_downloads');
 
-      if (savedRegs) setUserRegistrations(JSON.parse(savedRegs));
       if (savedLib) setUserLibrary(JSON.parse(savedLib));
       if (savedDownloads) setUserDownloads(JSON.parse(savedDownloads));
       if (savedSongDownloads) setUserSongDownloads(JSON.parse(savedSongDownloads));
@@ -240,22 +241,48 @@ export default function App() {
 
     try {
       if (supabase) {
+        const firstName = registration.firstName || registration.userName.split(' ')[0] || '';
+        const surname = registration.surname || registration.userName.split(' ').slice(1).join(' ') || '';
+
+        // 1. Insert into meeting_registrations table as requested
+        const { error: meetingRegError } = await supabase
+          .from("meeting_registrations")
+          .insert({
+            first_name: firstName,
+            surname: surname,
+            email: registration.userEmail,
+            phone_number: registration.userPhone || '',
+            address: registration.address || '',
+            nearest_branch: registration.userBranch || '',
+            age: registration.ageRange || '',
+            expecations_prayer_request: registration.expectations || '',
+            gender: registration.gender || '',
+            how_you_heard: registration.howHeard || '',
+            meeting_date: registration.eventDate || ''
+          });
+
+        if (meetingRegError) {
+          console.warn('meeting_registrations table insert warning/error:', meetingRegError);
+        } else {
+          console.log('Saved to meeting_registrations table successfully');
+        }
+
+        // 2. Also insert into registrations table as fallback/admin portal compatibility
         const { error } = await supabase
           .from('registrations')
           .insert([{
             id: registration.id,
             event_id: registration.eventId,
             event_name: registration.eventTitle,
-            first_name: registration.userName.split(' ')[1] || registration.userName || '',
-            surname: registration.userName.split(' ')[0] || '',
+            first_name: firstName,
+            surname: surname,
             email: registration.userEmail,
             phone: registration.userPhone || '',
             location: registration.userBranch || '',
             status: 'Registered',
             created_at: new Date().toISOString()
           }]);
-        if (error) throw error;
-        console.log('Registration saved to Supabase successfully');
+        if (error) console.warn('registrations table insert warning:', error);
       }
     } catch (err) {
       console.error('Failed to save registration to Supabase', err);
@@ -314,14 +341,31 @@ export default function App() {
   };
 
   // Remove handlers
-  const handleRemoveRegistration = (id: string) => {
-    updateRegistrations(userRegistrations.filter(reg => reg.id !== id));
+  const handleRemoveRegistration = async (id: string) => {
+    const updated = userRegistrations.filter(reg => reg.id !== id);
+    updateRegistrations(updated);
+
+    if (supabase) {
+      try {
+        await supabase.from('registrations').delete().eq('id', id);
+      } catch (err) {
+        console.error('Failed to delete registration from Supabase', err);
+      }
+    }
   };
 
-  const handleClearRegistrations = () => {
+  const handleClearRegistrations = async () => {
     updateRegistrations([]);
     localStorage.removeItem('gec_user_registrations');
     localStorage.removeItem('cci_user_registrations');
+
+    if (supabase) {
+      try {
+        await supabase.from('registrations').delete().neq('id', '');
+      } catch (err) {
+        console.error('Failed to clear registrations from Supabase', err);
+      }
+    }
   };
 
   const handleRemoveLibrary = (id: string) => {
@@ -395,6 +439,7 @@ export default function App() {
                   userRegistrations={userRegistrations} 
                   prefilledReg={prefilledReg}
                   onClearPrefilled={() => setPrefilledReg(null)}
+                  onRemoveRegistration={handleRemoveRegistration}
                   onClearRegistrations={handleClearRegistrations}
                 />
                 <Teachings 
@@ -416,6 +461,7 @@ export default function App() {
                 userRegistrations={userRegistrations} 
                 prefilledReg={prefilledReg}
                 onClearPrefilled={() => setPrefilledReg(null)}
+                onRemoveRegistration={handleRemoveRegistration}
                 onClearRegistrations={handleClearRegistrations}
               />
             )}

@@ -225,28 +225,65 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
       }
 
       // 2. Fetch Registrations
+      const { data: meetingRegsData } = await supabase
+        .from('meeting_registrations')
+        .select('*');
+
       const { data: regsData, error: rError } = await supabase
         .from('registrations')
         .select('*')
         .order('created_at', { ascending: false });
-      
-      if (!rError && regsData) {
-        const mappedRegs: Registration[] = regsData.map((r: any) => ({
+
+      const allCombinedRaw = [
+        ...(meetingRegsData || []).map((m: any) => ({
+          id: m.id || `mreg-${m.email}-${m.first_name}`,
+          eventId: 'edifice-conference-2026',
+          eventTitle: "God's Edifice Church Conference",
+          eventDate: m.meeting_date || '2026-10-01',
+          eventLocation: m.address || m.nearest_branch || 'Lekki HQ',
+          userName: `${m.first_name || ''} ${m.surname || ''}`.trim() || 'Attendee',
+          firstName: m.first_name || '',
+          surname: m.surname || '',
+          userEmail: m.email || '',
+          userPhone: m.phone_number || '',
+          userBranch: m.nearest_branch || '',
+          ticketCode: `GEC-${Math.floor(100000 + Math.random() * 900000)}`,
+          registrationDate: new Date().toISOString(),
+          mode: 'physical' as const,
+          address: m.address || '',
+          ageRange: m.age || '',
+          gender: m.gender || '',
+          expectations: m.expecations_prayer_request || '',
+          howHeard: m.how_you_heard || ''
+        })),
+        ...(!rError && regsData ? regsData.map((r: any) => ({
           id: r.id,
           eventId: r.event_id || r.eventId || 'edifice-conference-2026',
           eventTitle: r.event_title || r.eventTitle || r.event_name || r.eventName || "God's Edifice Church Conference",
-          eventDate: r.event_date || r.eventDate || '2026-07-25',
+          eventDate: r.event_date || r.eventDate || '2026-10-01',
           eventLocation: r.event_location || r.eventLocation || 'Lekki HQ',
           userName: r.user_name || r.userName || `${r.surname || ''} ${r.first_name || ''}`.trim() || 'Attendee',
+          firstName: r.first_name || '',
+          surname: r.surname || '',
           userEmail: r.user_email || r.userEmail || r.email || '',
           userPhone: r.user_phone || r.userPhone || r.phone || '',
           userBranch: r.user_branch || r.userBranch || r.location || 'Main Branch',
           ticketCode: r.ticket_code || r.ticketCode || `GEC-${Math.floor(100000 + Math.random() * 900000)}`,
           registrationDate: r.registration_date || r.registrationDate || r.created_at || new Date().toISOString(),
           mode: (r.mode as 'physical' | 'virtual') || 'physical'
-        }));
-        setRegistrations(mappedRegs);
+        })) : [])
+      ];
+
+      // Filter duplicates by email if any
+      const uniqueRegs: Registration[] = [];
+      const seenEmails = new Set();
+      for (const reg of allCombinedRaw) {
+        if (!seenEmails.has(reg.userEmail)) {
+          seenEmails.add(reg.userEmail);
+          uniqueRegs.push(reg);
+        }
       }
+      setRegistrations(uniqueRegs);
 
       // 3. Fetch Subscribers
       const { data: subsData, error: sError } = await supabase
