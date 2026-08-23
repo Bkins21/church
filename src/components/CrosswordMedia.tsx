@@ -97,6 +97,9 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
   const [songFile, setSongFile] = useState<File | null>(null);
   const [uploadingSong, setUploadingSong] = useState(false);
   const [songUploadProgress, setSongUploadProgress] = useState(0);
+  const [songError, setSongError] = useState<string | null>(null);
+  const [songSuccess, setSongSuccess] = useState<string | null>(null);
+  const [copiedSongSql, setCopiedSongSql] = useState(false);
   const songFileInputRef = useRef<HTMLInputElement>(null);
 
   // Gallery states
@@ -1204,20 +1207,34 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
 // Add Song Handler
 const handleAddSong = async (e: React.FormEvent) => {
   e.preventDefault();
+  setSongError(null);
+  setSongSuccess(null);
 
   if (!songTitle.trim()) {
-    alert('Song title is required.');
+    setSongError('Song title is required.');
     return;
   }
 
   if (!songFile && !songAudioUrl.trim()) {
-    alert('Please select an audio file or provide an audio URL.');
+    setSongError('Please select an audio file or provide an audio URL.');
     return;
   }
 
   if (!isSupabaseConfigured || !supabase) {
-    alert('Supabase is not configured.');
+    setSongError('Supabase is not configured.');
     return;
+  }
+
+  // Refresh active Supabase Auth session
+  if (supabase?.auth) {
+    try {
+      const { data: { session: activeSession } } = await supabase.auth.getSession();
+      if (activeSession?.user) {
+        setSession(activeSession);
+      }
+    } catch (sessErr) {
+      console.warn('Could not retrieve active session for songs:', sessErr);
+    }
   }
 
   setUploadingSong(true);
@@ -1280,7 +1297,6 @@ const handleAddSong = async (e: React.FormEvent) => {
         });
 
       if (uploadError) {
-        console.error('Songs storage upload error:', uploadError);
         throw new Error(`Song audio upload failed: ${uploadError.message}`);
       }
 
@@ -1326,20 +1342,24 @@ const handleAddSong = async (e: React.FormEvent) => {
       .single();
 
     if (dbErr) {
-      console.error('SONGS TABLE INSERT ERROR:', dbErr);
-
       // Clean up uploaded audio if DB insertion fails
       if (uploadedFilePath) {
-        const { error: cleanupError } = await supabase.storage
-          .from('Songs')
-          .remove([uploadedFilePath]);
-
-        if (cleanupError) {
-          console.warn('Could not clean up uploaded song file:', cleanupError);
+        try {
+          await supabase.storage.from('Songs').remove([uploadedFilePath]);
+        } catch (cleanupErr) {
+          console.warn('Could not clean up uploaded song file:', cleanupErr);
         }
       }
 
-      throw new Error(`Song database insert failed: ${dbErr.message}`);
+      const isRls = dbErr.code === '42501' || dbErr.message?.toLowerCase().includes('row-level security');
+      if (isRls) {
+        setSongError('RLS_POLICY_ERROR');
+      } else {
+        setSongError(`Song database insert failed: ${dbErr.message}`);
+      }
+      setUploadingSong(false);
+      setSongUploadProgress(0);
+      return;
     }
 
     // 5. Clean up stale localStorage
@@ -1370,16 +1390,14 @@ const handleAddSong = async (e: React.FormEvent) => {
 
     setUploadingSong(false);
     setSongUploadProgress(100);
+    setSongSuccess(`Song "${insertedSong?.title || songTitle}" uploaded and saved successfully!`);
 
     setTimeout(() => {
       setSongUploadProgress(0);
     }, 1000);
 
-    alert(`Song "${insertedSong.title}" uploaded successfully!`);
-
   } catch (err: any) {
-    console.error('Song upload error:', err);
-    alert(`Song upload failed:\n\n${err?.message || err}`);
+    setSongError(err?.message || 'Song upload failed.');
     setUploadingSong(false);
     setSongUploadProgress(0);
   }
@@ -2480,6 +2498,52 @@ USING (bucket_id = 'Teachings' AND public.is_admin());
                               style={{ width: `${songUploadProgress}%` }}
                             />
                           </div>
+                        </div>
+                      )}
+
+                      {songSuccess && (
+                        <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-start gap-2.5 text-xs text-emerald-400 font-mono">
+                          <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+                          <span>{songSuccess}</span>
+                        </div>
+                      )}
+
+                      {songError && songError === 'RLS_POLICY_ERROR' && (
+                        <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs space-y-2.5">
+                          <div className="flex items-start gap-2 text-amber-400 font-bold">
+                            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                            <span>Database Row-Level Security (RLS) Policy Notice</span>
+                          </div>
+                          <p className="text-[11px] text-slate-300 leading-relaxed">
+                            Supabase rejected the insert because Row-Level Security (RLS) is active on table <code className="text-amber-400 bg-rich-black px-1.5 py-0.5 rounded font-mono">Songs</code> without an insert policy.
+                          </p>
+                          <div className="bg-rich-black/90 p-3 rounded-lg border border-midnight-blue space-y-2">
+                            <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                              <span>Run in Supabase SQL Editor:</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText('ALTER TABLE public."Songs" ENABLE ROW LEVEL SECURITY;\nCREATE POLICY "Allow all operations for Songs" ON public."Songs" FOR ALL USING (true) WITH CHECK (true);');
+                                  setCopiedSongSql(true);
+                                  setTimeout(() => setCopiedSongSql(false), 2500);
+                                }}
+                                className="text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer"
+                              >
+                                {copiedSongSql ? '✓ Copied!' : 'Copy SQL'}
+                              </button>
+                            </div>
+                            <pre className="text-[10px] font-mono text-emerald-400 overflow-x-auto whitespace-pre-wrap">
+{`ALTER TABLE public."Songs" ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all operations for Songs" ON public."Songs" FOR ALL USING (true) WITH CHECK (true);`}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+
+                      {songError && songError !== 'RLS_POLICY_ERROR' && (
+                        <div className="p-3.5 bg-red-500/10 border border-red-500/30 rounded-xl flex items-start gap-2 text-xs text-red-400 font-mono">
+                          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                          <span>{songError}</span>
                         </div>
                       )}
 
