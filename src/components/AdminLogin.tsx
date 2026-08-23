@@ -12,44 +12,38 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // If already logged in, redirect straight to admin
+  // Validate actual active Supabase session on mount
   useEffect(() => {
-    if (localStorage.getItem('gec_admin_authenticated') === 'true') {
-      onLoginSuccess();
-      return;
-    }
     if (!isSupabaseConfigured || !supabase) return;
     
     try {
-      supabase.auth.getSession().then(({ data: { session } }) => {
+      supabase.auth.getSession().then(({ data: { session } }: any) => {
         if (session?.user) {
           localStorage.setItem('gec_admin_authenticated', 'true');
           onLoginSuccess();
+        } else {
+          localStorage.removeItem('gec_admin_authenticated');
         }
-      }).catch(err => {
-        console.warn('Supabase session error:', err);
+      }).catch((err: any) => {
+        console.warn('Supabase session check error:', err);
+        localStorage.removeItem('gec_admin_authenticated');
       });
     } catch (err) {
       console.warn('Supabase getSession exception:', err);
+      localStorage.removeItem('gec_admin_authenticated');
     }
   }, [onLoginSuccess]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccessMessage('');
     setLoading(true);
-
-    const isExplicitAdmin = email.trim().toLowerCase() === 'boluakintola@gmail.com' && password === 'crosswordmedia2026';
-
-    if (isExplicitAdmin) {
-      localStorage.setItem('gec_admin_authenticated', 'true');
-      onLoginSuccess();
-      setLoading(false);
-      return;
-    }
 
     try {
       if (!isSupabaseConfigured || !supabase) {
@@ -57,20 +51,41 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
         return;
       }
 
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      });
+      const cleanEmail = email.trim().toLowerCase();
 
-      if (authError) {
-        throw authError;
-      }
+      if (authMode === 'login') {
+        const { data, error: authError } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password,
+        });
 
-      if (data?.session) {
-        localStorage.setItem('gec_admin_authenticated', 'true');
-        onLoginSuccess();
+        if (authError) {
+          throw authError;
+        }
+
+        if (data?.session) {
+          localStorage.setItem('gec_admin_authenticated', 'true');
+          onLoginSuccess();
+        } else {
+          throw new Error('Authentication succeeded but no active session was established.');
+        }
       } else {
-        throw new Error('Authentication succeeded but no session was established.');
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email: cleanEmail,
+          password,
+        });
+
+        if (signUpError) {
+          throw signUpError;
+        }
+
+        if (data?.session) {
+          localStorage.setItem('gec_admin_authenticated', 'true');
+          onLoginSuccess();
+        } else {
+          setSuccessMessage('Account created successfully! You can now sign in with your credentials.');
+          setAuthMode('login');
+        }
       }
     } catch (err: any) {
       setError(err.message || 'An error occurred during authentication.');
@@ -80,18 +95,17 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
   };
 
   return (
-    <div className="min-h-screen bg-[#0E1013] text-soft-white flex flex-col justify-center items-center px-4 relative overflow-hidden" id="admin-login-page">
-      {/* Premium Ambient Background Glows */}
-      <div className="absolute -top-[300px] left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-royal-blue/10 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute top-1/2 -translate-y-1/2 left-1/4 w-[400px] h-[400px] bg-electric-blue/5 rounded-full blur-[100px] pointer-events-none" />
-      <div className="absolute bottom-[-100px] right-10 w-[300px] h-[300px] bg-royal-blue/10 rounded-full blur-[100px] pointer-events-none" />
+    <div className="min-h-screen bg-[#090D16] text-[#F8FAFC] flex flex-col justify-center items-center px-4 relative overflow-hidden" id="admin-login-page">
+      {/* Subtle Background Glows */}
+      <div className="absolute -top-[250px] left-1/2 -translate-x-1/2 w-[550px] h-[550px] bg-blue-600/15 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-100px] right-10 w-[350px] h-[350px] bg-amber-500/10 rounded-full blur-[100px] pointer-events-none" />
 
       {/* Main Container */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: 'easeOut' }}
-        className="w-full max-w-md bg-charcoal/40 border border-midnight-blue/80 rounded-3xl p-8 sm:p-10 backdrop-blur-xl shadow-2xl relative z-10"
+        className="w-full max-w-md bg-[#131B2E] border-2 border-[#2A3756] rounded-3xl p-8 sm:p-10 shadow-2xl relative z-10"
         id="login-card-container"
       >
         {/* Church Logo & Branding at the top */}
@@ -99,7 +113,7 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
           <motion.div 
             whileHover={{ scale: 1.05 }}
             onClick={onNavigateHome}
-            className="w-16 h-16 text-white cursor-pointer flex items-center justify-center bg-midnight-blue/50 border border-royal-blue/20 rounded-2xl p-2.5 shadow-lg transition-all"
+            className="w-16 h-16 text-white cursor-pointer flex items-center justify-center bg-[#1E293B] border border-[#38BDF8]/40 rounded-2xl p-2.5 shadow-lg transition-all"
             id="login-logo-wrapper"
           >
             <svg viewBox="920 620 650 750" className="w-full h-full text-white" fill="currentColor">
@@ -114,7 +128,7 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
           <h2 className="font-display font-black text-xl tracking-wider text-white uppercase mt-4" id="login-church-name">
             God's Edifice Church
           </h2>
-          <p className="text-[10px] font-mono tracking-widest text-electric-blue uppercase mt-1">
+          <p className="text-xs font-mono font-bold tracking-widest text-[#38BDF8] uppercase mt-1">
             Media Administration
           </p>
         </div>
@@ -122,10 +136,10 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
         {/* Heading */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold font-church text-center text-white" id="login-heading">
-            Admin Login
+            Admin Portal Access
           </h1>
-          <p className="text-xs text-light-gray text-center mt-1.5">
-            Authenticate to access the administrative dashboard.
+          <p className="text-sm font-medium text-[#CBD5E1] text-center mt-1.5">
+            Authenticate to access live registrations, media uploads, and analytics.
           </p>
         </div>
 
@@ -133,11 +147,11 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
         <form onSubmit={handleSubmit} className="space-y-5" id="admin-login-form">
           {/* Email Input */}
           <div className="space-y-1.5">
-            <label className="block text-[11px] font-mono uppercase tracking-wider text-light-gray">
+            <label className="block text-xs font-mono uppercase tracking-wider text-[#E2E8F0] font-semibold">
               Email Address
             </label>
             <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-light-gray">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#94A3B8]">
                 <Mail className="h-4 w-4" />
               </span>
               <input
@@ -146,7 +160,7 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="admin@gacedifice.com"
-                className="w-full bg-rich-black/95 border border-midnight-blue focus:border-royal-blue rounded-2xl py-3.5 pl-11 pr-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all duration-200"
+                className="w-full bg-[#0A0E1A] border-2 border-[#2A3756] focus:border-[#38BDF8] rounded-2xl py-3.5 pl-11 pr-4 text-sm font-medium text-white placeholder-[#64748B] focus:outline-none transition-all duration-200"
                 id="login-email-input"
               />
             </div>
@@ -154,11 +168,11 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
 
           {/* Password Input */}
           <div className="space-y-1.5">
-            <label className="block text-[11px] font-mono uppercase tracking-wider text-light-gray">
+            <label className="block text-xs font-mono uppercase tracking-wider text-[#E2E8F0] font-semibold">
               Password
             </label>
             <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-light-gray">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#94A3B8]">
                 <Lock className="h-4 w-4" />
               </span>
               <input
@@ -167,13 +181,13 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-rich-black/95 border border-midnight-blue focus:border-royal-blue rounded-2xl py-3.5 pl-11 pr-11 text-xs text-white placeholder-medium-gray focus:outline-none transition-all duration-200"
+                className="w-full bg-[#0A0E1A] border-2 border-[#2A3756] focus:border-[#38BDF8] rounded-2xl py-3.5 pl-11 pr-11 text-sm font-medium text-white placeholder-[#64748B] focus:outline-none transition-all duration-200"
                 id="login-password-input"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-light-gray hover:text-white transition-colors cursor-pointer"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-white transition-colors cursor-pointer"
                 id="login-toggle-password"
                 tabIndex={-1}
               >
@@ -182,42 +196,72 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
             </div>
           </div>
 
+          {/* Success Message Display */}
+          {successMessage && (
+            <motion.div 
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-3.5 bg-emerald-950/80 border-2 border-emerald-500/50 rounded-2xl flex items-start gap-2.5 text-xs text-emerald-200 font-mono font-medium"
+              id="login-success-display"
+            >
+              <span className="leading-relaxed">{successMessage}</span>
+            </motion.div>
+          )}
+
           {/* Error Message Display */}
           {error && (
             <motion.div 
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="p-3.5 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-start gap-2.5 text-xs text-red-400 font-mono"
+              className="p-3.5 bg-red-950/80 border-2 border-red-500/50 rounded-2xl flex items-start gap-2.5 text-xs text-red-200 font-mono font-medium"
               id="login-error-display"
             >
-              <AlertCircle className="h-4.5 w-4.5 shrink-0 mt-0.5" />
+              <AlertCircle className="h-4.5 w-4.5 shrink-0 mt-0.5 text-red-400" />
               <span className="leading-relaxed">{error}</span>
             </motion.div>
           )}
 
-          {/* Sign In Button */}
+          {/* Submit Button */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-royal-blue to-electric-blue hover:from-electric-blue hover:to-royal-blue font-display font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all duration-300 text-white disabled:opacity-50 shadow-lg shadow-royal-blue/20 cursor-pointer"
+            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-blue-600 to-sky-500 hover:from-sky-500 hover:to-blue-600 font-display font-bold text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all duration-300 text-white disabled:opacity-50 shadow-lg shadow-blue-500/25 cursor-pointer"
             id="login-submit-button"
           >
             {loading ? (
               <>
                 <Loader2 className="h-4.5 w-4.5 animate-spin text-white" />
-                <span>Signing In...</span>
+                <span>{authMode === 'login' ? 'Signing In...' : 'Registering Account...'}</span>
               </>
             ) : (
-              <span>Sign In</span>
+              <span>{authMode === 'login' ? 'Sign In to Admin Portal' : 'Create Admin Account'}</span>
             )}
           </button>
         </form>
+
+        {/* Toggle Mode */}
+        <div className="mt-4 text-center">
+          <button
+            type="button"
+            onClick={() => {
+              setAuthMode(authMode === 'login' ? 'signup' : 'login');
+              setError('');
+              setSuccessMessage('');
+            }}
+            className="text-xs text-sky-400 hover:text-sky-300 font-mono transition-colors cursor-pointer"
+            id="login-toggle-mode-button"
+          >
+            {authMode === 'login'
+              ? "Don't have an admin auth user yet? Register account"
+              : "Already have an admin account? Sign In"}
+          </button>
+        </div>
 
         {/* Back to Home Link */}
         <div className="mt-6 text-center">
           <button
             onClick={onNavigateHome}
-            className="text-[11px] text-light-gray hover:text-white transition-colors font-mono uppercase tracking-widest cursor-pointer"
+            className="text-xs text-[#CBD5E1] hover:text-white transition-colors font-mono uppercase tracking-widest cursor-pointer font-semibold"
             id="login-back-home-button"
           >
             ← Back to Website
@@ -226,8 +270,8 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
       </motion.div>
 
       {/* Footer Branding */}
-      <p className="absolute bottom-6 text-[10px] font-mono tracking-widest text-medium-gray text-center select-none">
-        © {new Date().getFullYear()} GOD'S EDIFICE CHURCH. COVENANT PORTAL.
+      <p className="absolute bottom-6 text-xs font-mono tracking-widest text-[#94A3B8] text-center select-none">
+        © {new Date().getFullYear()} GOD'S EDIFICE CHURCH • MEDIA ADMINISTRATION
       </p>
     </div>
   );

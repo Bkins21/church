@@ -1,40 +1,51 @@
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700;800&family=Poppins:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700;800;900&family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500;1,600&display=swap');
 @import url('https://fonts.cdnfonts.com/css/lemon-milk');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Poppins", sans-serif;
+  --font-poppins: "Poppins", sans-serif;
   --font-display: "Lemon Milk", sans-serif;
+  --font-lemon: "Lemon Milk", sans-serif;
+  --font-cinzel: "Cinzel", serif;
   --font-church: "Cinzel", serif;
-  --font-mono: "JetBrains Mono", monospace;
+  --font-editorial: "Cinzel", serif;
+  --font-mono: "Poppins", sans-serif;
   
-  /* Custom requested palette colors */
-  --color-rich-black: #0E1013;
-  --color-charcoal: #28303D;
-  --color-midnight-blue: #071940;
-  --color-royal-blue: #0A3584;
-  --color-electric-blue: #076EC5;
-  --color-soft-white: #ECECEC;
-  --color-medium-gray: #585B64;
-  --color-light-gray: #9B9EA6;
+  /* Warm Editorial Stone & Alabaster Palette */
+  --color-alabaster-50: #FCFBF9;
+  --color-alabaster-100: #F7F5F0;
+  --color-alabaster-200: #EFEAE1;
+  --color-alabaster-300: #E4DCD0;
+  --color-alabaster-400: #D5C9B8;
+  
+  --color-bronze-400: #C28B57;
+  --color-bronze-500: #A36B3B;
+  --color-bronze-600: #8D5A30;
+  --color-bronze-700: #714624;
+  
+  --color-charcoal-900: #141416;
+  --color-charcoal-800: #222326;
+  --color-charcoal-700: #383A3F;
+  --color-charcoal-600: #54575E;
+  --color-charcoal-400: #8A8E96;
 
-  /* Remapping GEC/CCI legacy variables to the new premium palette */
-  --color-cci-blue-950: #0E1013; /* Rich Black (Main Background) */
-  --color-cci-blue-900: #28303D; /* Charcoal (Cards, Panels) */
-  --color-cci-blue-800: #071940; /* Midnight Blue (Dark Overlays) */
-  --color-cci-blue-700: #0A3584; /* Royal Blue (Primary Accent) */
-  --color-cci-gold-300: #ECECEC; /* Soft White */
-  --color-cci-gold-400: #076EC5; /* Electric Blue (Light Accent/Glow) */
-  --color-cci-gold-500: #0A3584; /* Royal Blue (Primary Accent) */
-  --color-cci-gold-600: #076EC5; /* Electric Blue (Glow) */
-  --color-cci-gold-700: #071940; /* Midnight Blue */
+  /* Legacy remappings for compatibility across sub-modules */
+  --color-cci-blue-950: #141416;
+  --color-cci-blue-900: #222326;
+  --color-cci-blue-800: #E4DCD0;
+  --color-cci-blue-700: #A36B3B;
+  --color-cci-gold-300: #F7F5F0;
+  --color-cci-gold-400: #A36B3B;
+  --color-cci-gold-500: #8D5A30;
+  --color-cci-gold-600: #714624;
 }
 
 @layer base {
   body {
     font-family: var(--font-sans);
-    background-color: #0E1013; /* Rich Black */
-    color: #ECECEC; /* Soft White */
+    background-color: #F7F5F0; /* Alabaster Cream */
+    color: #141416; /* Deep Charcoal */
     -webkit-font-smoothing: antialiased;
   }
 }

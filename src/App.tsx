@@ -9,6 +9,7 @@ import Gallery from './components/Gallery';
 import Footer from './components/Footer';
 import Cells from './components/Cells';
 import Songs from './components/Songs';
+import AboutUs from './components/AboutUs';
 import { teachingsCatalog } from './data';
 import Newsletter from './components/Newsletter';
 
@@ -59,11 +60,10 @@ export default function App() {
         setUserRegistrations([]);
       }
 
-      const savedLib = localStorage.getItem('gec_user_library') || localStorage.getItem('cci_user_library');
       const savedDownloads = localStorage.getItem('gec_user_downloads') || localStorage.getItem('cci_user_downloads');
       const savedSongDownloads = localStorage.getItem('gec_user_song_downloads');
 
-      if (savedLib) setUserLibrary(JSON.parse(savedLib));
+      setUserLibrary([]);
       if (savedDownloads) setUserDownloads(JSON.parse(savedDownloads));
       if (savedSongDownloads) setUserSongDownloads(JSON.parse(savedSongDownloads));
     } catch (e) {
@@ -85,7 +85,7 @@ export default function App() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Load teachings from Supabase or localStorage on mount
+  // Load teachings from Supabase on mount and listen to updates
   useEffect(() => {
     let active = true;
     const loadTeachings = async () => {
@@ -94,43 +94,42 @@ export default function App() {
           const { data, error } = await supabase
             .from('teachings')
             .select('*')
-            .order('date', { ascending: false });
+            .order('created_at', { ascending: false });
           
           if (!error && data && active) {
             const mapped: Teaching[] = data.map((t: any) => ({
               id: t.id,
-              title: t.title,
-              preacher: t.preacher || t.speaker || 'Pastor Abiodun Adebayo',
-              series: t.series || t.category || 'Sermon',
+              title: t.title || '',
+              preacher: t.speaker || t.preacher || 'Pastor Abiodun Adebayo',
+              series: t.category || t.series || 'Sermon',
               duration: t.duration || '45 mins',
-              date: t.date,
-              description: t.description || 'Systematic theological sermon.',
+              date: t.date || '',
+              description: t.description || 'No description provided.',
               audioUrl: t.audio_url || t.audioUrl || '',
               coverUrl: t.cover_url || t.coverUrl || 'https://images.unsplash.com/photo-1507679799987-c73779587ccf?q=80&w=600&auto=format&fit=crop',
               downloadCount: t.download_count || t.downloadCount || 0,
-              size: t.size || '15 MB'
+              size: t.size || '18.5 MB'
             }));
             setTeachings(mapped);
-            localStorage.setItem('gec_teachings_catalog', JSON.stringify(mapped));
             return;
           }
         }
-        
-        // Fallback to localStorage if unconfigured or error
-        const saved = localStorage.getItem('gec_teachings_catalog');
-        if (saved && active) {
-          setTeachings(JSON.parse(saved));
-        } else if (active) {
-          setTeachings([]);
-        }
       } catch (err) {
-        console.error('Failed to load teachings on mount', err);
+        console.error('Failed to load teachings from Supabase:', err);
       }
     };
 
     loadTeachings();
+
+    const handleTeachingsUpdate = () => {
+      loadTeachings();
+    };
+
+    window.addEventListener('gec_teachings_updated', handleTeachingsUpdate);
+
     return () => {
       active = false;
+      window.removeEventListener('gec_teachings_updated', handleTeachingsUpdate);
     };
   }, []);
 
@@ -234,58 +233,39 @@ export default function App() {
 
   // Add handlers
   const handleRegisterSuccess = async (registration: Registration) => {
-    const exists = userRegistrations.some(reg => reg.eventId === registration.eventId);
-    if (!exists) {
-      updateRegistrations([...userRegistrations, registration]);
+    if (!supabase) {
+      throw new Error('Supabase client is not initialized. Please verify backend connection.');
     }
 
-    try {
-      if (supabase) {
-        const firstName = registration.firstName || registration.userName.split(' ')[0] || '';
-        const surname = registration.surname || registration.userName.split(' ').slice(1).join(' ') || '';
+    const firstName = registration.firstName || registration.userName.split(' ')[0] || '';
+    const surname = registration.surname || registration.userName.split(' ').slice(1).join(' ') || '';
 
-        // 1. Insert into meeting_registrations table as requested
-        const { error: meetingRegError } = await supabase
-          .from("meeting_registrations")
-          .insert({
-            first_name: firstName,
-            surname: surname,
-            email: registration.userEmail,
-            phone_number: registration.userPhone || '',
-            address: registration.address || '',
-            nearest_branch: registration.userBranch || '',
-            age: registration.ageRange || '',
-            expecations_prayer_request: registration.expectations || '',
-            gender: registration.gender || '',
-            how_you_heard: registration.howHeard || '',
-            meeting_date: registration.eventDate || ''
-          });
+    // Insert into meeting_registrations table (single source of truth for Edifice registrations)
+    const { error: meetingRegError } = await supabase
+      .from("meeting_registrations")
+      .insert({
+        first_name: firstName,
+        surname: surname,
+        email: registration.userEmail,
+        phone_number: registration.userPhone || '',
+        address: registration.address || '',
+        nearest_branch: registration.userBranch || '',
+        age: registration.ageRange || '',
+        expecations_prayer_request: registration.expectations || '',
+        gender: registration.gender || '',
+        how_you_heard: registration.howHeard || '',
+        meeting_date: registration.eventDate || ''
+      });
 
-        if (meetingRegError) {
-          console.warn('meeting_registrations table insert warning/error:', meetingRegError);
-        } else {
-          console.log('Saved to meeting_registrations table successfully');
-        }
+    if (meetingRegError) {
+      console.error('Failed to save to meeting_registrations in Supabase:', meetingRegError);
+      throw new Error(meetingRegError.message || 'Could not write registration record to Supabase.');
+    }
 
-        // 2. Also insert into registrations table as fallback/admin portal compatibility
-        const { error } = await supabase
-          .from('registrations')
-          .insert([{
-            id: registration.id,
-            event_id: registration.eventId,
-            event_name: registration.eventTitle,
-            first_name: firstName,
-            surname: surname,
-            email: registration.userEmail,
-            phone: registration.userPhone || '',
-            location: registration.userBranch || '',
-            status: 'Registered',
-            created_at: new Date().toISOString()
-          }]);
-        if (error) console.warn('registrations table insert warning:', error);
-      }
-    } catch (err) {
-      console.error('Failed to save registration to Supabase', err);
+    // Only update local view state when Supabase write succeeds
+    const exists = userRegistrations.some(reg => reg.eventId === registration.eventId);
+    if (!exists) {
+      setUserRegistrations(prev => [...prev, registration]);
     }
   };
 
@@ -404,7 +384,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-rich-black flex flex-col justify-between" id="app-root-container">
+    <div className="min-h-screen bg-[#F7F5F0] text-[#141416] flex flex-col justify-between" id="app-root-container">
       
       {/* Dynamic Header / Navigation */}
       <Navbar
@@ -425,34 +405,16 @@ export default function App() {
             className="w-full"
           >
             {activeTab === 'home' && (
-              <>
-                <Hero 
-                  onNavigate={setActiveTab} 
-                  userRegistrations={userRegistrations}
-                  onStartRegistration={(firstName, surname, email) => {
-                    setPrefilledReg({ firstName, surname, email, eventId: 'edifice-conference-2026' });
-                    setActiveTab('meetings');
-                  }}
-                />
-                <Meetings 
-                  onRegisterSuccess={handleRegisterSuccess} 
-                  userRegistrations={userRegistrations} 
-                  prefilledReg={prefilledReg}
-                  onClearPrefilled={() => setPrefilledReg(null)}
-                  onRemoveRegistration={handleRemoveRegistration}
-                  onClearRegistrations={handleClearRegistrations}
-                />
-                <Teachings 
-                  onDownloadSuccess={handleDownloadSuccess} 
-                  userDownloads={userDownloads} 
-                  teachingsList={teachings}
-                  onAddTeaching={handleAddTeaching}
-                  isAdmin={isAdmin}
-                  onToggleAdmin={updateIsAdmin}
-                  onDeleteTeaching={handleDeleteTeaching}
-                />
-                <Newsletter />
-              </>
+              <Hero 
+                onNavigate={setActiveTab} 
+                userRegistrations={userRegistrations}
+              />
+            )}
+
+            {activeTab === 'about' && (
+              <AboutUs 
+                onNavigate={setActiveTab} 
+              />
             )}
 
             {activeTab === 'meetings' && (
@@ -501,6 +463,7 @@ export default function App() {
               <Songs
                 userSongDownloads={userSongDownloads}
                 onSongDownloadSuccess={handleSongDownloadSuccess}
+                isAdmin={isAdmin}
               />
             )}
 
@@ -510,7 +473,7 @@ export default function App() {
       </main>
 
       {/* Footer Details */}
-      <Footer />
+      <Footer activeTab={activeTab} />
 
       {/* Floating Back to Top Button */}
       <AnimatePresence>
@@ -522,7 +485,21 @@ export default function App() {
             whileHover={{ y: -4 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            className="fixed bottom-6 right-6 z-50 p-3.5 rounded-full bg-gradient-to-r from-cci-gold-600 to-cci-gold-400 text-[#040814] shadow-xl shadow-cci-gold-500/20 hover:from-cci-gold-500 hover:to-cci-gold-300 border border-cci-gold-400/25 transition-all duration-300 cursor-pointer flex items-center justify-center"
+            style={
+              activeTab === 'songs'
+                ? {
+                    background: '#FFC801',
+                    borderColor: '#FFC801',
+                    color: '#172836',
+                    boxShadow: '0 10px 25px rgba(255, 200, 1, 0.4)'
+                  }
+                : undefined
+            }
+            className={`fixed bottom-6 right-6 z-50 p-3.5 rounded-full shadow-xl transition-all duration-300 cursor-pointer flex items-center justify-center border ${
+              activeTab === 'songs'
+                ? 'hover:bg-[#FFC801]/90 text-[#172836]'
+                : 'bg-[#A36B3B] hover:bg-[#8D5A30] text-white shadow-[#A36B3B]/25 border-[#C28B57]/30'
+            }`}
             id="floating-back-to-top"
             title="Scroll to top"
           >

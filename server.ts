@@ -1,9 +1,11 @@
 import express from "express";
 import path from "path";
+import http from "http";
 import { createServer as createViteServer } from "vite";
 
 async function startServer() {
   const app = express();
+  const server = http.createServer(app);
   const PORT = 3000;
 
   // Health check API route
@@ -13,8 +15,13 @@ async function startServer() {
 
   // Vite middleware for development vs static files for production
   if (process.env.NODE_ENV !== "production") {
+    const isHmrDisabled = process.env.DISABLE_HMR === 'true';
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: isHmrDisabled ? false : { server },
+        watch: isHmrDisabled ? null : {},
+      },
       appType: "spa",
     });
     app.use(vite.middlewares);
@@ -27,7 +34,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  server.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }

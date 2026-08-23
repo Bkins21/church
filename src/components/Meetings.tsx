@@ -1,11 +1,11 @@
 import { useState, useEffect, FormEvent } from 'react';
-import { Calendar, MapPin, Clock, User, Mail, Phone, Ticket, QrCode, Printer, ChevronLeft, CheckCircle2, Trash2, ArrowRight, ShieldCheck, Sparkles, Map } from 'lucide-react';
+import { Calendar, MapPin, Clock, User, Mail, Phone, Ticket, QrCode, Printer, ChevronLeft, CheckCircle2, Trash2, ArrowRight, ShieldCheck, Sparkles, Building2, Check } from 'lucide-react';
 import { Registration, ChurchEvent } from '../types';
 import { upcomingMeetings } from '../data';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface MeetingsProps {
-  onRegisterSuccess: (registration: Registration) => void;
+  onRegisterSuccess: (registration: Registration) => Promise<void> | void;
   userRegistrations: Registration[];
   prefilledReg: { firstName: string; surname: string; email: string; eventId: string } | null;
   onClearPrefilled: () => void;
@@ -24,13 +24,15 @@ export default function Meetings({
   const [selectedEvent, setSelectedEvent] = useState<ChurchEvent | null>(null);
   const [activeTicket, setActiveTicket] = useState<Registration | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   // Form Fields
   const [firstName, setFirstName] = useState('');
   const [surname, setSurname] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [branch, setBranch] = useState('GEC Lekki HQ (Lekki HQ)');
+  const [branch, setBranch] = useState('GEC Onikolobo');
   const [mode, setMode] = useState<'physical' | 'virtual'>('physical');
   const [address, setAddress] = useState('');
   const [ageRange, setAgeRange] = useState('');
@@ -44,17 +46,13 @@ export default function Meetings({
   // Countdown State
   const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0, expired: false });
 
-  // Branches list
+  // Specified GEC Branches list
   const branches = [
-    'GEC Lekki HQ (Lekki HQ)',
-    'GEC Abeokuta (Onikolobo)',
-    'GEC Lagos Mainland (Yaba)',
-    'GEC Obada Branch',
-    'GEC Port Harcourt',
-    'GEC Abuja',
-    'GEC London Branch',
-    'GEC Houston Branch',
-    'Online Campus (Global)'
+    'GEC Onikolobo',
+    'GEC Yaba',
+    'GEC Magboro',
+    'GEC FUNAAB',
+    'GEC Itori'
   ];
 
   // Handle prefilled registration from Hero
@@ -119,17 +117,20 @@ export default function Meetings({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedEvent) return;
 
     if (!validateForm()) {
-      const firstError = document.querySelector('.text-red-400');
+      const firstError = document.querySelector('.text-red-600');
       if (firstError) {
         firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
       return;
     }
+
+    setSubmitError('');
+    setIsSubmitting(true);
 
     const ticketCode = `GEC-${selectedEvent.id.substring(0, 4).toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`;
 
@@ -155,20 +156,28 @@ export default function Meetings({
       howHeard
     };
 
-    onRegisterSuccess(registration);
-    setActiveTicket(registration);
-    setSelectedEvent(null);
+    try {
+      await onRegisterSuccess(registration);
+      setActiveTicket(registration);
+      setSelectedEvent(null);
 
-    // Reset Form
-    setFirstName('');
-    setSurname('');
-    setEmail('');
-    setPhone('');
-    setAddress('');
-    setAgeRange('');
-    setGender('');
-    setExpectations('');
-    setHowHeard('');
+      // Reset Form
+      setFirstName('');
+      setSurname('');
+      setEmail('');
+      setPhone('');
+      setAddress('');
+      setAgeRange('');
+      setGender('');
+      setExpectations('');
+      setHowHeard('');
+      setSubmitError('');
+    } catch (err: any) {
+      console.error('Registration failed:', err);
+      setSubmitError(err.message || 'Database registration failed. Please ensure the Supabase database tables are created.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handlePrint = () => {
@@ -176,622 +185,664 @@ export default function Meetings({
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12" id="meetings-view">
-      <AnimatePresence mode="wait">
-        
-        {/* Ticket Detail / Active Ticket View */}
-        {activeTicket && (
-          <motion.div
-            key="ticket-view"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="max-w-2xl mx-auto"
-            id="ticket-details-panel"
-          >
-            <div className="flex justify-between items-center mb-6 no-print">
+    <div className="w-full bg-[#F5EFEB] text-[#121814] py-12 transition-colors duration-300" id="meetings-view">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <AnimatePresence mode="wait">
+          
+          {/* Ticket Detail / Active Ticket View (60% Beige, 30% Green, 10% Black) */}
+          {activeTicket && (
+            <motion.div
+              key="ticket-view"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="max-w-2xl mx-auto"
+              id="ticket-details-panel"
+            >
+              <div className="flex justify-between items-center mb-6 no-print">
+                <button
+                  onClick={() => setActiveTicket(null)}
+                  className="flex items-center gap-2 text-[#2C3E35] hover:text-[#0D3D2E] font-medium transition-colors py-2"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  <span>Back to Meetings</span>
+                </button>
+                <div className="flex items-center gap-2">
+                  {onRemoveRegistration && (
+                    <button
+                      onClick={() => {
+                        if (confirm('Are you sure you want to cancel and delete this registration information?')) {
+                          onRemoveRegistration(activeTicket.id);
+                          setActiveTicket(null);
+                        }
+                      }}
+                      className="flex items-center gap-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 px-3.5 py-2 rounded-xl text-xs font-bold text-rose-700 transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span>Delete Pass</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={handlePrint}
+                    className="flex items-center gap-2 bg-[#0F4C3A] hover:bg-[#0D3D2E] text-[#FAF7F2] px-4 py-2 rounded-xl text-xs font-bold shadow-md transition-colors"
+                  >
+                    <Printer className="h-4 w-4" />
+                    <span>Print Pass</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Skeuomorphic Boarding Pass / Ticket (Beige Base + Green Banner + Black Accents) */}
+              <div className="bg-[#FAF7F2] border-2 border-[#E1D6C7] rounded-3xl overflow-hidden shadow-2xl relative">
+                {/* Top Banner Green Accent */}
+                <div className="h-3 bg-gradient-to-r from-[#0D3D2E] via-[#107C55] to-[#0D3D2E]" />
+                
+                {/* Ticket Body */}
+                <div className="p-8">
+                  {/* Header */}
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-[#E1D6C7] pb-6 mb-6 gap-4">
+                    <div>
+                      <span className="text-xs font-mono tracking-wider text-[#107C55] uppercase font-bold">
+                        Official Attendance Pass
+                      </span>
+                      <h3 className="text-xl sm:text-2xl font-display font-black text-[#121814] tracking-tight mt-1">
+                        {activeTicket.eventTitle}
+                      </h3>
+                    </div>
+                    <div className="bg-[#107C55]/15 border border-[#107C55]/30 text-[#0F4C3A] rounded-full px-4 py-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide">
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#107C55]" />
+                      <span>Registered ({activeTicket.mode})</span>
+                    </div>
+                  </div>
+
+                  {/* Grid Info */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                    <div className="space-y-4">
+                      <div>
+                        <span className="text-[10px] font-mono text-[#5E6862] uppercase tracking-wider block">Attendee Name</span>
+                        <span className="text-base font-bold text-[#121814] block">{activeTicket.userName}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-mono text-[#5E6862] uppercase tracking-wider block">Email Address</span>
+                        <span className="text-sm text-[#232B25] block truncate">{activeTicket.userEmail}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-mono text-[#5E6862] uppercase tracking-wider block">Phone Number</span>
+                        <span className="text-sm text-[#232B25] block">{activeTicket.userPhone || 'Not Provided'}</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <span className="text-[10px] font-mono text-[#5E6862] uppercase tracking-wider block">Registering From</span>
+                        <span className="text-sm text-[#0F4C3A] block font-bold">{activeTicket.userBranch}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-mono text-[#5E6862] uppercase tracking-wider block">Event Date</span>
+                        <span className="text-sm text-[#232B25] block">{activeTicket.eventDate}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-mono text-[#5E6862] uppercase tracking-wider block">Location / Venue</span>
+                        <span className="text-sm text-[#232B25] block line-clamp-2">{activeTicket.eventLocation}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Perforation Divider Line */}
+                  <div className="relative my-8 border-t-2 border-dashed border-[#D5C9B7]">
+                    <div className="absolute -left-11 -top-3 w-6 h-6 bg-[#F5EFEB] rounded-full border-r-2 border-[#E1D6C7]" />
+                    <div className="absolute -right-11 -top-3 w-6 h-6 bg-[#F5EFEB] rounded-full border-l-2 border-[#E1D6C7]" />
+                  </div>
+
+                  {/* QR Code and Code Footer */}
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
+                    <div className="text-center sm:text-left">
+                      <span className="text-[10px] font-mono text-[#5E6862] uppercase tracking-wider block">Unique Ticket ID</span>
+                      <span className="text-xl font-mono font-bold text-[#121814] tracking-widest block mt-1">
+                        {activeTicket.ticketCode}
+                      </span>
+                      <span className="text-[11px] text-[#5E6862] mt-1 block">Registered on: {activeTicket.registrationDate}</span>
+                    </div>
+                    
+                    {/* QR Code */}
+                    <div className="p-3 bg-white border border-[#E1D6C7] rounded-2xl shrink-0 flex items-center justify-center relative shadow-sm">
+                      <QrCode className="h-28 w-28 text-[#121814]" />
+                    </div>
+                  </div>
+
+                  <div className="mt-8 pt-6 border-t border-[#E1D6C7] text-center no-print">
+                    <p className="text-xs text-[#5E6862] max-w-md mx-auto">
+                      Please present this digital pass or a printed copy at the reception desk for verification.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Registration Form View (60% Beige, 30% Green, 10% Black) */}
+          {selectedEvent && !activeTicket && (
+            <motion.div
+              key="register-form"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              className="max-w-3xl mx-auto"
+              id="registration-form-panel"
+            >
               <button
-                onClick={() => setActiveTicket(null)}
-                className="flex items-center gap-2 text-slate-300 hover:text-white transition-colors py-2"
+                onClick={() => setSelectedEvent(null)}
+                className="flex items-center gap-2 text-[#2C3E35] hover:text-[#0D3D2E] font-medium transition-colors mb-6 py-2"
               >
                 <ChevronLeft className="h-4 w-4" />
                 <span>Back to Meetings</span>
               </button>
-              <div className="flex items-center gap-2">
-                {onRemoveRegistration && (
-                  <button
-                    onClick={() => {
-                      if (confirm('Are you sure you want to cancel and delete this registration information?')) {
-                        onRemoveRegistration(activeTicket.id);
-                        setActiveTicket(null);
-                      }
-                    }}
-                    className="flex items-center gap-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 px-3.5 py-2 rounded-xl text-xs font-bold text-rose-400 transition-colors"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    <span>Delete Registration</span>
-                  </button>
-                )}
-                <button
-                  onClick={handlePrint}
-                  className="flex items-center gap-2 bg-cci-blue-800 hover:bg-cci-blue-700 border border-cci-blue-700/60 px-4 py-2 rounded-xl text-xs font-bold text-cci-gold-400 transition-colors"
-                >
-                  <Printer className="h-4 w-4" />
-                  <span>Print Pass</span>
-                </button>
-              </div>
-            </div>
 
-            {/* Skeuomorphic Boarding Pass / Ticket */}
-            <div className="bg-[#0a1128] border border-cci-blue-700/60 rounded-3xl overflow-hidden shadow-2xl relative">
-              {/* Top Banner Accent */}
-              <div className="h-2 bg-gradient-to-r from-cci-gold-600 via-cci-gold-400 to-cci-gold-600" />
-              
-              {/* Ticket Body */}
-              <div className="p-8">
-                {/* Header */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-cci-blue-700/40 pb-6 mb-6 gap-4">
-                  <div>
-                    <span className="text-xs font-mono tracking-wider text-cci-gold-400 uppercase font-semibold">
-                      Official Attendance Pass
-                    </span>
-                    <h3 className="text-xl sm:text-2xl font-display font-black text-white tracking-tight mt-1">
-                      {activeTicket.eventTitle}
-                    </h3>
-                  </div>
-                  <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full px-4 py-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide">
-                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                    <span>Registered ({activeTicket.mode})</span>
-                  </div>
-                </div>
-
-                {/* Grid Info */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                  <div className="space-y-4">
-                    <div>
-                      <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Attendee Name</span>
-                      <span className="text-base font-bold text-white block">{activeTicket.userName}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Email Address</span>
-                      <span className="text-sm text-slate-200 block truncate">{activeTicket.userEmail}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Phone Number</span>
-                      <span className="text-sm text-slate-200 block">{activeTicket.userPhone || 'Not Provided'}</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Local Branch</span>
-                      <span className="text-sm text-slate-200 block font-semibold">{activeTicket.userBranch}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Event Date</span>
-                      <span className="text-sm text-slate-200 block">{activeTicket.eventDate}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Location / Venue</span>
-                      <span className="text-sm text-slate-200 block line-clamp-2">{activeTicket.eventLocation}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Perforation Divider Line */}
-                <div className="relative my-8 border-t-2 border-dashed border-cci-blue-700/50">
-                  <div className="absolute -left-11 -top-3 w-6 h-6 bg-[#040814] rounded-full border-r border-cci-blue-700/60" />
-                  <div className="absolute -right-11 -top-3 w-6 h-6 bg-[#040814] rounded-full border-l border-cci-blue-700/60" />
-                </div>
-
-                {/* QR Code and Code Footer */}
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
-                  <div className="text-center sm:text-left">
-                    <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Unique Ticket ID</span>
-                    <span className="text-xl font-mono font-bold text-white tracking-widest block mt-1">
-                      {activeTicket.ticketCode}
-                    </span>
-                    <span className="text-[10px] text-slate-400 mt-1 block">Registered on: {activeTicket.registrationDate}</span>
-                  </div>
-                  
-                  {/* Decorative QR Code */}
-                  <div className="p-3 bg-white rounded-2xl shrink-0 flex items-center justify-center relative group">
-                    <QrCode className="h-28 w-28 text-slate-900" />
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-[#040814]/90 rounded-2xl transition-opacity no-print">
-                      <span className="text-[10px] font-mono text-cci-gold-400 font-bold uppercase tracking-wider">Valid Entry</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-8 pt-6 border-t border-cci-blue-700/20 text-center no-print">
-                  <p className="text-xs text-slate-400 max-w-md mx-auto mb-4">
-                    Please present this digital ticket pass or a printed copy at the entrance desk of the venue for confirmation.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Registration Form View */}
-        {selectedEvent && !activeTicket && (
-          <motion.div
-            key="register-form"
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -15 }}
-            className="max-w-3xl mx-auto"
-            id="registration-form-panel"
-          >
-            <button
-              onClick={() => setSelectedEvent(null)}
-              className="flex items-center gap-2 text-slate-300 hover:text-white transition-colors mb-6 py-2"
-            >
-              <ChevronLeft className="h-4 w-4" />
-              <span>Back to Meetings</span>
-            </button>
-
-            <div className="bg-gradient-to-b from-[#0a1128] to-[#040814] border border-cci-blue-700/60 rounded-3xl p-6 sm:p-10 shadow-xl overflow-hidden relative">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-cci-gold-500/5 rounded-full blur-2xl pointer-events-none" />
-              
-              <div className="mb-8 border-b border-cci-blue-700/40 pb-6">
-                <span className="text-xs font-mono font-semibold uppercase tracking-widest text-cci-gold-400 block mb-2">
-                  Conference Registration Form
-                </span>
-                <h3 className="text-2xl sm:text-3xl font-display font-black text-white tracking-tight">
-                  {selectedEvent.title}
-                </h3>
-                <div className="flex flex-wrap gap-y-2 gap-x-4 mt-4 text-xs text-slate-300 font-medium">
-                  <span className="flex items-center gap-1.5">
-                    <Calendar className="h-3.5 w-3.5 text-cci-gold-500" />
-                    {selectedEvent.date}
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <Clock className="h-3.5 w-3.5 text-cci-gold-500" />
-                    {selectedEvent.time}
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <MapPin className="h-3.5 w-3.5 text-cci-gold-500 shrink-0" />
-                    {selectedEvent.location}
-                  </span>
-                </div>
-              </div>
-
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="bg-[#FAF7F2] border-2 border-[#E1D6C7] rounded-3xl p-6 sm:p-10 shadow-xl overflow-hidden relative">
+                {/* Decorative green accent blur */}
+                <div className="absolute top-0 right-0 w-40 h-40 bg-[#107C55]/10 rounded-full blur-3xl pointer-events-none" />
                 
-                {/* Name section */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-xs font-mono text-slate-300 uppercase tracking-wider mb-2 font-semibold">
-                      First Name <span className="text-red-400">*</span>
-                    </label>
-                    <div className="relative">
-                      <User className="absolute left-4 top-3.5 h-4 w-4 text-slate-400" />
-                      <input
-                        type="text"
-                        value={firstName}
-                        onChange={(e) => setFirstName(e.target.value)}
-                        placeholder="John"
-                        className="w-full bg-[#050b18] border border-cci-blue-700/50 hover:border-cci-blue-700/80 focus:border-cci-gold-500/80 rounded-xl py-3 pl-11 pr-4 text-sm text-white placeholder-slate-500 focus:outline-none transition-colors"
-                      />
-                    </div>
-                    {errors.firstName && <span className="text-red-400 text-xs mt-1 block font-mono">{errors.firstName}</span>}
+                <div className="mb-8 border-b border-[#E1D6C7] pb-6">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#107C55]/10 border border-[#107C55]/20 text-[#0F4C3A] rounded-full text-[11px] font-mono uppercase font-bold tracking-wider mb-2">
+                    <Sparkles className="h-3 w-3 text-[#107C55]" />
+                    <span>Conference Registration Form</span>
                   </div>
-
-                  <div>
-                    <label className="block text-xs font-mono text-slate-300 uppercase tracking-wider mb-2 font-semibold">
-                      Surname / Last Name <span className="text-red-400">*</span>
-                    </label>
-                    <div className="relative">
-                      <User className="absolute left-4 top-3.5 h-4 w-4 text-slate-400" />
-                      <input
-                        type="text"
-                        value={surname}
-                        onChange={(e) => setSurname(e.target.value)}
-                        placeholder="Doe"
-                        className="w-full bg-[#050b18] border border-cci-blue-700/50 hover:border-cci-blue-700/80 focus:border-cci-gold-500/80 rounded-xl py-3 pl-11 pr-4 text-sm text-white placeholder-slate-500 focus:outline-none transition-colors"
-                      />
-                    </div>
-                    {errors.surname && <span className="text-red-400 text-xs mt-1 block font-mono">{errors.surname}</span>}
-                  </div>
-                </div>
-
-                {/* Email and Phone */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-xs font-mono text-slate-300 uppercase tracking-wider mb-2 font-semibold">
-                      Email Address <span className="text-red-400">*</span>
-                    </label>
-                    <div className="relative">
-                      <Mail className="absolute left-4 top-3.5 h-4 w-4 text-slate-400" />
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="john.doe@example.com"
-                        className="w-full bg-[#050b18] border border-cci-blue-700/50 hover:border-cci-blue-700/80 focus:border-cci-gold-500/80 rounded-xl py-3 pl-11 pr-4 text-sm text-white placeholder-slate-500 focus:outline-none transition-colors"
-                      />
-                    </div>
-                    {errors.email && <span className="text-red-400 text-xs mt-1 block font-mono">{errors.email}</span>}
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-mono text-slate-300 uppercase tracking-wider mb-2 font-semibold">
-                      Phone Number <span className="text-red-400">*</span>
-                    </label>
-                    <div className="relative">
-                      <Phone className="absolute left-4 top-3.5 h-4 w-4 text-slate-400" />
-                      <input
-                        type="tel"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="+234 ..."
-                        className="w-full bg-[#050b18] border border-cci-blue-700/50 hover:border-cci-blue-700/80 focus:border-cci-gold-500/80 rounded-xl py-3 pl-11 pr-4 text-sm text-white placeholder-slate-500 focus:outline-none transition-colors"
-                      />
-                    </div>
-                    {errors.phone && <span className="text-red-400 text-xs mt-1 block font-mono">{errors.phone}</span>}
-                  </div>
-                </div>
-
-                {/* Nearest GEC Branch */}
-                <div>
-                  <label className="block text-xs font-mono text-slate-300 uppercase tracking-wider mb-2 font-semibold">
-                    Your Nearest GEC Branch <span className="text-red-400">*</span>
-                  </label>
-                  <select
-                    value={branch}
-                    onChange={(e) => setBranch(e.target.value)}
-                    className="w-full bg-[#050b18] border border-cci-blue-700/50 hover:border-cci-blue-700/80 focus:border-cci-gold-500/80 rounded-xl py-3 px-4 text-sm text-white focus:outline-none transition-colors"
-                  >
-                    {branches.map((b) => (
-                      <option key={b} value={b} className="bg-[#050b18] text-white">{b}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Residential Address - Required if physical */}
-                <div>
-                  <label className="block text-xs font-mono text-slate-300 uppercase tracking-wider mb-2 font-semibold">
-                    Residential Address {mode === 'physical' && <span className="text-red-400">*</span>}
-                  </label>
-                  <textarea
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    placeholder="Provide your city or full residential address..."
-                    rows={2}
-                    className="w-full bg-[#050b18] border border-cci-blue-700/50 hover:border-cci-blue-700/80 focus:border-cci-gold-500/80 rounded-xl py-3 px-4 text-sm text-white placeholder-slate-500 focus:outline-none transition-colors resize-none"
-                  />
-                  {errors.address && <span className="text-red-400 text-xs mt-1 block font-mono">{errors.address}</span>}
-                </div>
-
-                {/* Demographics */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-xs font-mono text-slate-300 uppercase tracking-wider mb-2 font-semibold">
-                      Age Range
-                    </label>
-                    <select
-                      value={ageRange}
-                      onChange={(e) => setAgeRange(e.target.value)}
-                      className="w-full bg-[#050b18] border border-cci-blue-700/50 hover:border-cci-blue-700/80 focus:border-cci-gold-500/80 rounded-xl py-3 px-4 text-sm text-white focus:outline-none transition-colors"
-                    >
-                      <option value="" className="bg-[#050b18]">Select Age range (Optional)</option>
-                      <option value="Under 18" className="bg-[#050b18]">Under 18</option>
-                      <option value="18 - 25" className="bg-[#050b18]">18 - 25 years</option>
-                      <option value="26 - 35" className="bg-[#050b18]">26 - 35 years</option>
-                      <option value="36 - 45" className="bg-[#050b18]">36 - 45 years</option>
-                      <option value="46 and Above" className="bg-[#050b18]">46 and Above</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-mono text-slate-300 uppercase tracking-wider mb-2 font-semibold">
-                      Gender
-                    </label>
-                    <select
-                      value={gender}
-                      onChange={(e) => setGender(e.target.value)}
-                      className="w-full bg-[#050b18] border border-cci-blue-700/50 hover:border-cci-blue-700/80 focus:border-cci-gold-500/80 rounded-xl py-3 px-4 text-sm text-white focus:outline-none transition-colors"
-                    >
-                      <option value="" className="bg-[#050b18]">Select Gender (Optional)</option>
-                      <option value="Male" className="bg-[#050b18]">Male</option>
-                      <option value="Female" className="bg-[#050b18]">Female</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* expectations */}
-                <div>
-                  <label className="block text-xs font-mono text-slate-300 uppercase tracking-wider mb-2 font-semibold">
-                    What are your expectations or prayer requests?
-                  </label>
-                  <textarea
-                    value={expectations}
-                    onChange={(e) => setExpectations(e.target.value)}
-                    placeholder="Share what you are believing God for at this conference..."
-                    rows={3}
-                    className="w-full bg-[#050b18] border border-cci-blue-700/50 hover:border-cci-blue-700/80 focus:border-cci-gold-500/80 rounded-xl py-3 px-4 text-sm text-white placeholder-slate-500 focus:outline-none transition-colors resize-none"
-                  />
-                </div>
-
-                {/* how heard */}
-                <div>
-                  <label className="block text-xs font-mono text-slate-300 uppercase tracking-wider mb-2 font-semibold">
-                    How did you hear about this meeting?
-                  </label>
-                  <select
-                    value={howHeard}
-                    onChange={(e) => setHowHeard(e.target.value)}
-                    className="w-full bg-[#050b18] border border-cci-blue-700/50 hover:border-cci-blue-700/80 focus:border-cci-gold-500/80 rounded-xl py-3 px-4 text-sm text-white focus:outline-none transition-colors"
-                  >
-                    <option value="" className="bg-[#050b18]">Select Option (Optional)</option>
-                    <option value="Church Service Announcement" className="bg-[#050b18]">Church Service Announcement</option>
-                    <option value="Friend or Family Member" className="bg-[#050b18]">Friend or Family Member</option>
-                    <option value="Social Media (X, Facebook, Instagram)" className="bg-[#050b18]">Social Media (X, Facebook, Instagram)</option>
-                    <option value="WhatsApp Status / Group" className="bg-[#050b18]">WhatsApp Status / Group</option>
-                    <option value="Mixlr / Audio stream" className="bg-[#050b18]">Mixlr / Audio stream</option>
-                    <option value="Flyers / Billboard" className="bg-[#050b18]">Flyers / Billboard</option>
-                  </select>
-                </div>
-
-                {/* Consent & Submit */}
-                <div className="pt-4">
-                  <button
-                    type="submit"
-                    className="w-full py-4 rounded-xl font-display font-bold text-sm tracking-wider bg-gradient-to-r from-cci-gold-600 to-cci-gold-400 hover:from-cci-gold-500 hover:to-cci-gold-300 text-[#040814] flex items-center justify-center gap-2 shadow-lg shadow-cci-gold-600/10 hover:shadow-cci-gold-600/25 transition-all transform hover:-translate-y-0.5"
-                  >
-                    <Ticket className="h-4 w-4" />
-                    <span>Complete Registration</span>
-                  </button>
-                </div>
-
-              </form>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Catalog and Countdown (Active Meetings Dashboard) */}
-        {!selectedEvent && !activeTicket && (
-          <motion.div
-            key="meetings-dashboard"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="space-y-16"
-          >
-            {/* Header */}
-            <div className="text-center max-w-3xl mx-auto mb-12">
-              <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight text-white mb-4">
-                Upcoming Meetings & Conferences
-              </h2>
-              <div className="w-16 h-1 bg-gradient-to-r from-cci-gold-600 to-cci-gold-400 mx-auto mb-5 rounded-full" />
-              <p className="text-sm sm:text-base text-slate-300">
-                Register for GEC meetings, lock in your official entrance passes, and join believers across the globe as we build deep scriptural clarity and experience spiritual outpouring.
-              </p>
-            </div>
-
-            {/* Countdown Panel */}
-            <div className="relative overflow-hidden bg-gradient-to-br from-[#0c1635] to-[#040814] border border-emerald-500/20 rounded-3xl p-6 sm:p-10 shadow-xl" id="hero-countdown-panel">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
-              
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-                <div className="lg:col-span-7 space-y-4">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full text-[10px] font-mono uppercase font-bold tracking-wider">
-                    <Sparkles className="h-3 w-3" />
-                    <span>Our next special meeting is...</span>
-                  </div>
-                  <h3 className="text-2xl sm:text-3xl font-display font-black text-white tracking-tight">
-                    Edifice Conference 2026
+                  <h3 className="text-2xl sm:text-3xl font-display font-black text-[#121814] tracking-tight">
+                    {selectedEvent.title}
                   </h3>
-                  <p className="text-sm text-slate-300 leading-relaxed max-w-xl">
-                    Register now for the premier spiritual gathering of the year. Build a rigorous scriptural foundation, clarify Christian doctrines, and build intense prayer capacity with Pastor Abiodun Adebayo and guest ministers.
-                  </p>
-                  <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-300 font-semibold pt-2">
+                  <div className="flex flex-wrap gap-y-2 gap-x-5 mt-4 text-xs text-[#334239] font-medium">
                     <span className="flex items-center gap-1.5">
-                      <Calendar className="h-3.5 w-3.5 text-cci-gold-500" />
-                      October 1st - 4th, 2026
+                      <Calendar className="h-3.5 w-3.5 text-[#107C55]" />
+                      {selectedEvent.date}
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <MapPin className="h-3.5 w-3.5 text-cci-gold-500" />
-                      GEC Lekki HQ
+                      <Clock className="h-3.5 w-3.5 text-[#107C55]" />
+                      {selectedEvent.time}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <MapPin className="h-3.5 w-3.5 text-[#107C55] shrink-0" />
+                      {selectedEvent.location}
                     </span>
                   </div>
                 </div>
 
-                {/* Countdown Timer Block */}
-                <div className="lg:col-span-5 flex flex-col items-center justify-center space-y-4">
-                  <div className="grid grid-cols-4 gap-3 sm:gap-4 w-full">
-                    {[
-                      { label: 'Days', value: countdown.days },
-                      { label: 'Hours', value: countdown.hours },
-                      { label: 'Minutes', value: countdown.minutes },
-                      { label: 'Seconds', value: countdown.seconds }
-                    ].map((item, i) => (
-                      <div key={i} className="flex flex-col items-center bg-[#050b18] border border-cci-blue-700/40 rounded-2xl py-3 px-2 sm:py-4">
-                        <span className="text-2xl sm:text-3xl font-mono font-bold text-cci-gold-400">
-                          {String(item.value).padStart(2, '0')}
-                        </span>
-                        <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider mt-1.5">
-                          {item.label}
-                        </span>
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  
+                  {/* Name section */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-xs font-mono text-[#121814] uppercase tracking-wider mb-2 font-bold">
+                        First Name <span className="text-red-600">*</span>
+                      </label>
+                      <div className="relative">
+                        <User className="absolute left-4 top-3.5 h-4 w-4 text-[#5E6862]" />
+                        <input
+                          type="text"
+                          value={firstName}
+                          onChange={(e) => setFirstName(e.target.value)}
+                          placeholder="John"
+                          className="w-full bg-white border border-[#D5C9B7] focus:border-[#107C55] focus:ring-1 focus:ring-[#107C55] rounded-xl py-3 pl-11 pr-4 text-sm text-[#121814] placeholder-[#8A928B] focus:outline-none transition-colors shadow-sm"
+                        />
                       </div>
-                    ))}
+                      {errors.firstName && <span className="text-red-600 text-xs mt-1 block font-mono font-medium">{errors.firstName}</span>}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-mono text-[#121814] uppercase tracking-wider mb-2 font-bold">
+                        Surname / Last Name <span className="text-red-600">*</span>
+                      </label>
+                      <div className="relative">
+                        <User className="absolute left-4 top-3.5 h-4 w-4 text-[#5E6862]" />
+                        <input
+                          type="text"
+                          value={surname}
+                          onChange={(e) => setSurname(e.target.value)}
+                          placeholder="Doe"
+                          className="w-full bg-white border border-[#D5C9B7] focus:border-[#107C55] focus:ring-1 focus:ring-[#107C55] rounded-xl py-3 pl-11 pr-4 text-sm text-[#121814] placeholder-[#8A928B] focus:outline-none transition-colors shadow-sm"
+                        />
+                      </div>
+                      {errors.surname && <span className="text-red-600 text-xs mt-1 block font-mono font-medium">{errors.surname}</span>}
+                    </div>
                   </div>
 
-                  {userRegistrations.some(r => r.eventId === 'edifice-conference-2026') ? (
-                    <button
-                      onClick={() => {
-                        const pass = userRegistrations.find(r => r.eventId === 'edifice-conference-2026');
-                        if (pass) setActiveTicket(pass);
-                      }}
-                      className="w-full py-3.5 rounded-xl font-display font-bold text-xs uppercase tracking-wider bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center gap-2 transition-all"
+                  {/* Email and Phone */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-xs font-mono text-[#121814] uppercase tracking-wider mb-2 font-bold">
+                        Email Address <span className="text-red-600">*</span>
+                      </label>
+                      <div className="relative">
+                        <Mail className="absolute left-4 top-3.5 h-4 w-4 text-[#5E6862]" />
+                        <input
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="john.doe@example.com"
+                          className="w-full bg-white border border-[#D5C9B7] focus:border-[#107C55] focus:ring-1 focus:ring-[#107C55] rounded-xl py-3 pl-11 pr-4 text-sm text-[#121814] placeholder-[#8A928B] focus:outline-none transition-colors shadow-sm"
+                        />
+                      </div>
+                      {errors.email && <span className="text-red-600 text-xs mt-1 block font-mono font-medium">{errors.email}</span>}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-mono text-[#121814] uppercase tracking-wider mb-2 font-bold">
+                        Phone Number <span className="text-red-600">*</span>
+                      </label>
+                      <div className="relative">
+                        <Phone className="absolute left-4 top-3.5 h-4 w-4 text-[#5E6862]" />
+                        <input
+                          type="tel"
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                          placeholder="+234 ..."
+                          className="w-full bg-white border border-[#D5C9B7] focus:border-[#107C55] focus:ring-1 focus:ring-[#107C55] rounded-xl py-3 pl-11 pr-4 text-sm text-[#121814] placeholder-[#8A928B] focus:outline-none transition-colors shadow-sm"
+                        />
+                      </div>
+                      {errors.phone && <span className="text-red-600 text-xs mt-1 block font-mono font-medium">{errors.phone}</span>}
+                    </div>
+                  </div>
+
+                  {/* Branch selector: Which of our branches are you registering from */}
+                  <div>
+                    <label className="block text-xs font-mono text-[#121814] uppercase tracking-wider mb-2 font-bold flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Building2 className="h-3.5 w-3.5 text-[#107C55]" />
+                        <span>Which of our branches are you registering from?</span> <span className="text-red-600">*</span>
+                      </span>
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={branch}
+                        onChange={(e) => setBranch(e.target.value)}
+                        className="w-full bg-white border border-[#D5C9B7] focus:border-[#107C55] focus:ring-1 focus:ring-[#107C55] rounded-xl py-3.5 px-4 text-sm text-[#121814] font-medium focus:outline-none transition-colors shadow-sm appearance-none cursor-pointer"
+                      >
+                        {branches.map((b) => (
+                          <option key={b} value={b} className="bg-white text-[#121814] py-1">{b}</option>
+                        ))}
+                      </select>
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-[#107C55] font-bold text-xs">
+                        ▼
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Residential Address - Required if physical */}
+                  <div>
+                    <label className="block text-xs font-mono text-[#121814] uppercase tracking-wider mb-2 font-bold">
+                      Residential Address {mode === 'physical' && <span className="text-red-600">*</span>}
+                    </label>
+                    <textarea
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                      placeholder="Provide your city or full residential address..."
+                      rows={2}
+                      className="w-full bg-white border border-[#D5C9B7] focus:border-[#107C55] focus:ring-1 focus:ring-[#107C55] rounded-xl py-3 px-4 text-sm text-[#121814] placeholder-[#8A928B] focus:outline-none transition-colors resize-none shadow-sm"
+                    />
+                    {errors.address && <span className="text-red-600 text-xs mt-1 block font-mono font-medium">{errors.address}</span>}
+                  </div>
+
+                  {/* Demographics */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-xs font-mono text-[#121814] uppercase tracking-wider mb-2 font-bold">
+                        Age Range
+                      </label>
+                      <select
+                        value={ageRange}
+                        onChange={(e) => setAgeRange(e.target.value)}
+                        className="w-full bg-white border border-[#D5C9B7] focus:border-[#107C55] focus:ring-1 focus:ring-[#107C55] rounded-xl py-3 px-4 text-sm text-[#121814] focus:outline-none transition-colors shadow-sm cursor-pointer"
+                      >
+                        <option value="">Select Age range (Optional)</option>
+                        <option value="Under 18">Under 18</option>
+                        <option value="18 - 25">18 - 25 years</option>
+                        <option value="26 - 35">26 - 35 years</option>
+                        <option value="36 - 45">36 - 45 years</option>
+                        <option value="46 and Above">46 and Above</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-mono text-[#121814] uppercase tracking-wider mb-2 font-bold">
+                        Gender
+                      </label>
+                      <select
+                        value={gender}
+                        onChange={(e) => setGender(e.target.value)}
+                        className="w-full bg-white border border-[#D5C9B7] focus:border-[#107C55] focus:ring-1 focus:ring-[#107C55] rounded-xl py-3 px-4 text-sm text-[#121814] focus:outline-none transition-colors shadow-sm cursor-pointer"
+                      >
+                        <option value="">Select Gender (Optional)</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* expectations */}
+                  <div>
+                    <label className="block text-xs font-mono text-[#121814] uppercase tracking-wider mb-2 font-bold">
+                      What are your expectations or prayer requests?
+                    </label>
+                    <textarea
+                      value={expectations}
+                      onChange={(e) => setExpectations(e.target.value)}
+                      placeholder="Share what you are believing God for at this conference..."
+                      rows={3}
+                      className="w-full bg-white border border-[#D5C9B7] focus:border-[#107C55] focus:ring-1 focus:ring-[#107C55] rounded-xl py-3 px-4 text-sm text-[#121814] placeholder-[#8A928B] focus:outline-none transition-colors resize-none shadow-sm"
+                    />
+                  </div>
+
+                  {/* how heard */}
+                  <div>
+                    <label className="block text-xs font-mono text-[#121814] uppercase tracking-wider mb-2 font-bold">
+                      How did you hear about this meeting?
+                    </label>
+                    <select
+                      value={howHeard}
+                      onChange={(e) => setHowHeard(e.target.value)}
+                      className="w-full bg-white border border-[#D5C9B7] focus:border-[#107C55] focus:ring-1 focus:ring-[#107C55] rounded-xl py-3 px-4 text-sm text-[#121814] focus:outline-none transition-colors shadow-sm cursor-pointer"
                     >
-                      <ShieldCheck className="h-4 w-4" />
-                      <span>View My Active Pass</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        const edificeEvent = upcomingMeetings.find(e => e.id === 'edifice-conference-2026');
-                        if (edificeEvent) setSelectedEvent(edificeEvent);
-                      }}
-                      className="w-full py-3.5 rounded-xl font-display font-bold text-xs uppercase tracking-wider bg-gradient-to-r from-cci-gold-600 to-cci-gold-400 hover:from-cci-gold-500 hover:to-cci-gold-300 text-[#040814] flex items-center justify-center gap-2 shadow-lg shadow-cci-gold-600/10 transition-all transform hover:-translate-y-0.5"
-                    >
-                      <Ticket className="h-4 w-4" />
-                      <span>Register to Attend</span>
-                    </button>
+                      <option value="">Select Option (Optional)</option>
+                      <option value="Church Service Announcement">Church Service Announcement</option>
+                      <option value="Friend or Family Member">Friend or Family Member</option>
+                      <option value="Social Media (X, Facebook, Instagram)">Social Media (X, Facebook, Instagram)</option>
+                      <option value="WhatsApp Status / Group">WhatsApp Status / Group</option>
+                      <option value="Mixlr / Audio stream">Mixlr / Audio stream</option>
+                      <option value="Flyers / Billboard">Flyers / Billboard</option>
+                    </select>
+                  </div>
+
+                  {/* Submit Error Banner */}
+                  {submitError && (
+                    <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs font-mono space-y-1">
+                      <div className="font-bold flex items-center gap-1.5 text-red-800">
+                        <span>Database Registration Error</span>
+                      </div>
+                      <p>{submitError}</p>
+                      <p className="text-[11px] text-red-600">
+                        Please verify that the Supabase database tables are initialized using the SQL script in Admin Setup.
+                      </p>
+                    </div>
                   )}
+
+                  {/* Submit Button (Green 30% Theme Accent) */}
+                  <div className="pt-4">
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="w-full py-4 rounded-xl font-display font-bold text-sm tracking-wider bg-[#0F4C3A] hover:bg-[#0D3D2E] disabled:opacity-60 disabled:cursor-not-allowed text-[#FAF7F2] flex items-center justify-center gap-2 shadow-lg shadow-[#0F4C3A]/25 transition-all transform hover:-translate-y-0.5"
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          <span>Saving to Supabase...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Ticket className="h-4 w-4 text-[#FAF7F2]" />
+                          <span>Complete Registration</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                </form>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Catalog and Countdown (Active Meetings Dashboard - 60% Beige, 30% Green, 10% Black) */}
+          {!selectedEvent && !activeTicket && (
+            <motion.div
+              key="meetings-dashboard"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="space-y-16"
+            >
+              {/* Themed Header: Midnight Royal Navy & Radiant Amber Fire */}
+              <div className="text-center max-w-3xl mx-auto mb-12 space-y-4">
+                <div className="inline-flex items-center gap-1.5 px-3.5 py-1 bg-[#F59E0B]/15 border border-[#F59E0B]/30 text-[#F59E0B] rounded-full text-xs font-mono uppercase font-bold tracking-wider shadow-sm">
+                  <Building2 className="h-3.5 w-3.5 text-[#F59E0B]" />
+                  <span>God's Edifice Church Gatherings</span>
+                </div>
+                <h2 className="font-cinzel text-3xl sm:text-5xl font-bold tracking-tight text-[#141A29]">
+                  Upcoming Meetings & Conferences
+                </h2>
+                <div className="w-16 h-1 bg-[#F59E0B] mx-auto rounded-full shadow-sm shadow-[#F59E0B]/50" />
+                <p className="text-sm sm:text-base text-[#475569] leading-relaxed">
+                  Register for GEC meetings, lock in your official entrance passes, and join believers across our branches as we build deep scriptural clarity and experience spiritual outpouring.
+                </p>
+              </div>
+
+              {/* Countdown Panel (Midnight Royal Navy + Radiant Amber Fire Accents) */}
+              <div className="relative overflow-hidden bg-gradient-to-br from-[#141A29] via-[#1E2738] to-[#101522] border-2 border-[#2A3654] rounded-3xl p-6 sm:p-10 shadow-2xl text-white" id="hero-countdown-panel">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-[#F59E0B]/15 rounded-full blur-3xl pointer-events-none" />
+                
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center relative z-10">
+                  <div className="lg:col-span-7 space-y-4">
+                    <div className="inline-flex items-center gap-1.5 px-3.5 py-1 bg-[#F59E0B]/20 text-[#FBBF24] border border-[#F59E0B]/40 rounded-full text-[11px] font-mono uppercase font-black tracking-wider shadow-sm">
+                      <Sparkles className="h-3 w-3 text-[#F59E0B]" />
+                      <span>Our next special meeting is...</span>
+                    </div>
+                    <h3 className="text-2xl sm:text-3xl lg:text-4xl font-cinzel font-black text-[#F0F4F8] tracking-tight">
+                      Edifice Conference 2026
+                    </h3>
+                    <p className="text-sm text-[#CBD5E1] leading-relaxed max-w-xl">
+                      Register now for the premier spiritual gathering of the year. Build a rigorous scriptural foundation, clarify Christian doctrines, and build intense prayer capacity with Pastor Abiodun Adebayo and guest ministers.
+                    </p>
+                    <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-[#F0F4F8] font-semibold pt-2">
+                      <span className="flex items-center gap-1.5 bg-black/30 border border-white/10 px-3 py-1.5 rounded-lg">
+                        <Calendar className="h-3.5 w-3.5 text-[#F59E0B]" />
+                        October 1st - 4th, 2026
+                      </span>
+                      <span className="flex items-center gap-1.5 bg-black/30 border border-white/10 px-3 py-1.5 rounded-lg">
+                        <MapPin className="h-3.5 w-3.5 text-[#F59E0B]" />
+                        GEC Onikolobo & Branch Campuses
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Countdown Timer Block (Midnight Background with Amber Digits) */}
+                  <div className="lg:col-span-5 flex flex-col items-center justify-center space-y-4">
+                    <div className="grid grid-cols-4 gap-3 sm:gap-4 w-full">
+                      {[
+                        { label: 'Days', value: countdown.days },
+                        { label: 'Hours', value: countdown.hours },
+                        { label: 'Minutes', value: countdown.minutes },
+                        { label: 'Seconds', value: countdown.seconds }
+                      ].map((item, i) => (
+                        <div key={i} className="flex flex-col items-center bg-[#0F1420]/80 border border-[#2A3654] rounded-2xl py-3 px-2 sm:py-4 shadow-md">
+                          <span className="text-2xl sm:text-3xl font-mono font-black text-[#F59E0B]">
+                            {String(item.value).padStart(2, '0')}
+                          </span>
+                          <span className="text-[10px] font-mono text-[#94A3B8] uppercase font-bold tracking-wider mt-1.5">
+                            {item.label}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {userRegistrations.some(r => r.eventId === 'edifice-conference-2026') ? (
+                      <button
+                        onClick={() => {
+                          const pass = userRegistrations.find(r => r.eventId === 'edifice-conference-2026');
+                          if (pass) setActiveTicket(pass);
+                        }}
+                        className="w-full py-3.5 rounded-xl font-display font-bold text-xs uppercase tracking-wider bg-[#FAF7F2] hover:bg-white text-[#0D3D2E] flex items-center justify-center gap-2 transition-all shadow-md"
+                      >
+                        <ShieldCheck className="h-4 w-4 text-[#107C55]" />
+                        <span>View My Active Pass</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          const edificeEvent = upcomingMeetings.find(e => e.id === 'edifice-conference-2026');
+                          if (edificeEvent) setSelectedEvent(edificeEvent);
+                        }}
+                        className="w-full py-3.5 rounded-xl font-display font-black text-xs uppercase tracking-wider bg-[#FAF7F2] hover:bg-white text-[#0D3D2E] flex items-center justify-center gap-2 shadow-lg transition-all transform hover:-translate-y-0.5"
+                      >
+                        <Ticket className="h-4 w-4 text-[#107C55]" />
+                        <span>Register to Attend</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Upcoming Events Catalog List */}
-            <div className="space-y-6">
-              <h3 className="font-display text-xl sm:text-2xl font-bold text-white tracking-tight">
-                Event Calendar
-              </h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {upcomingMeetings.map((event) => {
-                  const isRegistered = userRegistrations.some(r => r.eventId === event.id);
-                  const regDetails = userRegistrations.find(r => r.eventId === event.id);
+              {/* Upcoming Events Catalog List (Beige Cards, Green Accents, Black Typography) */}
+              <div className="space-y-6">
+                <div className="flex items-center justify-between border-b border-[#E1D6C7] pb-4">
+                  <h3 className="font-display text-xl sm:text-2xl font-bold text-[#121814] tracking-tight flex items-center gap-2">
+                    <Calendar className="h-5 w-5 text-[#107C55]" />
+                    <span>Event Calendar</span>
+                  </h3>
+                  <span className="text-xs font-mono text-[#5E6862]">All GEC Branches</span>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {upcomingMeetings.map((event) => {
+                    const isRegistered = userRegistrations.some(r => r.eventId === event.id);
+                    const regDetails = userRegistrations.find(r => r.eventId === event.id);
 
-                  return (
-                    <div
-                      key={event.id}
-                      className="flex flex-col bg-gradient-to-b from-[#0a1128] to-[#040814] border border-cci-blue-700/50 rounded-3xl overflow-hidden shadow-lg hover:shadow-cci-gold-600/5 hover:border-cci-blue-700/80 transition-all duration-300 group"
-                    >
-                      {/* Banner Image */}
-                      <div className="h-48 overflow-hidden relative">
-                        <img
-                          src={event.banner}
-                          alt={event.title}
-                          referrerPolicy="no-referrer"
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-[#040814] via-[#040814]/40 to-transparent" />
-                      </div>
-
-                      {/* Card Content */}
-                      <div className="p-6 flex-1 flex flex-col justify-between space-y-4">
-                        <div className="space-y-2">
-                          <h4 className="font-display text-lg sm:text-xl font-bold text-white leading-snug">
-                            {event.title}
-                          </h4>
-                          <p className="text-xs text-slate-300 leading-relaxed line-clamp-3">
-                            {event.description}
-                          </p>
-                        </div>
-
-                        {/* Speaker & Meta info */}
-                        <div className="pt-2 border-t border-cci-blue-700/20 space-y-2.5 text-xs text-slate-300">
-                          <div className="flex items-center gap-1.5">
-                            <Calendar className="h-3.5 w-3.5 text-cci-gold-500 shrink-0" />
-                            <span>{event.date}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <MapPin className="h-3.5 w-3.5 text-cci-gold-500 shrink-0" />
-                            <span className="truncate">{event.location}</span>
+                    return (
+                      <div
+                        key={event.id}
+                        className="flex flex-col bg-[#FAF7F2] border-2 border-[#E1D6C7] hover:border-[#107C55]/60 rounded-3xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 group"
+                      >
+                        {/* Banner Image */}
+                        <div className="h-48 overflow-hidden relative">
+                          <img
+                            src={event.banner}
+                            alt={event.title}
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-[#121814]/80 via-transparent to-transparent" />
+                          <div className="absolute bottom-3 left-4 right-4">
+                            <span className="inline-block bg-[#0D3D2E]/90 text-[#FAF7F2] text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-1 rounded-md">
+                              {event.date}
+                            </span>
                           </div>
                         </div>
 
-                        {/* Action buttons */}
-                        <div className="pt-2">
-                          {event.id === 'edifice-conference-2026' ? (
-                            isRegistered && regDetails ? (
-                              <div className="flex gap-2">
+                        {/* Card Content (60% Beige interior, 10% Black titles, 30% Green CTA) */}
+                        <div className="p-6 flex-1 flex flex-col justify-between space-y-4">
+                          <div className="space-y-2">
+                            <h4 className="font-display text-lg sm:text-xl font-bold text-[#121814] leading-snug group-hover:text-[#0D3D2E] transition-colors">
+                              {event.title}
+                            </h4>
+                            <p className="text-xs text-[#3B443D] leading-relaxed line-clamp-3">
+                              {event.description}
+                            </p>
+                          </div>
+
+                          {/* Speaker & Meta info */}
+                          <div className="pt-2 border-t border-[#E1D6C7] space-y-2 text-xs text-[#334239]">
+                            <div className="flex items-center gap-1.5">
+                              <MapPin className="h-3.5 w-3.5 text-[#107C55] shrink-0" />
+                              <span className="truncate">{event.location}</span>
+                            </div>
+                          </div>
+
+                          {/* Action buttons */}
+                          <div className="pt-2">
+                            {event.id === 'edifice-conference-2026' ? (
+                              isRegistered && regDetails ? (
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => setActiveTicket(regDetails)}
+                                    className="flex-1 py-3 bg-[#107C55]/15 hover:bg-[#107C55]/25 border border-[#107C55]/40 text-[#0F4C3A] rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors"
+                                  >
+                                    <Ticket className="h-4 w-4 text-[#107C55]" />
+                                    <span>My Pass / Code</span>
+                                  </button>
+                                </div>
+                              ) : (
                                 <button
-                                  onClick={() => setActiveTicket(regDetails)}
-                                  className="flex-1 py-3 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors"
+                                  onClick={() => {
+                                    setSelectedEvent(event);
+                                  }}
+                                  className="w-full py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all bg-[#0F4C3A] hover:bg-[#0D3D2E] text-[#FAF7F2] shadow-md transform hover:-translate-y-0.5"
                                 >
-                                  <Ticket className="h-4 w-4" />
-                                  <span>My Pass / Pass Code</span>
+                                  <span>Register to Attend</span>
+                                  <ArrowRight className="h-3.5 w-3.5" />
                                 </button>
-                              </div>
+                              )
                             ) : (
                               <button
-                                onClick={() => {
-                                  document.getElementById('hero-countdown-panel')?.scrollIntoView({ behavior: 'smooth' });
-                                }}
-                                className="w-full py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all bg-gradient-to-r from-cci-gold-600/10 to-cci-gold-400/10 border border-cci-gold-500/40 hover:border-cci-gold-500 text-cci-gold-400 hover:bg-gradient-to-r hover:from-cci-gold-600 hover:to-cci-gold-400 hover:text-[#040814] transform hover:-translate-y-0.5"
+                                disabled
+                                className="w-full py-3 bg-[#EAE2D5] border border-[#D5C9B7] text-[#8A928B] rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-not-allowed"
                               >
-                                <span>Learn More</span>
-                                <ArrowRight className="h-3.5 w-3.5" />
+                                <span>Registration Opens Later</span>
                               </button>
-                            )
-                          ) : (
-                            <button
-                              disabled
-                              className="w-full py-3 bg-slate-800/50 border border-slate-700/20 text-slate-500 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-not-allowed"
-                            >
-                              <span>Registration Opens Later</span>
-                            </button>
-                          )}
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* My Active Passes Summary */}
-            {userRegistrations.length > 0 && (
-              <div className="pt-4 border-t border-cci-blue-700/20 space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <h3 className="font-display text-xl sm:text-2xl font-bold text-white tracking-tight">
-                    My Active Registration Passes ({userRegistrations.length})
-                  </h3>
-                  {onClearRegistrations && (
-                    <button
-                      onClick={() => {
-                        if (showClearConfirm) {
-                          onClearRegistrations();
-                          setShowClearConfirm(false);
-                        } else {
-                          setShowClearConfirm(true);
-                        }
-                      }}
-                      onMouseLeave={() => setShowClearConfirm(false)}
-                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-rose-400 hover:text-rose-300 border border-rose-500/20 hover:border-rose-500/40 bg-rose-500/5 hover:bg-rose-500/10 transition-colors self-start sm:self-auto"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      <span>{showClearConfirm ? 'Are you sure? Click again' : 'Clear Registration History'}</span>
-                    </button>
-                  )}
-                </div>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {userRegistrations.map((pass) => (
-                    <button
-                      key={pass.id}
-                      onClick={() => setActiveTicket(pass)}
-                      className="flex items-center justify-between p-4 bg-[#0a1128] border border-cci-blue-700/50 hover:border-cci-gold-500 rounded-2xl shadow-md transition-all group text-left"
-                    >
-                      <div className="space-y-1 pr-4 truncate">
-                        <span className="text-[9px] font-mono uppercase tracking-wider text-cci-gold-500 font-semibold">
-                          {pass.ticketCode}
-                        </span>
-                        <h4 className="text-sm font-bold text-white truncate group-hover:text-cci-gold-400 transition-colors">
-                          {pass.eventTitle}
-                        </h4>
-                        <span className="text-[10px] text-slate-400 block truncate">
-                          {pass.userName} • {pass.userBranch}
-                        </span>
-                      </div>
-                      <div className="bg-cci-gold-500/10 group-hover:bg-cci-gold-500/20 text-cci-gold-400 p-2.5 rounded-xl transition-colors shrink-0">
-                        <Ticket className="h-4 w-4" />
-                      </div>
-                    </button>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
-            )}
 
-          </motion.div>
-        )}
+              {/* My Active Passes Summary (Beige Cards, Green Icons, Black Headings) */}
+              {userRegistrations.length > 0 && (
+                <div className="pt-8 border-t border-[#E1D6C7] space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <h3 className="font-display text-xl sm:text-2xl font-bold text-[#121814] tracking-tight flex items-center gap-2">
+                      <Ticket className="h-5 w-5 text-[#107C55]" />
+                      <span>My Active Registration Passes ({userRegistrations.length})</span>
+                    </h3>
+                    {onClearRegistrations && (
+                      <button
+                        onClick={() => {
+                          if (showClearConfirm) {
+                            onClearRegistrations();
+                            setShowClearConfirm(false);
+                          } else {
+                            setShowClearConfirm(true);
+                          }
+                        }}
+                        onMouseLeave={() => setShowClearConfirm(false)}
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-rose-700 hover:text-rose-800 border border-rose-500/30 hover:border-rose-500/50 bg-rose-500/10 transition-colors self-start sm:self-auto"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span>{showClearConfirm ? 'Are you sure? Click again' : 'Clear Registration History'}</span>
+                      </button>
+                    )}
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {userRegistrations.map((pass) => (
+                      <button
+                        key={pass.id}
+                        onClick={() => setActiveTicket(pass)}
+                        className="flex items-center justify-between p-4 bg-[#FAF7F2] border-2 border-[#E1D6C7] hover:border-[#107C55] rounded-2xl shadow-sm hover:shadow-md transition-all group text-left"
+                      >
+                        <div className="space-y-1 pr-4 truncate">
+                          <span className="text-[9px] font-mono uppercase tracking-wider text-[#107C55] font-black">
+                            {pass.ticketCode}
+                          </span>
+                          <h4 className="text-sm font-bold text-[#121814] truncate group-hover:text-[#0D3D2E] transition-colors">
+                            {pass.eventTitle}
+                          </h4>
+                          <span className="text-[11px] text-[#5E6862] block truncate">
+                            {pass.userName} • {pass.userBranch}
+                          </span>
+                        </div>
+                        <div className="bg-[#107C55]/10 group-hover:bg-[#107C55] text-[#107C55] group-hover:text-white p-2.5 rounded-xl transition-colors shrink-0">
+                          <Ticket className="h-4 w-4" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-      </AnimatePresence>
+            </motion.div>
+          )}
+
+        </AnimatePresence>
+      </div>
     </div>
   );
 }

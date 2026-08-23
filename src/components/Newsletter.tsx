@@ -1,7 +1,7 @@
 import { useState, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Mail, CheckCircle, ArrowRight, Loader2, Sparkles, Bell } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../supabase';
+import { Mail, CheckCircle, ArrowRight, Loader2, Bell } from 'lucide-react';
+import { supabase } from '../supabase';
 import { Subscriber } from '../types';
 
 export default function Newsletter() {
@@ -32,43 +32,37 @@ export default function Newsletter() {
     };
 
     try {
-      if (supabase) {
-        const { error } = await supabase
-          .from('subscribers')
-          .insert([{
-            id: subscriberId,
-            email: email.trim().toLowerCase(),
-            subscribed_at: subscriberData.subscribedAt
-          }]);
-        if (error) throw error;
-      } else {
-        // Fallback to local storage if supabase is not configured yet
-        const localSubs = JSON.parse(localStorage.getItem('gec_local_subscribers') || '[]');
-        localSubs.push(subscriberData);
-        localStorage.setItem('gec_local_subscribers', JSON.stringify(localSubs));
-        console.log('Saved subscriber locally (Supabase not configured yet)');
+      if (!supabase) {
+        throw new Error('Supabase client is not connected.');
       }
+      const { error } = await supabase
+        .from('subscribers')
+        .insert([{
+          id: subscriberId,
+          email: email.trim().toLowerCase(),
+          subscribed_at: subscriberData.subscribedAt
+        }]);
+      if (error) throw error;
       setIsSuccess(true);
       setEmail('');
-    } catch (err) {
-      console.error('Failed to subscribe:', err);
-      setErrorMsg('Failed to subscribe. Please verify your Supabase setup and database tables.');
+    } catch (err: any) {
+      console.error('Failed to subscribe to Supabase:', err);
+      setErrorMsg(err.message || 'Failed to subscribe. Please verify database connection.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <section className="py-20 bg-gradient-to-b from-rich-black to-[#090b0e] relative overflow-hidden" id="newsletter-section">
+    <section className="py-20 bg-[#F7F5F0] relative overflow-hidden" id="newsletter-section">
       {/* Decorative ambient background glows */}
-      <div className="absolute top-1/2 left-1/4 -translate-y-1/2 w-[350px] h-[350px] rounded-full bg-midnight-blue/20 blur-[100px] pointer-events-none" />
-      <div className="absolute top-1/2 right-1/4 -translate-y-1/2 w-[300px] h-[300px] rounded-full bg-electric-blue/10 blur-[80px] pointer-events-none" />
+      <div className="absolute top-1/2 left-1/4 -translate-y-1/2 w-[350px] h-[350px] rounded-full bg-[#A36B3B]/5 blur-[100px] pointer-events-none" />
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 relative z-10">
-        <div className="bg-charcoal/45 border border-midnight-blue rounded-3xl p-8 sm:p-12 md:p-16 text-center backdrop-blur-md shadow-2xl relative overflow-hidden">
+        <div className="bg-white border border-[#E4DCD0] rounded-3xl p-8 sm:p-12 md:p-16 text-center shadow-xl shadow-stone-900/5 relative overflow-hidden">
           {/* Subtle top badge */}
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-midnight-blue/80 border border-electric-blue/10 text-electric-blue font-mono text-[10px] uppercase tracking-widest mb-6">
-            <Bell className="h-3 w-3 text-electric-blue" />
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#F0EBE1] border border-[#E4DCD0] text-[#A36B3B] font-mono text-[10px] uppercase tracking-widest mb-6 font-semibold">
+            <Bell className="h-3 w-3 text-[#A36B3B]" />
             <span>STAY EDIFIED</span>
           </div>
 
@@ -81,17 +75,17 @@ export default function Newsletter() {
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.3 }}
               >
-                <h2 className="font-display font-bold text-2xl sm:text-3xl text-soft-white tracking-tight">
+                <h2 className="font-display font-bold text-2xl sm:text-3xl text-[#141416] tracking-tight">
                   Subscribe to GEC Updates & Publications
                 </h2>
-                <p className="text-xs sm:text-sm text-light-gray mt-3 max-w-lg mx-auto leading-relaxed">
+                <p className="text-xs sm:text-sm text-[#54575E] mt-3 max-w-lg mx-auto leading-relaxed">
                   Join our global fellowship of believers. Get systematic theology resources, midweek/Sunday service bulletins, download alerts, and quarterly spiritual publications delivered straight to your inbox.
                 </p>
 
                 <form onSubmit={handleSubscribe} className="mt-8 max-w-md mx-auto relative">
                   <div className="flex flex-col sm:flex-row gap-2">
                     <div className="relative flex-grow">
-                      <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-light-gray" />
+                      <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#8A8E96]" />
                       <input
                         type="email"
                         placeholder="Enter your email address"
@@ -101,69 +95,52 @@ export default function Newsletter() {
                           setEmail(e.target.value);
                           if (errorMsg) setErrorMsg('');
                         }}
-                        className="w-full bg-rich-black/95 border border-midnight-blue focus:border-electric-blue rounded-xl py-3.5 pl-10 pr-4 text-xs text-soft-white placeholder-medium-gray focus:outline-none transition-all font-sans"
-                        id="newsletter-email-input"
+                        className="w-full bg-[#F7F5F0] border border-[#E4DCD0] rounded-xl pl-10 pr-4 py-3 text-xs text-[#141416] placeholder-[#8A8E96] focus:outline-none focus:border-[#A36B3B] transition-colors"
                       />
                     </div>
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="py-3.5 px-6 rounded-xl bg-gradient-to-r from-royal-blue to-electric-blue hover:from-electric-blue hover:to-royal-blue text-soft-white font-display font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-md shadow-royal-blue/5 hover:shadow-royal-blue/20 disabled:opacity-50 shrink-0"
-                      id="newsletter-submit-btn"
+                      className="px-6 py-3 rounded-xl bg-[#A36B3B] hover:bg-[#8D5A30] text-white font-display font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-md shadow-[#A36B3B]/20 cursor-pointer disabled:opacity-50 shrink-0"
                     >
                       {isSubmitting ? (
                         <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span>Subscribing...</span>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>Joining...</span>
                         </>
                       ) : (
                         <>
-                          <span>Subscribe Now</span>
+                          <span>Subscribe</span>
                           <ArrowRight className="h-3.5 w-3.5" />
                         </>
                       )}
                     </button>
                   </div>
-
                   {errorMsg && (
-                    <motion.p
-                      initial={{ opacity: 0, y: 5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="text-amber-500 text-[11px] font-mono mt-3 text-left pl-1"
-                    >
-                      {errorMsg}
-                    </motion.p>
+                    <p className="text-[11px] text-red-500 mt-2 text-left font-medium">{errorMsg}</p>
                   )}
                 </form>
-
-                <div className="mt-6 flex justify-center items-center gap-4 text-[10px] text-slate-500 font-mono">
-                  <span className="flex items-center gap-1">
-                    <Sparkles className="h-3 w-3 text-cci-gold-400" /> No Spam, Ever
-                  </span>
-                  <span>•</span>
-                  <span>Unsubscribe anytime</span>
-                </div>
               </motion.div>
             ) : (
               <motion.div
                 key="subscription-success"
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                transition={{ type: 'spring', damping: 20 }}
-                className="py-6 flex flex-col items-center"
+                transition={{ duration: 0.4 }}
+                className="py-6 space-y-4"
               >
-                <div className="w-14 h-14 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-6 border border-emerald-500/25">
-                  <CheckCircle className="h-7 w-7" />
+                <div className="w-12 h-12 rounded-full bg-[#A36B3B]/15 text-[#A36B3B] flex items-center justify-center mx-auto">
+                  <CheckCircle className="h-6 w-6" />
                 </div>
-                <h3 className="font-display font-bold text-xl sm:text-2xl text-white">
+                <h3 className="font-display font-bold text-xl text-[#141416]">
                   You're Subscribed!
                 </h3>
-                <p className="text-xs sm:text-sm text-slate-400 mt-2 max-w-sm mx-auto leading-relaxed">
-                  Thank you for joining. You are now subscribed to God's Edifice Church updates and publication digests.
+                <p className="text-xs text-[#54575E] max-w-sm mx-auto">
+                  Thank you for joining our updates list. You will receive spiritual bulletins and publications as they are released.
                 </p>
                 <button
                   onClick={() => setIsSuccess(false)}
-                  className="mt-6 text-xs text-cci-gold-400 hover:text-cci-gold-300 font-semibold underline underline-offset-4"
+                  className="text-xs font-semibold text-[#A36B3B] hover:underline pt-2 cursor-pointer"
                 >
                   Subscribe another email
                 </button>

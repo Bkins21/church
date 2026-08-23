@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Menu, X, BookOpen, MapPin, Calendar, Music, Image, ShieldAlert, Heart, User, Users, Disc } from 'lucide-react';
+import { Menu, X, BookOpen, MapPin, Calendar, Music, Disc, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface NavbarProps {
@@ -8,9 +8,149 @@ interface NavbarProps {
   registeredCount: number;
 }
 
+const navThemes: Record<string, {
+  bg: string;
+  bgScrolled: string;
+  border: string;
+  borderScrolled: string;
+  logoColor: string;
+  titleColor: string;
+  inactiveText: string;
+  hoverText: string;
+  hoverBg: string;
+  activeText: string;
+  activeBg: string;
+  indicator: string;
+  badgeBg: string;
+  badgeText: string;
+  mobileMenuBg: string;
+}> = {
+  home: {
+    bg: 'rgba(247, 245, 240, 0.90)',
+    bgScrolled: 'rgba(247, 245, 240, 0.98)',
+    border: '#EFEAE1',
+    borderScrolled: '#E4DCD0',
+    logoColor: '#141416',
+    titleColor: '#141416',
+    inactiveText: '#54575E',
+    hoverText: '#141416',
+    hoverBg: 'rgba(239, 234, 225, 0.65)',
+    activeText: '#A36B3B',
+    activeBg: 'rgba(239, 234, 225, 0.95)',
+    indicator: '#A36B3B',
+    badgeBg: '#A36B3B',
+    badgeText: '#FFFFFF',
+    mobileMenuBg: '#F7F5F0',
+  },
+  about: {
+    bg: '#01406D',
+    bgScrolled: '#01406D',
+    border: 'rgba(1, 180, 186, 0.25)',
+    borderScrolled: 'rgba(1, 180, 186, 0.45)',
+    logoColor: '#01B4BA',
+    titleColor: '#F5FEFE',
+    inactiveText: '#F5FEFE',
+    hoverText: '#01B4BA',
+    hoverBg: 'rgba(245, 254, 254, 0.08)',
+    activeText: '#01406D',
+    activeBg: '#01B4BA',
+    indicator: '#01B4BA',
+    badgeBg: '#01B4BA',
+    badgeText: '#01406D',
+    mobileMenuBg: '#01406D',
+  },
+  meetings: {
+    bg: 'rgba(20, 26, 41, 0.92)',
+    bgScrolled: 'rgba(20, 26, 41, 0.98)',
+    border: '#2A3654',
+    borderScrolled: '#354469',
+    logoColor: '#F59E0B',
+    titleColor: '#F0F4F8',
+    inactiveText: '#94A3B8',
+    hoverText: '#FFFFFF',
+    hoverBg: 'rgba(255, 255, 255, 0.08)',
+    activeText: '#F59E0B',
+    activeBg: 'rgba(245, 158, 11, 0.16)',
+    indicator: '#F59E0B',
+    badgeBg: '#F59E0B',
+    badgeText: '#0F172A',
+    mobileMenuBg: '#141A29',
+  },
+  teachings: {
+    bg: 'rgba(22, 20, 18, 0.92)',
+    bgScrolled: 'rgba(22, 20, 18, 0.98)',
+    border: '#332C24',
+    borderScrolled: '#453B31',
+    logoColor: '#E8A238',
+    titleColor: '#F9F6F0',
+    inactiveText: '#A89E92',
+    hoverText: '#FFFFFF',
+    hoverBg: 'rgba(255, 255, 255, 0.08)',
+    activeText: '#E8A238',
+    activeBg: 'rgba(232, 162, 56, 0.16)',
+    indicator: '#E8A238',
+    badgeBg: '#E8A238',
+    badgeText: '#161412',
+    mobileMenuBg: '#161412',
+  },
+  songs: {
+    bg: '#172836',
+    bgScrolled: '#172836',
+    border: 'rgba(241, 246, 244, 0.15)',
+    borderScrolled: 'rgba(255, 200, 1, 0.4)',
+    logoColor: '#FFC801',
+    titleColor: '#F1F6F4',
+    inactiveText: '#F1F6F4',
+    hoverText: '#FFC801',
+    hoverBg: 'rgba(241, 246, 244, 0.08)',
+    activeText: '#172836',
+    activeBg: '#FFC801',
+    indicator: '#FFC801',
+    badgeBg: '#FFC801',
+    badgeText: '#172836',
+    mobileMenuBg: '#172836',
+  },
+  publications: {
+    bg: 'rgba(17, 34, 27, 0.92)',
+    bgScrolled: 'rgba(17, 34, 27, 0.98)',
+    border: '#234436',
+    borderScrolled: '#315C4A',
+    logoColor: '#52B788',
+    titleColor: '#F2F7F4',
+    inactiveText: '#98B8A9',
+    hoverText: '#FFFFFF',
+    hoverBg: 'rgba(255, 255, 255, 0.08)',
+    activeText: '#52B788',
+    activeBg: 'rgba(82, 183, 136, 0.18)',
+    indicator: '#52B788',
+    badgeBg: '#52B788',
+    badgeText: '#0D1A14',
+    mobileMenuBg: '#11221B',
+  },
+  branches: {
+    bg: 'rgba(24, 31, 38, 0.92)',
+    bgScrolled: 'rgba(24, 31, 38, 0.98)',
+    border: '#32404E',
+    borderScrolled: '#425365',
+    logoColor: '#4FA3D1',
+    titleColor: '#F0F4F8',
+    inactiveText: '#95A7B8',
+    hoverText: '#FFFFFF',
+    hoverBg: 'rgba(255, 255, 255, 0.08)',
+    activeText: '#4FA3D1',
+    activeBg: 'rgba(79, 163, 209, 0.18)',
+    indicator: '#4FA3D1',
+    badgeBg: '#4FA3D1',
+    badgeText: '#0F172A',
+    mobileMenuBg: '#181F26',
+  }
+};
+
 export default function Navbar({ activeTab, setActiveTab, registeredCount }: NavbarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+
+  const currentTheme = navThemes[activeTab] || navThemes.home;
 
   useEffect(() => {
     const handleScroll = () => {
@@ -30,13 +170,12 @@ export default function Navbar({ activeTab, setActiveTab, registeredCount }: Nav
 
   const menuItems: MenuItem[] = [
     { id: 'home', label: 'Home', icon: BookOpen },
+    { id: 'about', label: 'Who We Are', icon: Users },
     { id: 'meetings', label: 'Meetings', icon: Calendar, badge: registeredCount > 0 ? registeredCount : undefined },
     { id: 'teachings', label: 'Teachings', icon: Music },
     { id: 'songs', label: 'Songs', icon: Disc },
     { id: 'publications', label: 'Publications', icon: BookOpen },
     { id: 'branches', label: 'Branches', icon: MapPin },
-    { id: 'cells', label: 'Join a Cell', icon: Users },
-    { id: 'gallery', label: 'Gallery', icon: Image }
   ];
 
   const handleNavClick = (tabId: string) => {
@@ -47,25 +186,29 @@ export default function Navbar({ activeTab, setActiveTab, registeredCount }: Nav
   return (
     <motion.nav 
       animate={{
-        backgroundColor: isScrolled ? 'rgba(4, 8, 20, 0.95)' : 'rgba(4, 8, 20, 0.8)',
-        borderColor: isScrolled ? 'rgba(212, 175, 55, 0.15)' : 'rgba(15, 32, 67, 0.4)',
-        backdropFilter: isScrolled ? 'blur(16px)' : 'blur(8px)',
+        backgroundColor: isScrolled ? currentTheme.bgScrolled : currentTheme.bg,
+        borderColor: isScrolled ? currentTheme.borderScrolled : currentTheme.border,
+        backdropFilter: isScrolled ? 'blur(16px)' : 'blur(10px)',
       }}
-      transition={{ duration: 0.3 }}
-      className="sticky top-0 z-50 border-b" 
+      transition={{ duration: 0.35, ease: 'easeInOut' }}
+      className="sticky top-0 z-50 border-b shadow-sm transition-colors duration-300" 
       id="main-nav"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Desktop Centered Stacked Layout */}
         <div className="hidden md:flex flex-col items-center justify-center py-5 gap-4">
-          {/* Church Branding - Centered & 200% Larger */}
+          {/* Church Branding - Centered & Refined */}
           <motion.div 
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            className="flex items-center gap-4 cursor-pointer" 
+            className="flex items-center gap-4 cursor-pointer transition-transform" 
             onClick={() => handleNavClick('home')}
           >
-            <div className="w-14 h-14 text-white flex items-center justify-center shrink-0">
+            <motion.div 
+              animate={{ color: currentTheme.logoColor }}
+              transition={{ duration: 0.3 }}
+              className="w-14 h-14 flex items-center justify-center shrink-0"
+            >
               <svg viewBox="920 620 650 750" className="w-full h-full" fill="currentColor">
                 <path d="M1085.557,1321.922l25.142,0l0,-490.404l-31.046,22.771l5.904,467.633Zm49.213,24.071l-72.983,0l-6.358,-503.792l79.342,-58.183l0,561.975Z" />
                 <path d="M1395.037,1321.922l25.146,0l5.9,-467.633l-31.046,-22.771l0,490.404Zm48.908,24.071l-72.979,0l0,-561.975l79.342,58.183l-6.362,503.792Z" />
@@ -73,14 +216,60 @@ export default function Navbar({ activeTab, setActiveTab, registeredCount }: Nav
                 <path d="M1545.665,1345.993l-79.267,0l0,-476.475l79.267,102.167l0,55.025l-24.071,0l0,-46.783l-31.125,-40.112l0,382.108l31.125,0l0,-211.196l24.071,0l0,235.267Z" />
                 <path d="M1036.645,1345.993l-93.983,0l0,-324.713l93.983,-49.462l0,65.929l-24.071,0l0,-26.058l-45.842,24.125l0,286.108l45.842,0l0,-234.5l24.071,0l0,258.571Z" />
               </svg>
-            </div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="font-display font-black text-[32px] tracking-tighter text-white leading-none">GOD'S EDIFICE CHURCH</span>
+            </motion.div>
+            <div className="flex flex-col items-center md:items-start text-center md:text-left">
+              <div className="flex items-baseline gap-1.5">
+                <motion.span 
+                  animate={{ color: currentTheme.titleColor }}
+                  transition={{ duration: 0.3 }}
+                  className="font-cinzel font-bold text-[26px] lg:text-[30px] tracking-wide leading-none"
+                >
+                  GOD'S EDIFICE CHURCH
+                </motion.span>
+              </div>
+              
+              {/* Dynamic Animated Subtitle: God's nurturing place */}
+              <motion.div 
+                initial={{ opacity: 0, y: 3 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, ease: "easeOut" }}
+                className="flex items-center gap-1.5 mt-1 overflow-hidden"
+              >
+                <motion.span
+                  animate={{
+                    scale: [1, 1.25, 1],
+                    opacity: [0.6, 1, 0.6]
+                  }}
+                  transition={{
+                    duration: 3,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }}
+                  className="w-1.5 h-1.5 rounded-full bg-[#A36B3B] inline-block"
+                />
+                <motion.span 
+                  animate={{
+                    opacity: [0.85, 1, 0.85],
+                    letterSpacing: ['0.22em', '0.28em', '0.22em']
+                  }}
+                  transition={{
+                    duration: 5,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }}
+                  className="text-[10px] lg:text-[11px] font-sans font-medium uppercase text-[#8A8E96] tracking-[0.24em] transition-colors"
+                  style={{
+                    color: activeTab === 'home' ? '#8A8E96' : '#C5BAC8'
+                  }}
+                >
+                  God's nurturing place
+                </motion.span>
+              </motion.div>
             </div>
           </motion.div>
 
           {/* Desktop Navigation - Centered underneath */}
-          <div className="flex items-center justify-center space-x-1 lg:space-x-3">
+          <div className="flex items-center justify-center space-x-1 lg:space-x-2">
             {menuItems.map((item) => {
               const isActive = activeTab === item.id;
               return (
@@ -88,26 +277,31 @@ export default function Navbar({ activeTab, setActiveTab, registeredCount }: Nav
                   key={item.id}
                   id={`nav-btn-${item.id}`}
                   onClick={() => handleNavClick(item.id)}
-                  whileHover={{ scale: 1.4, y: -0.5 }}
-                  whileTap={{ scale: 0.94 }}
-                  className={`relative px-3.5 py-2 rounded-md font-display text-[9.5px] font-light tracking-wider transition-all duration-300 flex items-center gap-1.5 hover:font-bold
-                    ${item.special 
-                      ? 'bg-gradient-to-r from-cci-gold-600 to-cci-gold-500 hover:from-cci-gold-500 hover:to-cci-gold-400 text-[#040814] !font-medium shadow-md shadow-cci-gold-600/10' 
-                      : isActive 
-                        ? 'text-cci-gold-400' 
-                        : 'text-slate-300 hover:text-slate-100 hover:bg-cci-blue-800/40'
-                    }`}
+                  whileHover={{ scale: 1.05, y: -1 }}
+                  whileTap={{ scale: 0.95 }}
+                  style={{
+                    color: isActive ? currentTheme.activeText : currentTheme.inactiveText,
+                    backgroundColor: isActive ? currentTheme.activeBg : 'transparent',
+                  }}
+                  className="relative px-4 py-2 rounded-lg font-display text-[11px] tracking-wider transition-all duration-200 flex items-center gap-1.5 cursor-pointer font-medium hover:opacity-100"
                 >
-                  {item.label}
+                  <span className={isActive ? 'font-bold' : 'font-medium'}>{item.label}</span>
                   {item.badge && (
-                    <span className="absolute -top-1 -right-1 bg-amber-500 text-black font-mono text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center shadow-md animate-pulse">
+                    <span 
+                      style={{
+                        backgroundColor: currentTheme.badgeBg,
+                        color: currentTheme.badgeText
+                      }}
+                      className="font-mono text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center shadow-sm"
+                    >
                       {item.badge}
                     </span>
                   )}
-                  {isActive && !item.special && (
+                  {isActive && (
                     <motion.div
                       layoutId="activeTabIndicator"
-                      className="absolute bottom-0 left-2 right-2 h-[2px] bg-cci-gold-500 rounded-full"
+                      style={{ backgroundColor: currentTheme.indicator }}
+                      className="absolute bottom-0 left-2 right-2 h-[2.5px] rounded-full"
                       transition={{ type: 'spring', stiffness: 380, damping: 30 }}
                     />
                   )}
@@ -125,7 +319,10 @@ export default function Navbar({ activeTab, setActiveTab, registeredCount }: Nav
             className="flex items-center gap-3 cursor-pointer" 
             onClick={() => handleNavClick('home')}
           >
-            <div className="w-10 h-10 text-white flex items-center justify-center shrink-0">
+            <motion.div 
+              animate={{ color: currentTheme.logoColor }}
+              className="w-10 h-10 flex items-center justify-center shrink-0"
+            >
               <svg viewBox="920 620 650 750" className="w-full h-full" fill="currentColor">
                 <path d="M1085.557,1321.922l25.142,0l0,-490.404l-31.046,22.771l5.904,467.633Zm49.213,24.071l-72.983,0l-6.358,-503.792l79.342,-58.183l0,561.975Z" />
                 <path d="M1395.037,1321.922l25.146,0l5.9,-467.633l-31.046,-22.771l0,490.404Zm48.908,24.071l-72.979,0l0,-561.975l79.342,58.183l-6.362,503.792Z" />
@@ -133,9 +330,31 @@ export default function Navbar({ activeTab, setActiveTab, registeredCount }: Nav
                 <path d="M1545.665,1345.993l-79.267,0l0,-476.475l79.267,102.167l0,55.025l-24.071,0l0,-46.783l-31.125,-40.112l0,382.108l31.125,0l0,-211.196l24.071,0l0,235.267Z" />
                 <path d="M1036.645,1345.993l-93.983,0l0,-324.713l93.983,-49.462l0,65.929l-24.071,0l0,-26.058l-45.842,24.125l0,286.108l45.842,0l0,-234.5l24.071,0l0,258.571Z" />
               </svg>
-            </div>
-            <div className="flex items-baseline gap-1">
-              <span className="font-display font-black text-[17px] tracking-tighter text-white leading-none">GOD'S EDIFICE CHURCH</span>
+            </motion.div>
+            <div className="flex flex-col items-start">
+              <motion.span 
+                animate={{ color: currentTheme.titleColor }}
+                className="font-cinzel font-bold text-[16px] tracking-wide leading-none"
+              >
+                GOD'S EDIFICE CHURCH
+              </motion.span>
+              <motion.span 
+                animate={{
+                  opacity: [0.75, 1, 0.75],
+                  letterSpacing: ['0.16em', '0.2em', '0.16em']
+                }}
+                transition={{
+                  duration: 4.5,
+                  repeat: Infinity,
+                  ease: "easeInOut"
+                }}
+                className="text-[8px] font-sans uppercase text-[#8A8E96] tracking-[0.16em] mt-0.5"
+                style={{
+                  color: activeTab === 'home' ? '#8A8E96' : '#C5BAC8'
+                }}
+              >
+                God's nurturing place
+              </motion.span>
             </div>
           </motion.div>
 
@@ -143,7 +362,8 @@ export default function Navbar({ activeTab, setActiveTab, registeredCount }: Nav
             <motion.button
               whileTap={{ scale: 0.9 }}
               onClick={() => setIsOpen(!isOpen)}
-              className="text-slate-300 hover:text-slate-100 p-2 rounded-md hover:bg-cci-blue-800/40 focus:outline-none transition-colors"
+              style={{ color: currentTheme.titleColor }}
+              className="p-2 rounded-md hover:bg-black/10 focus:outline-none transition-colors"
               aria-label="Toggle Menu"
               id="mobile-menu-toggle"
             >
@@ -161,7 +381,11 @@ export default function Navbar({ activeTab, setActiveTab, registeredCount }: Nav
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.2 }}
-            className="md:hidden bg-[#040814] border-b border-cci-blue-800/80 overflow-hidden"
+            style={{ 
+              backgroundColor: currentTheme.mobileMenuBg,
+              borderColor: currentTheme.border 
+            }}
+            className="md:hidden border-b overflow-hidden"
             id="mobile-nav-panel"
           >
             <div className="px-4 pt-2 pb-6 space-y-1">
@@ -174,20 +398,26 @@ export default function Navbar({ activeTab, setActiveTab, registeredCount }: Nav
                     id={`mobile-nav-btn-${item.id}`}
                     onClick={() => handleNavClick(item.id)}
                     whileTap={{ scale: 0.97 }}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-left font-display text-[10.5px] font-light transition-all
-                      ${item.special 
-                        ? 'bg-gradient-to-r from-cci-gold-600 to-cci-gold-500 text-[#040814] !font-medium mt-3' 
-                        : isActive 
-                          ? 'bg-cci-blue-800 text-cci-gold-400 border-l-4 border-cci-gold-500 pl-2.5' 
-                          : 'text-slate-300 hover:bg-cci-blue-900/60 hover:text-slate-100'
-                      }`}
+                    style={{
+                      backgroundColor: isActive ? currentTheme.activeBg : 'transparent',
+                      color: isActive ? currentTheme.activeText : currentTheme.inactiveText,
+                      borderLeftWidth: isActive ? '4px' : '0px',
+                      borderLeftColor: isActive ? currentTheme.indicator : 'transparent',
+                    }}
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-lg text-left font-display text-[11px] transition-all"
                   >
                     <div className="flex items-center gap-3">
-                      <IconComponent className={`h-5 w-5 ${isActive && !item.special ? 'text-cci-gold-400' : ''}`} />
+                      <IconComponent className="h-5 w-5" style={{ color: isActive ? currentTheme.activeText : currentTheme.inactiveText }} />
                       <span>{item.label}</span>
                     </div>
                     {item.badge && (
-                      <span className="bg-amber-500 text-black font-mono text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse">
+                      <span 
+                        style={{
+                          backgroundColor: currentTheme.badgeBg,
+                          color: currentTheme.badgeText
+                        }}
+                        className="font-mono text-[10px] font-bold px-2 py-0.5 rounded-full"
+                      >
                         {item.badge}
                       </span>
                     )}
@@ -201,3 +431,4 @@ export default function Navbar({ activeTab, setActiveTab, registeredCount }: Nav
     </motion.nav>
   );
 }
+

@@ -1,4 +1,6 @@
-import { ChurchEvent, Teaching, Publication, Branch, GalleryItem } from './types';
+import { ChurchEvent, Teaching, Publication, Branch, GalleryItem, Song } from './types';
+
+export const crossworshipSongsCatalog: Song[] = [];
 
 export const upcomingMeetings: ChurchEvent[] = [
   {
@@ -53,52 +55,7 @@ export const upcomingMeetings: ChurchEvent[] = [
 
 export const teachingsCatalog: Teaching[] = [];
 
-export const publicationsCatalog: Publication[] = [
-  {
-    id: 'book-preach',
-    title: 'Preach: How to Share Your Faith Effectively',
-    type: 'book',
-    author: 'Pastor Abiodun Adebayo',
-    description: 'The masterclass guide on evangelism. In this handbook, Pastor Adebayo provides systematic tools, psychological comfort-builders, and deep scriptural foundations to make sharing Christ second nature to you.',
-    coverUrl: 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?q=80&w=400&auto=format&fit=crop',
-    price: 15,
-    pages: 240,
-    publishYear: 2024
-  },
-  {
-    id: 'devotional-daily-creed-2026',
-    title: 'Daily Creed Devotional 2026 (Volume 2)',
-    type: 'devotional',
-    author: 'Pastor Abiodun Adebayo',
-    description: 'GEC’s daily study resource. Engage in structured devotional reading designed to build rigorous theological habits, intense praying discipline, and daily gratitude. Includes weekly memory verses.',
-    coverUrl: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?q=80&w=400&auto=format&fit=crop',
-    price: 0, // Free digital download
-    pages: 365,
-    publishYear: 2025
-  },
-  {
-    id: 'book-leading-questions',
-    title: 'Leading Questions: Honest Answers for Faith',
-    type: 'book',
-    author: 'Pastor Abiodun Adebayo',
-    description: 'Addressing the toughest modern objections to Christian theology. Pastor Adebayo handles tough topics such as science vs. scripture, the existence of evil, church governance, and doctrinal controversies with outstanding grace and analytical precision.',
-    coverUrl: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?q=80&w=400&auto=format&fit=crop',
-    price: 12,
-    pages: 180,
-    publishYear: 2023
-  },
-  {
-    id: 'book-saving-grace',
-    title: 'Saving Grace: Understanding Redemptive History',
-    type: 'book',
-    author: 'Pastor Abiodun Adebayo',
-    description: 'An essential text for every systematic theologian. Trace the redemptive narrative from Genesis to Revelation, demonstrating that salvation has always been, and will always be, of grace through faith in the Messiah.',
-    coverUrl: 'https://images.unsplash.com/photo-1516979187457-637abb4f9353?q=80&w=400&auto=format&fit=crop',
-    price: 10,
-    pages: 210,
-    publishYear: 2022
-  }
-];
+export const publicationsCatalog: Publication[] = [];
 
 export const ministryBranches: Branch[] = [
   {

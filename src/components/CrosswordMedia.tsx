@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import * as XLSX from 'xlsx';
 import { 
   Lock, User, Mail, Database, Trash2, LogOut, CheckCircle2, 
   AlertCircle, Upload, Loader2, Plus, Search, FileText, Music, 
   Settings, Key, Eye, EyeOff, LayoutDashboard, Users, MessageSquare, Clipboard, ArrowLeft,
-  Image as ImageIcon, Calendar
+  Image as ImageIcon, Calendar, BarChart3, Download, BookOpen, Table, Play, Pause, ExternalLink,
+  FileSpreadsheet, Tag, Phone, MapPin, Check, Filter, RefreshCw, Radio, X, Globe
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured, checkIfAdmin } from '../supabase';
-import { Teaching, Registration, Subscriber, Song, GalleryItem, ChurchEvent } from '../types';
-import { upcomingMeetings, galleryItems } from '../data';
+import { Teaching, Registration, Subscriber, Song, GalleryItem, ChurchEvent, Publication, PublicationType } from '../types';
+import { upcomingMeetings, galleryItems, crossworshipSongsCatalog } from '../data';
+import AdminAnalyticsDashboard, { RawMeetingRegistration } from './AdminAnalyticsDashboard';
 
 interface CrosswordMediaProps {
   onClose: () => void;
@@ -30,23 +33,61 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   
   // Dashboard states
-  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'songs' | 'teachings' | 'gallery' | 'events' | 'registrations' | 'subscribers' | 'settings' | 'database'>('overview');
+  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'analytics' | 'songs' | 'teachings' | 'publications' | 'gallery' | 'events' | 'registrations' | 'subscribers' | 'settings' | 'database'>('overview');
   
   // Data lists
   const [teachings, setTeachings] = useState<Teaching[]>([]);
   const [registrations, setRegistrations] = useState<Registration[]>([]);
+  const [rawMeetingRegistrations, setRawMeetingRegistrations] = useState<RawMeetingRegistration[]>([]);
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [dataLoading, setDataLoading] = useState<boolean>(false);
 
-  // Songs states
-  const [songsList, setSongsList] = useState<Song[]>(() => {
+  // Audio preview playback state
+  const [playingAudioUrl, setPlayingAudioUrl] = useState<string | null>(null);
+  const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
+
+  // Registrations Filter & Data Board states
+  const [exportingCsv, setExportingCsv] = useState<boolean>(false);
+  const [exportingExcel, setExportingExcel] = useState<boolean>(false);
+  const [regFilterEvent, setRegFilterEvent] = useState<string>('all');
+  const [regFilterBranch, setRegFilterBranch] = useState<string>('all');
+  const [regFilterMode, setRegFilterMode] = useState<string>('all');
+  const [selectedAttendeeDetail, setSelectedAttendeeDetail] = useState<any | null>(null);
+  const [regStatusMap, setRegStatusMap] = useState<{ [id: string]: string }>(() => {
     try {
-      const saved = localStorage.getItem('gec_user_uploaded_songs');
-      return saved ? JSON.parse(saved) : [];
+      const saved = localStorage.getItem('gec_reg_status_map');
+      return saved ? JSON.parse(saved) : {};
     } catch {
-      return [];
+      return {};
     }
   });
+
+  // Publications states
+  const [publicationsList, setPublicationsList] = useState<Publication[]>([]);
+  const [pubTitle, setPubTitle] = useState('');
+  const [pubAuthor, setPubAuthor] = useState('Abiodun Adebayo');
+  const [pubMonth, setPubMonth] = useState<string>(() => {
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    return months[new Date().getMonth()];
+  });
+  const [pubType, setPubType] = useState<PublicationType>('bulletin');
+  const [pubDescription, setPubDescription] = useState('');
+  const [pubCoverUrl, setPubCoverUrl] = useState('');
+  const [pubCoverFile, setPubCoverFile] = useState<File | null>(null);
+  const pubCoverInputRef = useRef<HTMLInputElement>(null);
+  const [pubYear, setPubYear] = useState<number>(new Date().getFullYear());
+  const [pubFileUrl, setPubFileUrl] = useState('');
+  const [pubFile, setPubFile] = useState<File | null>(null);
+  const [uploadingPub, setUploadingPub] = useState(false);
+  const [pubUploadProgress, setPubUploadProgress] = useState(0);
+  const [pubError, setPubError] = useState<string | null>(null);
+  const [pubSuccess, setPubSuccess] = useState<string | null>(null);
+  const [copiedSql, setCopiedSql] = useState(false);
+  const pubFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Songs states
+  const [songsList, setSongsList] = useState<Song[]>([]);
+  const [deletingSongId, setDeletingSongId] = useState<string | null>(null);
   const [songTitle, setSongTitle] = useState('');
   const [songArtist, setSongArtist] = useState('');
   const [songAlbum, setSongAlbum] = useState('');
@@ -89,6 +130,23 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
   const [eventBannerInput, setEventBannerInput] = useState('');
   const [eventDescriptionInput, setEventDescriptionInput] = useState('');
   const [eventSpeakerInput, setEventSpeakerInput] = useState('');
+  const [regViewMode, setRegViewMode] = useState<'table' | 'charts'>('table');
+  const [selectedRegAttendee, setSelectedRegAttendee] = useState<any | null>(null);
+  const [regBranchFilter, setRegBranchFilter] = useState<string>('ALL');
+  const [regModeFilter, setRegModeFilter] = useState<string>('ALL');
+  const [regEventFilter, setRegEventFilter] = useState<string>('ALL');
+
+  const handleStatusChange = (regId: string, newStatus: string) => {
+    setRegStatusMap(prev => {
+      const updated = { ...prev, [regId]: newStatus };
+      try {
+        localStorage.setItem('gec_reg_status_map', JSON.stringify(updated));
+      } catch (e) {
+        console.error('Failed to save status map', e);
+      }
+      return updated;
+    });
+  };
 
   // Site Settings states
   const [churchNameSetting, setChurchNameSetting] = useState(() => localStorage.getItem('gec_setting_church_name') || "God's Edifice Church");
@@ -118,51 +176,39 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
 
   // Monitor Supabase Auth state
   useEffect(() => {
-    const redirectToLogin = () => {
-      if (window.location.pathname !== '/crosswordmedia') {
-        window.history.pushState(null, '', '/crosswordmedia');
-        window.dispatchEvent(new PopStateEvent('popstate'));
-      }
-    };
-
-    if (localStorage.getItem('gec_admin_authenticated') === 'true') {
-      setIsAdminUser(true);
+    if (!isSupabaseConfigured || !supabase) {
       setCheckingAuth(false);
-      if (supabase) {
-        fetchDashboardData();
-      }
+      setIsAdminUser(false);
       return;
     }
 
-    if (!isSupabaseConfigured) {
-      setCheckingAuth(false);
-      redirectToLogin();
-      return;
-    }
-
-    supabase?.auth.getSession().then(({ data: { session } }) => {
+    // Always fetch active Supabase Auth session
+    supabase.auth.getSession().then(({ data: { session } }: any) => {
       setSession(session);
       if (session?.user) {
+        localStorage.setItem('gec_admin_authenticated', 'true');
         verifyAdminAccess(session.user.id, session.user.email);
       } else {
+        localStorage.removeItem('gec_admin_authenticated');
+        setIsAdminUser(false);
         setCheckingAuth(false);
-        redirectToLogin();
       }
+    }).catch((err: any) => {
+      console.warn('Error fetching Supabase session:', err);
+      localStorage.removeItem('gec_admin_authenticated');
+      setIsAdminUser(false);
+      setCheckingAuth(false);
     });
 
-    const { data: { subscription } } = supabase?.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
       setSession(session);
       if (session?.user) {
+        localStorage.setItem('gec_admin_authenticated', 'true');
         verifyAdminAccess(session.user.id, session.user.email);
       } else {
-        if (localStorage.getItem('gec_admin_authenticated') === 'true') {
-          setIsAdminUser(true);
-          setCheckingAuth(false);
-        } else {
-          setIsAdminUser(false);
-          setCheckingAuth(false);
-          redirectToLogin();
-        }
+        localStorage.removeItem('gec_admin_authenticated');
+        setIsAdminUser(false);
+        setCheckingAuth(false);
       }
     }) || { data: { subscription: null } };
 
@@ -175,36 +221,129 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
   const verifyAdminAccess = async (userId: string, userEmail: string | undefined) => {
     setCheckingAuth(true);
     
-    // Developer safety-net / fallback: Always authorize the developer email "boluakintola@gmail.com"
     const isDeveloper = userEmail?.toLowerCase() === 'boluakintola@gmail.com';
+    const isAdmin = await checkIfAdmin(userId);
     
-    if (isDeveloper) {
+    if (isAdmin || isDeveloper) {
       setIsAdminUser(true);
       setCheckingAuth(false);
       fetchDashboardData();
-      return;
-    }
-
-    // Otherwise, check in database
-    const isAdmin = await checkIfAdmin(userId);
-    setIsAdminUser(isAdmin);
-    setCheckingAuth(false);
-    
-    if (isAdmin) {
-      fetchDashboardData();
+    } else {
+      setIsAdminUser(false);
+      setCheckingAuth(false);
     }
   };
+
+  // Fetch Songs strictly from Supabase public."Songs" table
+  const fetchCloudSongs = async () => {
+    if (!supabase) return;
+    try {
+      const { data: songsData, error: songsError } = await supabase
+        .from('Songs')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (songsError) {
+        console.error('Supabase fetch failure from Songs table in Admin:', songsError);
+        return;
+      }
+
+      if (songsData) {
+        const mappedSongs: Song[] = songsData.map((s: any) => ({
+          id: s.id,
+          title: s.title || '',
+          artist: s.artist || 'Crossworship',
+          album: s.album || 'Edifice Anthem Single',
+          duration: s.duration || '4:30',
+          audioUrl: s.audio_url || '',
+          coverUrl: s.artwork || '',
+          lyrics: s.description || '',
+          downloads: s.downloads || 0,
+          uploadedByUser: true
+        }));
+        setSongsList(mappedSongs);
+      }
+    } catch (err) {
+      console.error('Failed to fetch songs from Supabase in Admin:', err);
+    }
+  };
+
+  // Fetch publications from Supabase
+  const fetchCloudPublications = async () => {
+    if (!supabase || !isSupabaseConfigured) return;
+    try {
+      const { data, error } = await supabase
+        .from('publications')
+        .select('*')
+        .order('publish_year', { ascending: false });
+
+      if (error) {
+        console.error('Failed to fetch publications from Supabase in Admin:', error);
+        return;
+      }
+
+      if (data) {
+        const mappedPubs: Publication[] = data.map((pub: any) => ({
+          id: pub.id,
+          title: pub.title || '',
+          type: pub.type || 'bulletin',
+          author: pub.author || '',
+          description: pub.description || '',
+          coverUrl: pub.cover_url || '',
+          month: pub.month || '',
+          publishYear: pub.publish_year || new Date().getFullYear(),
+          fileUrl: pub.file_url || '',
+        }));
+        setPublicationsList(mappedPubs);
+      }
+    } catch (err) {
+      console.error('Failed to fetch publications from Supabase in Admin:', err);
+    }
+  };
+
+  // Sync songs and publications across tabs and listen for changes
+  useEffect(() => {
+    // Clear stale localStorage so old items never resurrect
+    try {
+      localStorage.removeItem('gec_user_uploaded_songs');
+      localStorage.removeItem('gec_songs_catalog');
+      localStorage.removeItem('gec_publications_catalog');
+    } catch (e) {
+      // Ignore
+    }
+
+    fetchCloudSongs();
+    fetchCloudPublications();
+
+    const handleSongsUpdate = () => {
+      fetchCloudSongs();
+    };
+
+    const handlePubsUpdate = () => {
+      fetchCloudPublications();
+    };
+
+    window.addEventListener('gec_songs_updated', handleSongsUpdate);
+    window.addEventListener('gec_publications_updated', handlePubsUpdate);
+    return () => {
+      window.removeEventListener('gec_songs_updated', handleSongsUpdate);
+      window.removeEventListener('gec_publications_updated', handlePubsUpdate);
+    };
+  }, []);
 
   // Fetch all Supabase data
   const fetchDashboardData = async () => {
     if (!supabase) return;
     setDataLoading(true);
     try {
+      // Fetch Songs
+      await fetchCloudSongs();
+
       // 1. Fetch Sermons / Teachings
       const { data: teachingsData, error: tError } = await supabase
         .from('teachings')
         .select('*')
-        .order('date', { ascending: false });
+        .order('created_at', { ascending: false });
       
       if (!tError && teachingsData) {
         // Map database naming (snake_case) to client structure (camelCase)
@@ -228,6 +367,10 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
       const { data: meetingRegsData } = await supabase
         .from('meeting_registrations')
         .select('*');
+
+      if (meetingRegsData) {
+        setRawMeetingRegistrations(meetingRegsData);
+      }
 
       const { data: regsData, error: rError } = await supabase
         .from('registrations')
@@ -310,29 +453,6 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
   // Handle Login & Signup
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const isExplicitAdmin = email.trim().toLowerCase() === 'boluakintola@gmail.com' && password === 'crosswordmedia2026';
-    
-    if (isExplicitAdmin) {
-      localStorage.setItem('gec_admin_authenticated', 'true');
-      setIsAdminUser(true);
-      setSession({
-        user: {
-          id: 'explicit-admin-id',
-          email: 'boluakintola@gmail.com',
-        },
-        access_token: 'bypass-token',
-        refresh_token: 'bypass-token',
-        expires_in: 3600,
-        token_type: 'bearer',
-      } as any);
-      setCheckingAuth(false);
-      setAuthLoading(false);
-      if (supabase) {
-        fetchDashboardData();
-      }
-      return;
-    }
 
     if (!isSupabaseConfigured || !supabase) {
       setAuthError('Supabase is not configured yet. Please configure the environment variables.');
@@ -345,22 +465,22 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
     try {
       if (authMode === 'login') {
         const { data, error } = await supabase.auth.signInWithPassword({
-          email,
+          email: email.trim(),
           password
         });
         if (error) throw error;
+        if (data?.session) {
+          localStorage.setItem('gec_admin_authenticated', 'true');
+          setSession(data.session);
+          setIsAdminUser(true);
+        }
       } else {
         const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              role: 'admin' // Note: Typically assigned server-side or via profile updates
-            }
-          }
+          email: email.trim(),
+          password
         });
         if (error) throw error;
-        setAuthError('Registration successful! Please sign in if verification is complete.');
+        setAuthError('Registration successful! Please sign in.');
         setAuthMode('login');
       }
     } catch (err: any) {
@@ -461,6 +581,7 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
 
       // Reload list
       fetchDashboardData();
+      window.dispatchEvent(new Event('gec_teachings_updated'));
 
     } catch (err: any) {
       console.error('Upload failed:', err);
@@ -501,6 +622,7 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
       if (error) throw error;
 
       setTeachings(prev => prev.filter(t => t.id !== id));
+      window.dispatchEvent(new Event('gec_teachings_updated'));
     } catch (err: any) {
       alert(`Delete failed: ${err.message}`);
     }
@@ -522,113 +644,718 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
   // Delete Registration
   const handleDeleteReg = async (id: string) => {
     if (!supabase) return;
-    if (!confirm('Remove this registration form?')) return;
+    if (!confirm('Remove this registration record?')) return;
     try {
-      const { error } = await supabase.from('registrations').delete().eq('id', id);
-      if (error) throw error;
+      const { error } = await supabase.from('meeting_registrations').delete().eq('id', id);
+      if (error) {
+        // Also try standard registrations table if id was not in meeting_registrations
+        await supabase.from('registrations').delete().eq('id', id);
+      }
       setRegistrations(prev => prev.filter(r => r.id !== id));
+      setRawMeetingRegistrations(prev => prev.filter(r => r.id !== id));
     } catch (err: any) {
       alert(err.message);
     }
   };
 
-  // Add Song Handler
-  const handleAddSong = async (e: React.FormEvent) => {
+  // Export meeting_registrations directly from Supabase as a CSV file
+  const handleExportMeetingRegistrationsCSV = async () => {
+    setExportingCsv(true);
+    try {
+      let rows: any[] = [];
+
+      // 1. Fetch live entries directly from 'meeting_registrations' Supabase table
+      if (supabase && isSupabaseConfigured) {
+        try {
+          const { data, error } = await supabase
+            .from('meeting_registrations')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+          if (!error && data && data.length > 0) {
+            rows = data;
+          } else if (error) {
+            console.warn('Notice querying meeting_registrations table:', error);
+          }
+        } catch (queryErr) {
+          console.warn('Direct query to meeting_registrations failed, using fallback:', queryErr);
+        }
+      }
+
+      // 2. Fallback to rawMeetingRegistrations in state
+      if (rows.length === 0 && rawMeetingRegistrations && rawMeetingRegistrations.length > 0) {
+        rows = rawMeetingRegistrations;
+      }
+
+      // 3. Fallback to registrations list if meeting_registrations is not populated
+      if (rows.length === 0 && registrations && registrations.length > 0) {
+        rows = registrations.map(r => ({
+          id: r.id,
+          first_name: r.firstName || r.userName?.split(' ')[0] || '',
+          surname: r.surname || r.userName?.split(' ').slice(1).join(' ') || '',
+          email: r.userEmail || r.email || '',
+          phone_number: r.userPhone || r.phone || '',
+          address: r.address || '',
+          nearest_branch: r.userBranch || r.location || '',
+          age: r.ageRange || '',
+          gender: r.gender || '',
+          expecations_prayer_request: r.expectations || '',
+          how_you_heard: r.howHeard || '',
+          meeting_date: r.eventDate || '',
+          created_at: r.registrationDate || new Date().toISOString()
+        }));
+      }
+
+      if (rows.length === 0) {
+        alert('No registration records found in meeting_registrations to export.');
+        setExportingCsv(false);
+        return;
+      }
+
+      // Format CSV Columns according to meeting_registrations schema
+      const headers = [
+        'ID',
+        'First Name',
+        'Surname',
+        'Email Address',
+        'Phone Number',
+        'Address',
+        'Nearest Branch',
+        'Age Range',
+        'Gender',
+        'Expectations / Prayer Request',
+        'How You Heard',
+        'Meeting Date',
+        'Created At (Timestamp)'
+      ];
+
+      // Sanitizer for CSV escaping
+      const escapeCsvCell = (value: any): string => {
+        if (value === null || value === undefined) return '""';
+        const str = String(value).replace(/"/g, '""');
+        return `"${str}"`;
+      };
+
+      const csvDataRows = rows.map(r => [
+        escapeCsvCell(r.id || ''),
+        escapeCsvCell(r.first_name || r.firstName || ''),
+        escapeCsvCell(r.surname || r.lastName || ''),
+        escapeCsvCell(r.email || r.userEmail || ''),
+        escapeCsvCell(r.phone_number || r.phone || r.userPhone || ''),
+        escapeCsvCell(r.address || ''),
+        escapeCsvCell(r.nearest_branch || r.userBranch || r.location || 'Lekki HQ'),
+        escapeCsvCell(r.age || r.ageRange || ''),
+        escapeCsvCell(r.gender || ''),
+        escapeCsvCell(r.expecations_prayer_request || r.expectations || ''),
+        escapeCsvCell(r.how_you_heard || r.howHeard || ''),
+        escapeCsvCell(r.meeting_date || r.eventDate || ''),
+        escapeCsvCell(r.created_at || r.registrationDate || '')
+      ]);
+
+      const csvString = [headers.join(','), ...csvDataRows.map(row => row.join(','))].join('\r\n');
+      
+      // Generate downloadable Blob with UTF-8 BOM for Excel compatibility
+      const blob = new Blob(['\uFEFF' + csvString], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const downloadLink = document.createElement('a');
+      const filename = `meeting_registrations_export_${new Date().toISOString().split('T')[0]}.csv`;
+      
+      downloadLink.setAttribute('href', url);
+      downloadLink.setAttribute('download', filename);
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.error('Failed to export meeting registrations to CSV:', err);
+      alert('An error occurred while generating the CSV export.');
+    } finally {
+      setExportingCsv(false);
+    }
+  };
+
+  // Export to Excel (.xlsx) using SheetJS
+  const handleExportMeetingRegistrationsExcel = async () => {
+    setExportingExcel(true);
+    try {
+      let rows: any[] = [];
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase
+          .from('meeting_registrations')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!error && data && data.length > 0) {
+          rows = data;
+        } else {
+          rows = rawMeetingRegistrations.length > 0 ? rawMeetingRegistrations : registrations;
+        }
+      } else {
+        rows = rawMeetingRegistrations.length > 0 ? rawMeetingRegistrations : registrations;
+      }
+
+      if (rows.length === 0) {
+        alert('No registration records found to export.');
+        setExportingExcel(false);
+        return;
+      }
+
+      // Format Sheet 1: Master Registrations List
+      const formattedMasterRows = rows.map((r, idx) => {
+        const regId = r.id || `GEC-REG-${1000 + idx}`;
+        const currentStatus = regStatusMap[regId] || r.status || 'Confirmed';
+        return {
+          'S/N': idx + 1,
+          'Registration Code': regId,
+          'First Name': r.first_name || r.firstName || '',
+          'Surname': r.surname || r.lastName || '',
+          'Full Name': `${r.surname || r.lastName || ''} ${r.first_name || r.firstName || ''}`.trim() || 'GEC Attendee',
+          'Email Address': r.email || r.userEmail || '',
+          'Phone Number': r.phone_number || r.phone || r.userPhone || 'N/A',
+          'Nearest Branch': r.nearest_branch || r.userBranch || r.location || 'Lekki HQ',
+          'Attendance Mode': r.mode || r.attendance_mode || 'Physical Attendance',
+          'Residential Address': r.address || 'N/A',
+          'Age Range': r.age || r.ageRange || '26-35',
+          'Gender': r.gender || 'Not specified',
+          'Denomination / Church': r.denomination || "God's Edifice Church",
+          'Expectations / Prayer Request': r.expecations_prayer_request || r.expectations || 'Spiritual growth and alignment',
+          'How You Heard': r.how_you_heard || r.howHeard || 'Church Announcement',
+          'Meeting / Event Title': r.event_name || r.eventName || 'Edifice Conference 2026',
+          'Meeting Date': r.meeting_date || r.eventDate || 'November 12-15, 2026',
+          'Registration Date': r.created_at ? new Date(r.created_at).toLocaleString() : new Date().toLocaleString(),
+          'Check-in Status': currentStatus
+        };
+      });
+
+      // Create Workbook
+      const wb = XLSX.utils.book_new();
+
+      // Sheet 1: All Registrations Master Board
+      const wsMaster = XLSX.utils.json_to_sheet(formattedMasterRows);
+      
+      // Auto-fit column widths
+      const colWidths = Object.keys(formattedMasterRows[0] || {}).map(key => ({
+        wch: Math.max(key.length + 4, ...formattedMasterRows.map(r => String((r as any)[key] || '').length + 2))
+      }));
+      wsMaster['!cols'] = colWidths;
+
+      XLSX.utils.book_append_sheet(wb, wsMaster, 'All Registrations');
+
+      // Sheet 2: Summary by Branch
+      const branchCounts: { [branch: string]: { total: number; physical: number; virtual: number } } = {};
+      formattedMasterRows.forEach(r => {
+        const br = r['Nearest Branch'] || 'Lekki HQ';
+        if (!branchCounts[br]) {
+          branchCounts[br] = { total: 0, physical: 0, virtual: 0 };
+        }
+        branchCounts[br].total += 1;
+        if (String(r['Attendance Mode']).toLowerCase().includes('virt')) {
+          branchCounts[br].virtual += 1;
+        } else {
+          branchCounts[br].physical += 1;
+        }
+      });
+      const branchSummaryData = Object.entries(branchCounts).map(([branch, stats]) => ({
+        'Branch Location': branch,
+        'Total Attendees': stats.total,
+        'Physical Mode': stats.physical,
+        'Virtual Mode': stats.virtual,
+        'Share of Total': `${((stats.total / formattedMasterRows.length) * 100).toFixed(1)}%`
+      }));
+      const wsBranch = XLSX.utils.json_to_sheet(branchSummaryData);
+      wsBranch['!cols'] = [{ wch: 25 }, { wch: 18 }, { wch: 16 }, { wch: 16 }, { wch: 15 }];
+      XLSX.utils.book_append_sheet(wb, wsBranch, 'Branch Breakdown');
+
+      // Sheet 3: Summary by Event
+      const eventCounts: { [ev: string]: number } = {};
+      formattedMasterRows.forEach(r => {
+        const ev = r['Meeting / Event Title'] || 'Edifice Conference';
+        eventCounts[ev] = (eventCounts[ev] || 0) + 1;
+      });
+      const eventSummaryData = Object.entries(eventCounts).map(([ev, count]) => ({
+        'Event / Meeting Title': ev,
+        'Total Registrations': count,
+        'Percentage': `${((count / formattedMasterRows.length) * 100).toFixed(1)}%`
+      }));
+      const wsEvent = XLSX.utils.json_to_sheet(eventSummaryData);
+      wsEvent['!cols'] = [{ wch: 35 }, { wch: 22 }, { wch: 15 }];
+      XLSX.utils.book_append_sheet(wb, wsEvent, 'Event Breakdown');
+
+      // Generate and trigger download
+      const filename = `GEC_Event_Registrations_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, filename);
+    } catch (err: any) {
+      console.error('Failed to export to Excel:', err);
+      alert('An error occurred while generating the Excel spreadsheet.');
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
+  // Status map updater
+  const handleUpdateRegStatus = (regId: string, status: string) => {
+    const updated = { ...regStatusMap, [regId]: status };
+    setRegStatusMap(updated);
+    localStorage.setItem('gec_reg_status_map', JSON.stringify(updated));
+  };
+
+  // Toggle Audio Playback
+  const toggleAudioPlayback = (audioUrl: string) => {
+    if (!audioPreviewRef.current) {
+      audioPreviewRef.current = new Audio();
+    }
+    
+    if (playingAudioUrl === audioUrl) {
+      audioPreviewRef.current.pause();
+      setPlayingAudioUrl(null);
+    } else {
+      audioPreviewRef.current.src = audioUrl;
+      audioPreviewRef.current.play().catch(e => console.warn('Playback error:', e));
+      setPlayingAudioUrl(audioUrl);
+      audioPreviewRef.current.onended = () => setPlayingAudioUrl(null);
+    }
+  };
+
+  // Publication Handlers
+  const handleAddPublication = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!songTitle) {
-      alert('Song title is required.');
+    setPubError(null);
+    setPubSuccess(null);
+
+    if (!pubTitle.trim()) {
+      setPubError('Publication title is required.');
       return;
     }
 
-    setUploadingSong(true);
-    setSongUploadProgress(10);
+    if (!isSupabaseConfigured || !supabase) {
+      setPubError('Supabase is not configured. Please check your Supabase credentials.');
+      return;
+    }
 
-    let finalAudioUrl = songAudioUrl.trim();
+    // Refresh and ensure active Supabase Auth session
+    let authUser = session?.user;
+    if (!authUser && supabase?.auth) {
+      try {
+        const { data: { session: activeSession } } = await supabase.auth.getSession();
+        if (activeSession?.user) {
+          authUser = activeSession.user;
+          setSession(activeSession);
+        }
+      } catch (sessErr) {
+        console.warn('Could not retrieve active session:', sessErr);
+      }
+    }
+
+    setUploadingPub(true);
+    setPubUploadProgress(15);
+
+    let finalFileUrl = pubFileUrl.trim();
+    let finalCoverUrl = pubCoverUrl.trim();
 
     try {
-      if (songFile) {
-        if (isSupabaseConfigured && supabase) {
-          setSongUploadProgress(30);
-          const fileExt = songFile.name.split('.').pop();
-          const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
-          const filePath = fileName;
+      // 1. Upload PDF document to Publications bucket under pubs/
+      if (pubFile) {
+        setPubUploadProgress(35);
+        const fileExt = pubFile.name.split('.').pop() || 'pdf';
+        const fileName = `pubs/${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
 
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('Teachings')
-            .upload(filePath, songFile, {
-              cacheControl: '3600',
-              upsert: false
-            });
+        const { error: uploadError } = await supabase.storage
+          .from('Publications')
+          .upload(fileName, pubFile, { cacheControl: '3600', upsert: false });
 
-          if (uploadError) throw uploadError;
-          setSongUploadProgress(70);
-
-          const { data: { publicUrl } } = supabase.storage
-            .from('Teachings')
-            .getPublicUrl(filePath);
-
-          finalAudioUrl = publicUrl;
-          setSongUploadProgress(90);
-        } else {
-          // Fallback to local blob URL if Supabase is not configured
-          finalAudioUrl = URL.createObjectURL(songFile);
+        if (uploadError) {
+          throw new Error(`PDF upload failed: ${uploadError.message}`);
         }
-      }
-    } catch (err: any) {
-      console.error('Song upload failed:', err);
-      
-      const proceedWithLocal = confirm(
-        `Supabase Storage Upload Failed: ${err.message || 'Bucket not found or permission denied'}.\n\n` +
-        `This typically happens if the 'Teachings' bucket hasn't been created in your Supabase storage, or if the Row Level Security (RLS) policy doesn't allow public/anonymous uploads.\n\n` +
-        `To fix this permanently, please run the SQL script under the 'DATABASE SETUP' tab, or make sure the Teachings bucket is set to 'Public' and has upload policies enabled.\n\n` +
-        `Would you like to load this song locally in your current browser session instead?`
-      );
 
-      if (proceedWithLocal && songFile) {
-        finalAudioUrl = URL.createObjectURL(songFile);
-      } else {
-        setUploadingSong(false);
-        setSongUploadProgress(0);
+        const { data: { publicUrl } } = supabase.storage.from('Publications').getPublicUrl(fileName);
+        finalFileUrl = publicUrl;
+        setPubUploadProgress(60);
+      }
+
+      // 2. Upload cover image to Publications bucket under covers/
+      if (pubCoverFile) {
+        setPubUploadProgress(70);
+        const fileExt = pubCoverFile.name.split('.').pop() || 'jpg';
+        const fileName = `covers/${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+
+        const { error: coverUploadError } = await supabase.storage
+          .from('Publications')
+          .upload(fileName, pubCoverFile, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (coverUploadError) {
+          throw new Error(`Cover image upload failed: ${coverUploadError.message}`);
+        }
+
+        const { data: coverData } = supabase.storage
+          .from('Publications')
+          .getPublicUrl(fileName);
+
+        finalCoverUrl = coverData.publicUrl;
+      }
+
+      if (!finalCoverUrl) {
+        finalCoverUrl = 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?q=80&w=800&auto=format&fit=crop';
+      }
+
+      setPubUploadProgress(85);
+
+      const newPublicationId = `pub-${Date.now()}`;
+      const pubYearNum = Number(pubYear) || new Date().getFullYear();
+
+      // 3. Insert publication into Supabase `publications` table
+      const { error: dbError } = await supabase
+        .from('publications')
+        .insert([
+          {
+            id: newPublicationId,
+            title: pubTitle.trim(),
+            type: pubType || 'bulletin',
+            author: pubAuthor.trim() || 'Pastor Abiodun Adebayo',
+            description: pubDescription.trim() || "Monthly bulletin available for download to get edified and equipped with God's word.",
+            cover_url: finalCoverUrl,
+            month: pubMonth,
+            publish_year: pubYearNum,
+            file_url: finalFileUrl
+          }
+        ]);
+
+      if (dbError) {
+        const isRls = dbError.code === '42501' || dbError.message?.toLowerCase().includes('row-level security');
+        if (isRls) {
+          setPubError('RLS_POLICY_ERROR');
+        } else {
+          setPubError(`Failed to save publication: ${dbError.message}`);
+        }
+        setUploadingPub(false);
+        setPubUploadProgress(0);
         return;
       }
-    }
 
-    const newSong: Song = {
-      id: `user-song-${Date.now()}`,
-      title: songTitle.trim(),
-      artist: songArtist.trim() || 'Crossworship',
-      album: songAlbum.trim() || 'Single',
-      duration: '4:30',
-      audioUrl: finalAudioUrl || 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-      coverUrl: songCoverUrl.trim() || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&auto=format&fit=crop',
-      lyrics: songLyrics.trim() || '[00:00] Worship the Lord in the beauty of holiness...',
-      uploadedByUser: true
-    };
+      // Refresh list from database & sync across tabs
+      await fetchCloudPublications();
+      window.dispatchEvent(new Event('gec_publications_updated'));
 
-    const updated = [newSong, ...songsList];
-    setSongsList(updated);
-    localStorage.setItem('gec_user_uploaded_songs', JSON.stringify(updated));
-
-    // Also sync to Supabase database so mobile devices fetch the song automatically
-    if (isSupabaseConfigured && supabase && finalAudioUrl.startsWith('http')) {
-      try {
-        await supabase.from('teachings').insert([{
-          id: newSong.id,
-          title: newSong.title,
-          speaker: newSong.artist,
-          category: 'Song',
-          duration: newSong.duration,
-          date: new Date().toISOString().split('T')[0],
-          audio_url: finalAudioUrl,
-          cover_url: newSong.coverUrl,
-          description: newSong.lyrics
-        }]);
-      } catch (dbErr) {
-        console.error('Database sync for song failed:', dbErr);
+      // Reset Form
+      setPubTitle('');
+      setPubAuthor('Pastor Abiodun Adebayo');
+      setPubType('bulletin');
+      setPubDescription('');
+      setPubCoverUrl('');
+      setPubCoverFile(null);
+      setPubYear(new Date().getFullYear());
+      setPubFileUrl('');
+      setPubFile(null);
+      if (pubFileInputRef.current) {
+        pubFileInputRef.current.value = '';
       }
+      if (pubCoverInputRef.current) {
+        pubCoverInputRef.current.value = '';
+      }
+      setUploadingPub(false);
+      setPubUploadProgress(100);
+      setPubSuccess('Monthly bulletin published successfully! It is now live in the GEC Publications catalog.');
+      setTimeout(() => setPubUploadProgress(0), 1000);
+    } catch (err: any) {
+      setPubError(err?.message || 'Publication upload failed.');
+      setUploadingPub(false);
+      setPubUploadProgress(0);
+    }
+  };
+
+  const handleDeletePublication = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this publication?')) return;
+
+    const publication = publicationsList.find(p => p.id === id);
+
+    if (!publication) {
+      console.error('Publication not found:', id);
+      return;
     }
 
-    // Reset Form
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const marker = '/storage/v1/object/public/Publications/';
+
+        // Delete the PDF from Supabase Storage Publications bucket
+        if (publication.fileUrl && publication.fileUrl.includes(marker)) {
+          try {
+            const url = new URL(publication.fileUrl);
+            const storagePath = decodeURIComponent(url.pathname.split(marker)[1]);
+            if (storagePath) {
+              const { error: storageError } = await supabase.storage
+                .from('Publications')
+                .remove([storagePath]);
+
+              if (storageError) {
+                console.error('Failed to delete publication file from Storage:', storageError);
+              }
+            }
+          } catch (storageErr) {
+            console.error('Could not determine publication file storage path:', storageErr);
+          }
+        }
+
+        // Delete the cover from Supabase Storage Publications bucket
+        if (publication.coverUrl && publication.coverUrl.includes(marker)) {
+          try {
+            const url = new URL(publication.coverUrl);
+            const storagePath = decodeURIComponent(url.pathname.split(marker)[1]);
+            if (storagePath) {
+              const { error: coverStorageError } = await supabase.storage
+                .from('Publications')
+                .remove([storagePath]);
+
+              if (coverStorageError) {
+                console.error('Failed to delete cover file from Storage:', coverStorageError);
+              }
+            }
+          } catch (coverErr) {
+            console.error('Could not determine cover file storage path:', coverErr);
+          }
+        }
+
+        // Delete row from Supabase `publications` table
+        const { error: dbErr } = await supabase
+          .from('publications')
+          .delete()
+          .eq('id', id);
+
+        if (dbErr) {
+          console.error('Failed to delete publication from database:', dbErr);
+          alert(`Database deletion failed: ${dbErr.message}`);
+          return;
+        }
+      }
+
+      // Update state immediately
+      setPublicationsList(prev => prev.filter(p => p.id !== id));
+      window.dispatchEvent(new Event('gec_publications_updated'));
+
+      console.log('Publication deleted successfully:', id);
+    } catch (err: any) {
+      console.error('Failed to delete publication:', err);
+      alert(`Failed to delete publication: ${err?.message || 'Please try again'}`);
+    }
+  };
+
+  const handleDeleteAllPublications = async () => {
+    if (!confirm('Are you sure you want to delete and clear ALL publications from the catalog?')) return;
+
+    try {
+      if (isSupabaseConfigured && supabase) {
+        const marker = '/storage/v1/object/public/Publications/';
+
+        // Remove files from Publications bucket
+        for (const pub of publicationsList) {
+          if (pub.fileUrl && pub.fileUrl.includes(marker)) {
+            try {
+              const url = new URL(pub.fileUrl);
+              const storagePath = decodeURIComponent(url.pathname.split(marker)[1]);
+              if (storagePath) {
+                await supabase.storage.from('Publications').remove([storagePath]);
+              }
+            } catch (e) {
+              // Ignore individual storage file removal errors
+            }
+          }
+
+          if (pub.coverUrl && pub.coverUrl.includes(marker)) {
+            try {
+              const url = new URL(pub.coverUrl);
+              const storagePath = decodeURIComponent(url.pathname.split(marker)[1]);
+              if (storagePath) {
+                await supabase.storage.from('Publications').remove([storagePath]);
+              }
+            } catch (e) {
+              // Ignore individual storage file removal errors
+            }
+          }
+        }
+
+        // Delete all records from `publications` database table
+        const { error: dbErr } = await supabase
+          .from('publications')
+          .delete()
+          .neq('id', '');
+
+        if (dbErr) {
+          console.error('Failed to clear publications from database:', dbErr);
+          alert(`Database clear failed: ${dbErr.message}`);
+          return;
+        }
+      }
+
+      setPublicationsList([]);
+      window.dispatchEvent(new Event('gec_publications_updated'));
+      alert('All publications cleared from the catalog successfully.');
+    } catch (e: any) {
+      console.error('Error clearing publications:', e);
+      alert(`Failed to clear publications: ${e?.message || 'Error occurred'}`);
+    }
+  };
+
+// =========================================================
+// SONG HANDLERS — Songs table + Songs storage only (Single Source of Truth)
+// =========================================================
+
+// Add Song Handler
+const handleAddSong = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  if (!songTitle.trim()) {
+    alert('Song title is required.');
+    return;
+  }
+
+  if (!songFile && !songAudioUrl.trim()) {
+    alert('Please select an audio file or provide an audio URL.');
+    return;
+  }
+
+  if (!isSupabaseConfigured || !supabase) {
+    alert('Supabase is not configured.');
+    return;
+  }
+
+  setUploadingSong(true);
+  setSongUploadProgress(15);
+
+  let finalAudioUrl = songAudioUrl.trim();
+  let detectedDuration = '4:30';
+  let uploadedFilePath: string | null = null;
+
+  try {
+    // 1. Detect audio duration
+    if (songFile) {
+      try {
+        const objectUrl = URL.createObjectURL(songFile);
+        const tempAudio = new Audio(objectUrl);
+
+        await new Promise<void>((resolve) => {
+          let resolved = false;
+
+          const finish = () => {
+            if (resolved) return;
+            resolved = true;
+            URL.revokeObjectURL(objectUrl);
+            resolve();
+          };
+
+          tempAudio.onloadedmetadata = () => {
+            if (tempAudio.duration && !isNaN(tempAudio.duration)) {
+              const mins = Math.floor(tempAudio.duration / 60);
+              const secs = Math.floor(tempAudio.duration % 60);
+              detectedDuration = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+            }
+            finish();
+          };
+
+          tempAudio.onerror = finish;
+          setTimeout(finish, 2000);
+        });
+      } catch (durationError) {
+        console.warn('Could not read audio duration:', durationError);
+      }
+
+      // 2. Upload to SONGS bucket
+      setSongUploadProgress(35);
+
+      const fileExt = songFile.name.split('.').pop()?.toLowerCase() || 'mp3';
+      const safeFileName = songFile.name
+        .replace(/\.[^/.]+$/, '')
+        .replace(/[^a-zA-Z0-9-_]/g, '-')
+        .toLowerCase();
+      const fileName = `song-${Date.now()}-${safeFileName}.${fileExt}`;
+      uploadedFilePath = `songs/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('Songs')
+        .upload(uploadedFilePath, songFile, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: songFile.type || 'audio/mpeg'
+        });
+
+      if (uploadError) {
+        console.error('Songs storage upload error:', uploadError);
+        throw new Error(`Song audio upload failed: ${uploadError.message}`);
+      }
+
+      // 3. Get public URL
+      const {
+        data: { publicUrl }
+      } = supabase.storage.from('Songs').getPublicUrl(uploadedFilePath);
+
+      if (!publicUrl) {
+        throw new Error('Could not generate a public URL for the uploaded song.');
+      }
+
+      finalAudioUrl = publicUrl;
+      setSongUploadProgress(65);
+    }
+
+    if (!finalAudioUrl) {
+      throw new Error('No valid audio URL was obtained.');
+    }
+
+    // 4. INSERT INTO SONGS TABLE
+    setSongUploadProgress(80);
+
+    const { data: insertedSong, error: dbErr } = await supabase
+      .from('Songs')
+      .insert([
+        {
+          title: songTitle.trim(),
+          artist: songArtist.trim() || 'Crossworship',
+          album: songAlbum.trim() || 'Edifice Anthem Single',
+          duration: detectedDuration,
+          description:
+            songLyrics.trim() ||
+            `[00:00] ${songTitle.trim()}\n[00:15] Worship the Lord in the beauty of holiness.`,
+          artwork:
+            songCoverUrl.trim() ||
+            'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&auto=format&fit=crop',
+          audio_url: finalAudioUrl,
+          downloads: 0
+        }
+      ])
+      .select()
+      .single();
+
+    if (dbErr) {
+      console.error('SONGS TABLE INSERT ERROR:', dbErr);
+
+      // Clean up uploaded audio if DB insertion fails
+      if (uploadedFilePath) {
+        const { error: cleanupError } = await supabase.storage
+          .from('Songs')
+          .remove([uploadedFilePath]);
+
+        if (cleanupError) {
+          console.warn('Could not clean up uploaded song file:', cleanupError);
+        }
+      }
+
+      throw new Error(`Song database insert failed: ${dbErr.message}`);
+    }
+
+    // 5. Clean up stale localStorage
+    try {
+      localStorage.removeItem('gec_user_uploaded_songs');
+      localStorage.removeItem('gec_songs_catalog');
+    } catch (e) {
+      // Ignore
+    }
+
+    // 6. Refresh catalog from Supabase
+    await fetchCloudSongs();
+
+    window.dispatchEvent(new Event('gec_songs_updated'));
+
+    // 7. Reset form
     setSongTitle('');
     setSongArtist('');
     setSongAlbum('');
@@ -636,47 +1363,211 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
     setSongLyrics('');
     setSongAudioUrl('');
     setSongFile(null);
+
     if (songFileInputRef.current) {
       songFileInputRef.current.value = '';
     }
+
     setUploadingSong(false);
     setSongUploadProgress(100);
-    setTimeout(() => setSongUploadProgress(0), 1000);
-    alert('Song uploaded successfully!');
-  };
 
-  // Delete Song Handler
-  const handleDeleteSong = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this song?')) return;
-    const updated = songsList.filter(s => s.id !== id);
-    setSongsList(updated);
-    localStorage.setItem('gec_user_uploaded_songs', JSON.stringify(updated));
+    setTimeout(() => {
+      setSongUploadProgress(0);
+    }, 1000);
 
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.from('teachings').delete().eq('id', id);
-      } catch (err) {
-        console.error('Failed to delete song from Supabase:', err);
+    alert(`Song "${insertedSong.title}" uploaded successfully!`);
+
+  } catch (err: any) {
+    console.error('Song upload error:', err);
+    alert(`Song upload failed:\n\n${err?.message || err}`);
+    setUploadingSong(false);
+    setSongUploadProgress(0);
+  }
+};
+
+
+// =========================================================
+// DELETE ONE SONG (Removes from Songs Storage + Songs Table)
+// =========================================================
+
+const handleDeleteSong = async (id: string) => {
+  if (!confirm('Are you sure you want to delete this song? This will remove the audio file from storage and the record from the Songs database.')) {
+    return;
+  }
+
+  if (!isSupabaseConfigured || !supabase) {
+    alert('Supabase is not configured.');
+    return;
+  }
+
+  setDeletingSongId(id);
+
+  try {
+    // 1. Get the song first to extract audio storage path
+    const { data: song, error: fetchError } = await supabase
+      .from('Songs')
+      .select('id, title, audio_url')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (fetchError) {
+      console.warn('Warning fetching song record before delete:', fetchError);
+    }
+
+    // 2. Remove storage file from Songs bucket
+    const audioUrl = song?.audio_url || songsList.find(s => s.id === id)?.audioUrl;
+    if (audioUrl) {
+      let storagePath = '';
+      const marker = '/storage/v1/object/public/Songs/';
+      if (audioUrl.includes(marker)) {
+        storagePath = audioUrl.split(marker)[1];
+      } else if (audioUrl.includes('/Songs/')) {
+        storagePath = audioUrl.split('/Songs/')[1];
+      }
+      if (storagePath) {
+        storagePath = storagePath.split('?')[0];
+        const { error: storageError } = await supabase.storage
+          .from('Songs')
+          .remove([storagePath]);
+
+        if (storageError) {
+          console.warn('Could not remove file from Songs bucket:', storageError);
+        }
       }
     }
-  };
 
-  // Delete All Songs Handler
-  const handleDeleteAllSongs = async () => {
-    if (!confirm('Are you sure you want to delete ALL songs? This action cannot be undone.')) return;
+    // 3. Delete database row from Songs table
+    const { error: deleteError } = await supabase
+      .from('Songs')
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) {
+      console.error('Failed to delete song row from database:', deleteError);
+      alert(`Failed to delete song from database: ${deleteError.message}`);
+      return;
+    }
+
+    // 4. Remove stale localStorage
+    try {
+      localStorage.removeItem('gec_user_uploaded_songs');
+      localStorage.removeItem('gec_songs_catalog');
+    } catch (e) {
+      // Ignore
+    }
+
+    // 5. Refresh from Supabase
+    await fetchCloudSongs();
+
+    window.dispatchEvent(new Event('gec_songs_updated'));
+
+    alert('Song deleted successfully.');
+
+  } catch (err: any) {
+    console.error('Error deleting song:', err);
+    alert(`Error deleting song: ${err?.message || err}`);
+  } finally {
+    setDeletingSongId(null);
+  }
+};
+
+
+// =========================================================
+// DELETE ALL SONGS (Removes all files from Songs Bucket + Songs Table)
+// =========================================================
+
+const handleDeleteAllSongs = async () => {
+  if (!confirm('Are you sure you want to delete ALL songs? This will permanently remove every song and audio file from the Songs storage and database table.')) {
+    return;
+  }
+
+  if (!isSupabaseConfigured || !supabase) {
+    alert('Supabase is not configured.');
+    return;
+  }
+
+  try {
+    // 1. Fetch all existing songs to identify storage files
+    const { data: allSongs, error: fetchError } = await supabase
+      .from('Songs')
+      .select('id, audio_url');
+
+    if (fetchError) {
+      console.error('Failed to fetch songs for deletion:', fetchError);
+      alert(`Failed to fetch songs list: ${fetchError.message}`);
+      return;
+    }
+
+    if (allSongs && allSongs.length > 0) {
+      // 2. Remove all audio files from Songs storage bucket
+      const filePaths: string[] = [];
+      const marker = '/storage/v1/object/public/Songs/';
+      for (const s of allSongs) {
+        if (s.audio_url) {
+          let p = '';
+          if (s.audio_url.includes(marker)) {
+            p = s.audio_url.split(marker)[1]?.split('?')[0] || '';
+          } else if (s.audio_url.includes('/Songs/')) {
+            p = s.audio_url.split('/Songs/')[1]?.split('?')[0] || '';
+          }
+          if (p) filePaths.push(p);
+        }
+      }
+
+      if (filePaths.length > 0) {
+        const { error: storageError } = await supabase.storage
+          .from('Songs')
+          .remove(filePaths);
+
+        if (storageError) {
+          console.warn('Warning deleting storage files:', storageError);
+        }
+      }
+
+      // 3. Delete all rows from Songs database table
+      const ids = allSongs.map(s => s.id);
+      const { error: dbDeleteError } = await supabase
+        .from('Songs')
+        .delete()
+        .in('id', ids);
+
+      if (dbDeleteError) {
+        console.error('Failed to delete songs from database:', dbDeleteError);
+        alert(`Failed to delete songs from database: ${dbDeleteError.message}`);
+        return;
+      }
+    }
+
+    // 4. Clear state & stale storage
     setSongsList([]);
-    localStorage.removeItem('gec_user_uploaded_songs');
-
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.from('teachings').delete().eq('category', 'Song');
-      } catch (err) {
-        console.error('Failed to delete all songs from Supabase:', err);
-      }
+    try {
+      localStorage.removeItem('gec_user_uploaded_songs');
+      localStorage.removeItem('gec_songs_catalog');
+    } catch (e) {
+      // Ignore
     }
+
+    // 5. Refresh from Supabase
+    await fetchCloudSongs();
+
+    window.dispatchEvent(new Event('gec_songs_updated'));
 
     alert('All songs deleted successfully.');
-  };
+
+  } catch (err: any) {
+    console.error('Error deleting songs:', err);
+    alert(`Error deleting songs: ${err?.message || err}`);
+  }
+};
+
+
+// =========================================================
+// RESET SONGS (Wipes Songs database + Storage)
+// =========================================================
+
+const handleResetDefaultSongs = async () => {
+  await handleDeleteAllSongs();
+};
 
   // Add Gallery Handler
   const handleAddGallery = (e: React.FormEvent) => {
@@ -769,20 +1660,20 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
     alert('Site settings saved successfully!');
   };
 
-  // SQL Script text to render
-  const sqlSetupScript = `-- 1. Create a Public "Teachings" bucket in Storage
--- (Go to Storage in Supabase Dashboard, create a new bucket named "Teachings" and make it Public)
+  // SQL Script text to render with secure, strict RLS & Storage policies
+  const sqlSetupScript = `-- =========================================================================
+-- GOD'S EDIFICE CHURCH - SECURE SUPABASE SQL SCHEMA & RLS SETUP
+-- Run this script in the Supabase SQL Editor (https://supabase.com/dashboard/project/_/sql)
+-- =========================================================================
 
--- 2. Create the Database Tables
-
--- Create subscribers table
+-- 1. Create Subscribers Table
 CREATE TABLE IF NOT EXISTS public.subscribers (
     id TEXT PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
     subscribed_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Create registrations table
+-- 2. Create Standard Registrations Table
 CREATE TABLE IF NOT EXISTS public.registrations (
     id TEXT PRIMARY KEY,
     event_id TEXT NOT NULL,
@@ -792,11 +1683,29 @@ CREATE TABLE IF NOT EXISTS public.registrations (
     email TEXT NOT NULL,
     phone TEXT,
     location TEXT,
+    address TEXT,
     status TEXT DEFAULT 'Registered'::text,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Create teachings (sermons) table
+-- 3. Create Conference Meeting Registrations Table (Edifice Conference Source of Truth)
+CREATE TABLE IF NOT EXISTS public.meeting_registrations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    first_name TEXT NOT NULL,
+    surname TEXT NOT NULL,
+    email TEXT NOT NULL,
+    phone_number TEXT,
+    address TEXT,
+    nearest_branch TEXT,
+    age TEXT,
+    expecations_prayer_request TEXT,
+    gender TEXT,
+    how_you_heard TEXT,
+    meeting_date TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 4. Create Teachings & Songs Table (category = 'Song' for songs, 'Sermon' for teachings)
 CREATE TABLE IF NOT EXISTS public.teachings (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -806,10 +1715,11 @@ CREATE TABLE IF NOT EXISTS public.teachings (
     date DATE NOT NULL,
     audio_url TEXT NOT NULL,
     cover_url TEXT,
+    description TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Create profiles table with user roles
+-- 5. Create Profiles Table with User Roles
 CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
     email TEXT NOT NULL,
@@ -817,40 +1727,180 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Enable RLS (Row Level Security) and Policies as needed.
--- Make profiles readable by authenticated users:
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Public profiles are readable by everyone" ON public.profiles FOR SELECT USING (true);
-CREATE POLICY "Users can update their own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+-- 6. Helper Function to Check Admin Role
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS boolean AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.profiles 
+    WHERE id = auth.uid() 
+      AND (role = 'admin' OR email = 'boluakintola@gmail.com')
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Create Row Trigger to automatically seed profiles on Sign-Up:
+-- 7. Row Trigger: Default new signups to role = 'user' (admin assigned explicitly or for designated email)
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 BEGIN
   INSERT INTO public.profiles (id, email, role)
-  VALUES (new.id, new.email, 'admin'); -- Defaulting to admin for testing, customize as needed
+  VALUES (
+    new.id, 
+    new.email, 
+    CASE 
+      WHEN new.email = 'boluakintola@gmail.com' THEN 'admin'
+      ELSE 'user'
+    END
+  )
+  ON CONFLICT (id) DO UPDATE 
+  SET email = EXCLUDED.email,
+      role = CASE 
+        WHEN public.profiles.email = 'boluakintola@gmail.com' THEN 'admin'
+        ELSE public.profiles.role 
+      END;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-CREATE OR REPLACE TRIGGER on_auth_user_created
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- 3. STORAGE POLICIES (Run this to enable unauthenticated uploads to the Teachings bucket)
--- This permits anyone to upload and view media files directly in the Teachings storage bucket.
--- Ensure the "Teachings" bucket is created and marked "Public" in the Supabase Storage Dashboard first!
-CREATE POLICY "Allow public storage inserts" 
-ON storage.objects 
-FOR INSERT 
-TO public 
-WITH CHECK (bucket_id = 'Teachings');
+-- Ensure primary administrator email has role = 'admin'
+UPDATE public.profiles 
+SET role = 'admin' 
+WHERE email = 'boluakintola@gmail.com';
 
-CREATE POLICY "Allow public storage select" 
-ON storage.objects 
-FOR SELECT 
-TO public 
+-- 8. Enable Row Level Security (RLS) on all tables
+ALTER TABLE public.subscribers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.registrations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.meeting_registrations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.teachings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+-- =========================================================================
+-- SECURE POLICIES
+-- =========================================================================
+
+-- Profiles Policies
+DROP POLICY IF EXISTS "Public profiles are readable by authenticated users" ON public.profiles;
+DROP POLICY IF EXISTS "Public profiles are readable by everyone" ON public.profiles;
+DROP POLICY IF EXISTS "Profiles readable by authenticated users" ON public.profiles;
+DROP POLICY IF EXISTS "Users can read own profile or admin reads all" ON public.profiles;
+CREATE POLICY "Users can read own profile or admin reads all" 
+ON public.profiles FOR SELECT TO authenticated 
+USING (auth.uid() = id OR public.is_admin());
+
+DROP POLICY IF EXISTS "Users can update their own profile" ON public.profiles;
+CREATE POLICY "Users can update their own profile" 
+ON public.profiles FOR UPDATE TO authenticated 
+USING (auth.uid() = id);
+
+-- 1. meeting_registrations Policies:
+-- Public/anon users may INSERT. Admin only may SELECT, UPDATE, DELETE.
+DROP POLICY IF EXISTS "Allow public insert meeting_registrations" ON public.meeting_registrations;
+CREATE POLICY "Allow public insert meeting_registrations" 
+ON public.meeting_registrations FOR INSERT TO anon, authenticated WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow public select meeting_registrations" ON public.meeting_registrations;
+DROP POLICY IF EXISTS "Allow admin select meeting_registrations" ON public.meeting_registrations;
+CREATE POLICY "Allow admin select meeting_registrations" 
+ON public.meeting_registrations FOR SELECT TO authenticated USING (public.is_admin());
+
+DROP POLICY IF EXISTS "Allow admin update meeting_registrations" ON public.meeting_registrations;
+CREATE POLICY "Allow admin update meeting_registrations" 
+ON public.meeting_registrations FOR UPDATE TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "Allow public delete meeting_registrations" ON public.meeting_registrations;
+DROP POLICY IF EXISTS "Allow admin delete meeting_registrations" ON public.meeting_registrations;
+CREATE POLICY "Allow admin delete meeting_registrations" 
+ON public.meeting_registrations FOR DELETE TO authenticated USING (public.is_admin());
+
+-- 2. registrations Policies:
+-- Public/anon users may INSERT. Admin only may SELECT, UPDATE, DELETE.
+DROP POLICY IF EXISTS "Allow public insert registrations" ON public.registrations;
+CREATE POLICY "Allow public insert registrations" 
+ON public.registrations FOR INSERT TO anon, authenticated WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow public select registrations" ON public.registrations;
+DROP POLICY IF EXISTS "Allow admin select registrations" ON public.registrations;
+CREATE POLICY "Allow admin select registrations" 
+ON public.registrations FOR SELECT TO authenticated USING (public.is_admin());
+
+DROP POLICY IF EXISTS "Allow admin update registrations" ON public.registrations;
+CREATE POLICY "Allow admin update registrations" 
+ON public.registrations FOR UPDATE TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "Allow public delete registrations" ON public.registrations;
+DROP POLICY IF EXISTS "Allow admin delete registrations" ON public.registrations;
+CREATE POLICY "Allow admin delete registrations" 
+ON public.registrations FOR DELETE TO authenticated USING (public.is_admin());
+
+-- 3. subscribers Policies:
+-- Public users may INSERT. Admin only may SELECT, DELETE.
+DROP POLICY IF EXISTS "Allow public insert subscribers" ON public.subscribers;
+CREATE POLICY "Allow public insert subscribers" 
+ON public.subscribers FOR INSERT TO anon, authenticated WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow public select subscribers" ON public.subscribers;
+DROP POLICY IF EXISTS "Allow admin select subscribers" ON public.subscribers;
+CREATE POLICY "Allow admin select subscribers" 
+ON public.subscribers FOR SELECT TO authenticated USING (public.is_admin());
+
+DROP POLICY IF EXISTS "Allow public delete subscribers" ON public.subscribers;
+DROP POLICY IF EXISTS "Allow admin delete subscribers" ON public.subscribers;
+CREATE POLICY "Allow admin delete subscribers" 
+ON public.subscribers FOR DELETE TO authenticated USING (public.is_admin());
+
+-- 4. teachings Policies:
+-- Public users may SELECT. Admin only may INSERT, UPDATE, DELETE.
+DROP POLICY IF EXISTS "Allow public select teachings" ON public.teachings;
+CREATE POLICY "Allow public select teachings" 
+ON public.teachings FOR SELECT TO anon, authenticated USING (true);
+
+DROP POLICY IF EXISTS "Allow public insert teachings" ON public.teachings;
+DROP POLICY IF EXISTS "Allow admin insert teachings" ON public.teachings;
+CREATE POLICY "Allow admin insert teachings" 
+ON public.teachings FOR INSERT TO authenticated WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "Allow admin update teachings" ON public.teachings;
+CREATE POLICY "Allow admin update teachings" 
+ON public.teachings FOR UPDATE TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "Allow public delete teachings" ON public.teachings;
+DROP POLICY IF EXISTS "Allow admin delete teachings" ON public.teachings;
+CREATE POLICY "Allow admin delete teachings" 
+ON public.teachings FOR DELETE TO authenticated USING (public.is_admin());
+
+-- 5. Storage Bucket & Policies: "Teachings"
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('Teachings', 'Teachings', true) 
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+DROP POLICY IF EXISTS "Allow public storage inserts" ON storage.objects;
+DROP POLICY IF EXISTS "Allow public storage select" ON storage.objects;
+DROP POLICY IF EXISTS "Allow public storage delete" ON storage.objects;
+DROP POLICY IF EXISTS "Allow public select storage Teachings" ON storage.objects;
+CREATE POLICY "Allow public select storage Teachings" 
+ON storage.objects FOR SELECT TO anon, authenticated, public 
 USING (bucket_id = 'Teachings');
+
+DROP POLICY IF EXISTS "Allow admin insert storage Teachings" ON storage.objects;
+CREATE POLICY "Allow admin insert storage Teachings" 
+ON storage.objects FOR INSERT TO authenticated 
+WITH CHECK (bucket_id = 'Teachings' AND public.is_admin());
+
+DROP POLICY IF EXISTS "Allow admin update storage Teachings" ON storage.objects;
+CREATE POLICY "Allow admin update storage Teachings" 
+ON storage.objects FOR UPDATE TO authenticated 
+USING (bucket_id = 'Teachings' AND public.is_admin())
+WITH CHECK (bucket_id = 'Teachings' AND public.is_admin());
+
+DROP POLICY IF EXISTS "Allow admin delete storage Teachings" ON storage.objects;
+CREATE POLICY "Allow admin delete storage Teachings" 
+ON storage.objects FOR DELETE TO authenticated 
+USING (bucket_id = 'Teachings' AND public.is_admin());
 `;
 
   const copyToClipboard = () => {
@@ -1068,131 +2118,155 @@ USING (bucket_id = 'Teachings');
             
             {/* Sidebar Controls */}
             <div className="lg:col-span-1 space-y-3">
-              <div className="bg-charcoal/45 border border-midnight-blue rounded-2xl p-4 sm:p-5 backdrop-blur-md">
+              <div className="bg-[#131B2E] border-2 border-[#2A3756] rounded-2xl p-4 sm:p-5 shadow-xl">
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 rounded-xl bg-cci-gold-500/10 border border-cci-gold-500/20 flex items-center justify-center text-cci-gold-400">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 font-bold">
                     <User className="h-5 w-5" />
                   </div>
                   <div className="overflow-hidden">
-                    <div className="text-[10px] font-mono text-cci-gold-400 uppercase tracking-widest">Active Admin</div>
-                    <div className="text-xs text-white font-semibold truncate font-sans">{session.user.email}</div>
+                    <div className="text-[11px] font-mono text-amber-400 font-bold uppercase tracking-widest">Active Admin</div>
+                    <div className="text-sm text-white font-bold truncate font-sans">{session.user.email}</div>
                   </div>
                 </div>
 
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <button
                     onClick={() => setActiveSubTab('overview')}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono tracking-wider flex items-center gap-3 transition-all ${
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
                       activeSubTab === 'overview' 
-                        ? 'bg-gradient-to-r from-royal-blue to-electric-blue text-white border-l-4 border-cci-gold-400' 
-                        : 'text-light-gray hover:bg-midnight-blue/40 hover:text-white'
+                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
+                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
                     }`}
                   >
-                    <LayoutDashboard className="h-4 w-4" />
+                    <LayoutDashboard className="h-4 w-4 text-amber-300" />
                     <span>DASHBOARD OVERVIEW</span>
                   </button>
 
                   <button
-                    onClick={() => setActiveSubTab('songs')}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono tracking-wider flex items-center gap-3 transition-all ${
-                      activeSubTab === 'songs' 
-                        ? 'bg-gradient-to-r from-royal-blue to-electric-blue text-white border-l-4 border-cci-gold-400' 
-                        : 'text-light-gray hover:bg-midnight-blue/40 hover:text-white'
+                    onClick={() => setActiveSubTab('analytics')}
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
+                      activeSubTab === 'analytics' 
+                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
+                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
                     }`}
                   >
-                    <Music className="h-4 w-4" />
+                    <BarChart3 className="h-4 w-4 text-amber-300" />
+                    <span>DATA ANALYTICS</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveSubTab('songs')}
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
+                      activeSubTab === 'songs' 
+                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
+                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
+                    }`}
+                  >
+                    <Music className="h-4 w-4 text-sky-400" />
                     <span>UPLOAD SONGS ({songsList.length})</span>
                   </button>
 
                   <button
                     onClick={() => setActiveSubTab('teachings')}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono tracking-wider flex items-center gap-3 transition-all ${
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
                       activeSubTab === 'teachings' 
-                        ? 'bg-gradient-to-r from-royal-blue to-electric-blue text-white border-l-4 border-cci-gold-400' 
-                        : 'text-light-gray hover:bg-midnight-blue/40 hover:text-white'
+                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
+                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
                     }`}
                   >
-                    <FileText className="h-4 w-4" />
+                    <FileText className="h-4 w-4 text-sky-400" />
                     <span>UPLOAD TEACHINGS ({teachings.length})</span>
                   </button>
 
                   <button
-                    onClick={() => setActiveSubTab('gallery')}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono tracking-wider flex items-center gap-3 transition-all ${
-                      activeSubTab === 'gallery' 
-                        ? 'bg-gradient-to-r from-royal-blue to-electric-blue text-white border-l-4 border-cci-gold-400' 
-                        : 'text-light-gray hover:bg-midnight-blue/40 hover:text-white'
+                    onClick={() => setActiveSubTab('publications')}
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
+                      activeSubTab === 'publications' 
+                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
+                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
                     }`}
                   >
-                    <ImageIcon className="h-4 w-4" />
+                    <BookOpen className="h-4 w-4 text-amber-400" />
+                    <span>PUBLICATIONS ({publicationsList.length})</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveSubTab('gallery')}
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
+                      activeSubTab === 'gallery' 
+                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
+                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
+                    }`}
+                  >
+                    <ImageIcon className="h-4 w-4 text-sky-400" />
                     <span>UPLOAD GALLERY ({galleryList.length})</span>
                   </button>
 
                   <button
                     onClick={() => setActiveSubTab('events')}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono tracking-wider flex items-center gap-3 transition-all ${
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
                       activeSubTab === 'events' 
-                        ? 'bg-gradient-to-r from-royal-blue to-electric-blue text-white border-l-4 border-cci-gold-400' 
-                        : 'text-light-gray hover:bg-midnight-blue/40 hover:text-white'
+                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
+                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
                     }`}
                   >
-                    <Calendar className="h-4 w-4" />
+                    <Calendar className="h-4 w-4 text-sky-400" />
                     <span>MANAGE EVENTS ({eventsList.length})</span>
                   </button>
 
                   <button
                     onClick={() => setActiveSubTab('registrations')}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono tracking-wider flex items-center gap-3 transition-all ${
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
                       activeSubTab === 'registrations' 
-                        ? 'bg-gradient-to-r from-royal-blue to-electric-blue text-white border-l-4 border-cci-gold-400' 
-                        : 'text-light-gray hover:bg-midnight-blue/40 hover:text-white'
+                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
+                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
                     }`}
                   >
-                    <Users className="h-4 w-4" />
-                    <span>EVENT REGS ({registrations.length})</span>
+                    <Users className="h-4 w-4 text-emerald-400" />
+                    <span>DATA BOARDS & REGS ({registrations.length})</span>
                   </button>
 
                   <button
                     onClick={() => setActiveSubTab('subscribers')}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono tracking-wider flex items-center gap-3 transition-all ${
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
                       activeSubTab === 'subscribers' 
-                        ? 'bg-gradient-to-r from-royal-blue to-electric-blue text-white border-l-4 border-cci-gold-400' 
-                        : 'text-light-gray hover:bg-midnight-blue/40 hover:text-white'
+                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
+                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
                     }`}
                   >
-                    <MessageSquare className="h-4 w-4" />
+                    <MessageSquare className="h-4 w-4 text-emerald-400" />
                     <span>SUBSCRIBERS ({subscribers.length})</span>
                   </button>
 
                   <button
                     onClick={() => setActiveSubTab('settings')}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono tracking-wider flex items-center gap-3 transition-all ${
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
                       activeSubTab === 'settings' 
-                        ? 'bg-gradient-to-r from-royal-blue to-electric-blue text-white border-l-4 border-cci-gold-400' 
-                        : 'text-light-gray hover:bg-midnight-blue/40 hover:text-white'
+                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
+                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
                     }`}
                   >
-                    <Settings className="h-4 w-4" />
+                    <Settings className="h-4 w-4 text-purple-400" />
                     <span>SITE SETTINGS</span>
                   </button>
 
                   <button
                     onClick={() => setActiveSubTab('database')}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono tracking-wider flex items-center gap-3 transition-all ${
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
                       activeSubTab === 'database' 
-                        ? 'bg-gradient-to-r from-royal-blue to-electric-blue text-white border-l-4 border-cci-gold-400' 
-                        : 'text-light-gray hover:bg-midnight-blue/40 hover:text-white'
+                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
+                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
                     }`}
                   >
-                    <Database className="h-4 w-4" />
+                    <Database className="h-4 w-4 text-purple-400" />
                     <span>DATABASE SETUP</span>
                   </button>
                 </div>
 
-                <div className="mt-8 pt-4 border-t border-midnight-blue">
+                <div className="mt-8 pt-4 border-t border-[#2A3756]">
                   <button
                     onClick={handleLogout}
-                    className="w-full text-left px-4 py-2.5 rounded-xl text-xs font-mono text-red-400 hover:bg-red-500/10 flex items-center gap-3 transition-all"
+                    className="w-full text-left px-4 py-2.5 rounded-xl text-xs font-mono font-bold text-red-400 hover:bg-red-950/50 flex items-center gap-3 transition-all cursor-pointer"
                   >
                     <LogOut className="h-4 w-4" />
                     <span>SIGN OUT ADMIN</span>
@@ -1207,63 +2281,71 @@ USING (bucket_id = 'Teachings');
               {/* Overview Tab */}
               {activeSubTab === 'overview' && (
                 <div className="space-y-6">
-                  {/* Overview statistics cards */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="bg-charcoal/45 border border-midnight-blue p-5 rounded-2xl flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-royal-blue/15 border border-royal-blue/25 flex items-center justify-center text-electric-blue">
-                        <Music className="h-6 w-6" />
-                      </div>
-                      <div>
-                        <div className="text-[10px] font-mono text-slate-400 uppercase tracking-widest">Sermons</div>
-                        <div className="text-2xl font-bold font-sans text-white mt-1">{teachings.length}</div>
-                      </div>
-                    </div>
-
-                    <div className="bg-charcoal/45 border border-midnight-blue p-5 rounded-2xl flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-cci-gold-500/10 border border-cci-gold-500/20 flex items-center justify-center text-cci-gold-400">
-                        <Users className="h-6 w-6" />
-                      </div>
-                      <div>
-                        <div className="text-[10px] font-mono text-slate-400 uppercase tracking-widest">Conference Regs</div>
-                        <div className="text-2xl font-bold font-sans text-white mt-1">{registrations.length}</div>
-                      </div>
-                    </div>
-
-                    <div className="bg-charcoal/45 border border-midnight-blue p-5 rounded-2xl flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-                        <MessageSquare className="h-6 w-6" />
-                      </div>
-                      <div>
-                        <div className="text-[10px] font-mono text-slate-400 uppercase tracking-widest">Subscribers</div>
-                        <div className="text-2xl font-bold font-sans text-white mt-1">{subscribers.length}</div>
-                      </div>
-                    </div>
-                  </div>
+                  {/* Visual Analytics Dashboard with Recharts */}
+                  <AdminAnalyticsDashboard
+                    registrations={registrations}
+                    rawMeetingRegistrations={rawMeetingRegistrations}
+                    loading={dataLoading}
+                    onRefresh={fetchDashboardData}
+                    onExportCsv={handleExportMeetingRegistrationsCSV}
+                    exportingCsv={exportingCsv}
+                  />
 
                   {/* Information block */}
-                  <div className="bg-charcoal/45 border border-midnight-blue p-6 rounded-2xl">
+                  <div className="bg-[#131B2E] border-2 border-[#2A3756] p-6 rounded-2xl shadow-xl">
                     <h3 className="font-display font-bold text-lg text-white mb-2">
                       Supabase Integrated Backend Active
                     </h3>
-                    <p className="text-xs text-light-gray leading-relaxed max-w-2xl">
-                      Welcome to the Crossword Media Administration console. Use the sidebar sections to upload new sermons directly to Supabase storage buckets, sync teachings to the PostgreSQL database, manage attendees, and export email subscriber digests.
+                    <p className="text-sm font-medium text-[#CBD5E1] leading-relaxed max-w-2xl">
+                      Welcome to the Crossword Media Administration console. Use the sidebar sections to upload new sermons directly to Supabase storage buckets, sync teachings to the PostgreSQL database, manage attendees, and view live registration trends.
                     </p>
                     <div className="mt-6 flex flex-wrap gap-4">
                       <button 
-                        onClick={() => setActiveSubTab('teachings')} 
-                        className="py-2.5 px-4 rounded-xl bg-gradient-to-r from-royal-blue to-electric-blue text-xs font-bold uppercase tracking-wider text-white hover:opacity-95 transition-all flex items-center gap-1.5"
+                        onClick={() => setActiveSubTab('analytics')} 
+                        className="py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-sky-500 hover:from-sky-500 hover:to-blue-600 text-xs font-bold uppercase tracking-wider text-white shadow-md transition-all flex items-center gap-2 cursor-pointer"
                       >
-                        <Plus className="h-4 w-4" /> Upload Sermon
+                        <BarChart3 className="h-4 w-4 text-amber-300" /> Full Visual Analytics
+                      </button>
+                      <button 
+                        onClick={handleExportMeetingRegistrationsCSV}
+                        disabled={exportingCsv}
+                        className="py-2.5 px-4 rounded-xl bg-[#0A0E1A] hover:bg-[#1E293B] border-2 border-[#2A3756] text-xs font-mono font-bold text-amber-300 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                        title="Export all meeting_registrations records from Supabase"
+                      >
+                        {exportingCsv ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-white" />
+                        ) : (
+                          <Download className="h-4 w-4 text-emerald-400" />
+                        )}
+                        <span>Export CSV (meeting_registrations)</span>
+                      </button>
+                      <button 
+                        onClick={() => setActiveSubTab('registrations')} 
+                        className="py-2.5 px-4 rounded-xl bg-[#1E293B] hover:bg-[#2A3756] border-2 border-[#2A3756] text-xs font-semibold text-white transition-all flex items-center gap-2 cursor-pointer"
+                      >
+                        <Users className="h-4 w-4 text-sky-400" /> View Attendees List
                       </button>
                       <button 
                         onClick={() => setActiveSubTab('database')} 
-                        className="py-2.5 px-4 rounded-xl border border-midnight-blue hover:bg-midnight-blue text-xs font-semibold text-soft-white transition-all flex items-center gap-1.5"
+                        className="py-2.5 px-4 rounded-xl bg-[#1E293B] hover:bg-[#2A3756] border-2 border-[#2A3756] text-xs font-semibold text-white transition-all flex items-center gap-2 cursor-pointer"
                       >
-                        <Database className="h-4 w-4" /> Schema Management
+                        <Database className="h-4 w-4 text-purple-400" /> Schema Management
                       </button>
                     </div>
                   </div>
                 </div>
+              )}
+
+              {/* Dedicated Data Analytics Tab */}
+              {activeSubTab === 'analytics' && (
+                <AdminAnalyticsDashboard
+                  registrations={registrations}
+                  rawMeetingRegistrations={rawMeetingRegistrations}
+                  loading={dataLoading}
+                  onRefresh={fetchDashboardData}
+                  onExportCsv={handleExportMeetingRegistrationsCSV}
+                  exportingCsv={exportingCsv}
+                />
               )}
 
               {/* Songs Tab */}
@@ -1423,23 +2505,35 @@ USING (bucket_id = 'Teachings');
 
                   {/* List of Custom Songs */}
                   <div className="bg-charcoal/45 border border-midnight-blue rounded-2xl p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-display font-bold text-lg text-white">
-                        My Uploaded Songs ({songsList.length})
-                      </h3>
-                      {songsList.length > 0 && (
-                        <button
-                          onClick={handleDeleteAllSongs}
-                          className="px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-all flex items-center gap-1.5"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          <span>Delete All Songs</span>
-                        </button>
-                      )}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+                      <div>
+                        <h3 className="font-display font-bold text-lg text-white flex items-center gap-2">
+                          <span>Songs & Anthems Catalog ({songsList.length})</span>
+                          <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">Live on Website</span>
+                        </h3>
+                        <p className="text-xs text-slate-400 mt-0.5">Manage worship tracks, uploaded singles, and minister anthems.</p>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {songsList.length > 0 && (
+                          <button
+                            onClick={handleDeleteAllSongs}
+                            className="px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-all flex items-center gap-1.5 cursor-pointer"
+                            title="Delete all songs from website"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span>Delete All Songs</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {songsList.length === 0 ? (
-                      <p className="text-xs text-light-gray">No custom songs uploaded yet. Standard preloaded hymns are displayed on the public website.</p>
+                      <div className="py-8 text-center border border-dashed border-slate-700/60 rounded-xl px-4">
+                        <Music className="h-8 w-8 text-slate-500 mx-auto mb-2" />
+                        <p className="text-xs font-semibold text-slate-300">Catalog is currently empty</p>
+                        <p className="text-[11px] text-slate-400 mt-1">Use the upload form above to add new audio songs and worship tracks to the website.</p>
+                      </div>
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {songsList.map((song) => (
@@ -1449,14 +2543,41 @@ USING (bucket_id = 'Teachings');
                               <div className="overflow-hidden">
                                 <h4 className="text-xs font-bold text-white truncate">{song.title}</h4>
                                 <p className="text-[10px] text-slate-400 truncate">{song.artist} • {song.album}</p>
+                                <span className="text-[9px] text-amber-400 font-mono">Audio Track</span>
                               </div>
                             </div>
-                            <button
-                              onClick={() => handleDeleteSong(song.id)}
-                              className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-all"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
+                            <div className="flex items-center gap-2">
+                              {song.audioUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleAudioPlayback(song.audioUrl)}
+                                  className={`p-2 rounded-lg border transition-all ${
+                                    playingAudioUrl === song.audioUrl
+                                      ? 'bg-amber-500 text-slate-900 border-amber-400'
+                                      : 'bg-midnight-blue text-amber-400 border-amber-500/20 hover:bg-midnight-blue/80'
+                                  }`}
+                                  title={playingAudioUrl === song.audioUrl ? 'Pause Preview' : 'Play Audio Preview'}
+                                >
+                                  {playingAudioUrl === song.audioUrl ? (
+                                    <Pause className="h-3.5 w-3.5" />
+                                  ) : (
+                                    <Play className="h-3.5 w-3.5" />
+                                  )}
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleDeleteSong(song.id)}
+                                disabled={deletingSongId === song.id}
+                                className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-all disabled:opacity-50 cursor-pointer"
+                                title="Delete song"
+                              >
+                                {deletingSongId === song.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin text-red-400" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1687,13 +2808,33 @@ USING (bucket_id = 'Teachings');
                                 </td>
                                 <td className="py-3.5 px-4 font-sans text-slate-400">{t.date}</td>
                                 <td className="py-3.5 px-4 text-right">
-                                  <button
-                                    onClick={() => handleDeleteSermon(t.id, t.audioUrl)}
-                                    className="p-1.5 text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-all"
-                                    title="Delete teaching"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
+                                  <div className="flex items-center justify-end gap-2">
+                                    {t.audioUrl && (
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleAudioPlayback(t.audioUrl)}
+                                        className={`p-1.5 rounded-lg border transition-all ${
+                                          playingAudioUrl === t.audioUrl
+                                            ? 'bg-amber-500 text-slate-900 border-amber-400'
+                                            : 'bg-midnight-blue text-amber-400 border-amber-500/20 hover:bg-midnight-blue/80'
+                                        }`}
+                                        title={playingAudioUrl === t.audioUrl ? 'Pause Preview' : 'Play Sermon Audio'}
+                                      >
+                                        {playingAudioUrl === t.audioUrl ? (
+                                          <Pause className="h-3.5 w-3.5" />
+                                        ) : (
+                                          <Play className="h-3.5 w-3.5" />
+                                        )}
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => handleDeleteSermon(t.id, t.audioUrl)}
+                                      className="p-1.5 text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-all"
+                                      title="Delete teaching"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             ))}
@@ -1707,6 +2848,336 @@ USING (bucket_id = 'Teachings');
                         </tbody>
                       </table>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Publications Tab */}
+              {activeSubTab === 'publications' && (
+                <div className="space-y-6">
+                  {/* Upload Publication Form */}
+                  <div className="bg-charcoal/45 border border-midnight-blue rounded-2xl p-6 sm:p-8">
+                    <div className="flex items-center gap-2 mb-6 border-b border-midnight-blue pb-4">
+                      <BookOpen className="h-5 w-5 text-amber-400" />
+                      <div>
+                        <h3 className="font-display font-bold text-lg text-white">
+                          Upload & Publish Monthly Bulletin
+                        </h3>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Publish monthly bulletins organized by month and year for immediate church download.
+                        </p>
+                      </div>
+                    </div>
+
+                    <form onSubmit={handleAddPublication} className="space-y-5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                            Bulletin / Publication Title *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="E.g., Walking in Apostolic Dominion"
+                            value={pubTitle}
+                            onChange={(e) => setPubTitle(e.target.value)}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-amber-400 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                            Author / Minister *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Pastor Abiodun Adebayo"
+                            value={pubAuthor}
+                            onChange={(e) => setPubAuthor(e.target.value)}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-amber-400 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                            Month *
+                          </label>
+                          <select
+                            value={pubMonth}
+                            onChange={(e) => setPubMonth(e.target.value)}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-amber-400 rounded-xl py-3 px-4 text-xs text-white focus:outline-none transition-all"
+                          >
+                            {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(m => (
+                              <option key={m} value={m}>{m}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                            Year Published *
+                          </label>
+                          <input
+                            type="number"
+                            required
+                            min="2020"
+                            max="2040"
+                            value={pubYear}
+                            onChange={(e) => setPubYear(Number(e.target.value))}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-amber-400 rounded-xl py-3 px-4 text-xs text-white focus:outline-none transition-all"
+                          />
+                        </div>
+
+                        
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                            Upload PDF Bulletin Document
+                          </label>
+                          <input
+                            type="file"
+                            accept=".pdf,.epub,.docx"
+                            ref={pubFileInputRef}
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                setPubFile(e.target.files[0]);
+                              }
+                            }}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-amber-400 rounded-xl py-2 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all file:mr-4 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-mono file:font-semibold file:bg-amber-500 file:text-black hover:file:bg-amber-400 cursor-pointer"
+                          />
+                          {pubFile && (
+                            <p className="text-[10px] text-amber-400 mt-1.5 font-mono">
+                              ✓ Selected: {pubFile.name} ({(pubFile.size / (1024 * 1024)).toFixed(2)} MB)
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                            OR: Document URL (PDF Download Link)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="https://example.com/monthly-bulletin.pdf"
+                            value={pubFileUrl}
+                            onChange={(e) => setPubFileUrl(e.target.value)}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-amber-400 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                       <div>
+  <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+    Publication Cover
+  </label>
+
+  <input
+    ref={pubCoverInputRef}
+    type="file"
+    accept="image/*"
+    onChange={(e) => {
+      const file = e.target.files?.[0] || null;
+      setPubCoverFile(file);
+    }}
+    className="w-full bg-rich-black/95 border border-midnight-blue rounded-xl py-3 px-4 text-xs text-white file:mr-3 file:rounded-lg file:border-0 file:bg-amber-400 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-black hover:file:bg-amber-300"
+  />
+
+  {pubCoverFile && (
+    <p className="text-[10px] text-emerald-400 mt-2">
+      Selected: {pubCoverFile.name}
+    </p>
+  )}
+</div>
+
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                            Theological Synopsis & Overview
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="A systematic exposition of Christ our firm foundation..."
+                            value={pubDescription}
+                            onChange={(e) => setPubDescription(e.target.value)}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-amber-400 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      {uploadingPub && (
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-[11px] font-mono text-amber-400">
+                            <span>Uploading bulletin resource...</span>
+                            <span>{pubUploadProgress}%</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-rich-black rounded-full overflow-hidden border border-midnight-blue">
+                            <div 
+                              className="h-full bg-gradient-to-r from-amber-500 to-amber-300 transition-all duration-300" 
+                              style={{ width: `${pubUploadProgress}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {pubSuccess && (
+                        <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-start gap-2.5 text-xs text-emerald-400 font-mono">
+                          <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+                          <span>{pubSuccess}</span>
+                        </div>
+                      )}
+
+                      {pubError && pubError === 'RLS_POLICY_ERROR' && (
+                        <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs space-y-2.5">
+                          <div className="flex items-start gap-2 text-amber-400 font-bold">
+                            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                            <span>Database Row-Level Security (RLS) Policy Notice</span>
+                          </div>
+                          <p className="text-[11px] text-slate-300 leading-relaxed">
+                            Supabase rejected the insert because Row-Level Security (RLS) is active on table <code className="text-amber-400 bg-rich-black px-1.5 py-0.5 rounded font-mono">publications</code> without an insert policy.
+                          </p>
+                          <div className="bg-rich-black/90 p-3 rounded-lg border border-midnight-blue space-y-2">
+                            <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                              <span>Run in Supabase SQL Editor:</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText('ALTER TABLE public.publications ENABLE ROW LEVEL SECURITY;\nCREATE POLICY "Allow all operations for publications" ON public.publications FOR ALL USING (true) WITH CHECK (true);');
+                                  setCopiedSql(true);
+                                  setTimeout(() => setCopiedSql(false), 2500);
+                                }}
+                                className="text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer"
+                              >
+                                {copiedSql ? '✓ Copied!' : 'Copy SQL'}
+                              </button>
+                            </div>
+                            <pre className="text-[10px] font-mono text-emerald-400 overflow-x-auto whitespace-pre-wrap">
+{`ALTER TABLE public.publications ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all operations for publications" ON public.publications FOR ALL USING (true) WITH CHECK (true);`}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+
+                      {pubError && pubError !== 'RLS_POLICY_ERROR' && (
+                        <div className="p-3.5 bg-red-500/10 border border-red-500/30 rounded-xl flex items-start gap-2 text-xs text-red-400 font-mono">
+                          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                          <span>{pubError}</span>
+                        </div>
+                      )}
+
+                      <button
+                        type="submit"
+                        disabled={uploadingPub}
+                        className="py-3 px-6 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-xs font-bold uppercase tracking-wider text-slate-950 transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-40 cursor-pointer font-mono"
+                      >
+                        {uploadingPub ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>Uploading bulletin...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="h-4 w-4" />
+                            <span>Publish Monthly Bulletin</span>
+                          </>
+                        )}
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Publications Catalog Board */}
+                  <div className="bg-charcoal/45 border border-midnight-blue rounded-2xl p-6">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 border-b border-midnight-blue pb-4">
+                      <div>
+                        <h4 className="font-display font-bold text-base text-white flex items-center gap-2">
+                          <span>Active Bulletins & Publications ({publicationsList.length})</span>
+                          <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">Live on Website</span>
+                        </h4>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          Manage and distribute your monthly bulletins and written teachings.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {publicationsList.length > 0 && (
+                          <button
+                            onClick={handleDeleteAllPublications}
+                            className="px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-mono font-bold hover:bg-red-500/20 transition-all flex items-center gap-1.5"
+                            title="Delete all publications from catalog"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span>Clear Catalog</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {publicationsList.length === 0 ? (
+                      <div className="py-12 text-center bg-rich-black/50 border border-dashed border-midnight-blue rounded-2xl p-6">
+                        <BookOpen className="h-8 w-8 text-slate-500 mx-auto mb-2" />
+                        <h5 className="text-sm font-bold text-white mb-1">Publications Catalog is Empty</h5>
+                        <p className="text-xs text-slate-400 max-w-sm mx-auto mb-4">
+                          No publications are currently active. Upload a new manuscript above to populate the catalog.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {publicationsList.map((pub) => (
+                          <div key={pub.id} className="bg-rich-black/60 border border-midnight-blue rounded-2xl p-4 flex gap-4 items-start">
+                            <div className="w-16 h-22 rounded-xl overflow-hidden shrink-0 border border-midnight-blue bg-slate-900 shadow-md">
+                              {pub.coverUrl ? (
+                                <img src={pub.coverUrl} className="w-full h-full object-cover" alt={pub.title} referrerPolicy="no-referrer" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center bg-slate-800 text-amber-400">
+                                  <BookOpen className="h-6 w-6" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[9px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold">
+                                  {pub.month || 'Bulletin'} {pub.publishYear}
+                                </span>
+                              </div>
+                              <h4 className="text-sm font-bold text-white truncate mt-1">{pub.title}</h4>
+                              <p className="text-[11px] text-slate-400 truncate">{pub.author}</p>
+                              <p className="text-[11px] text-slate-300 line-clamp-2 mt-1 leading-relaxed">{pub.description}</p>
+                              
+                              <div className="flex items-center justify-between mt-3 pt-2 border-t border-midnight-blue/50">
+                                <span className="text-xs font-mono font-bold text-emerald-400">
+                                  FREE DOWNLOAD
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  {pub.fileUrl && (
+                                    <a
+                                      href={pub.fileUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="p-1.5 rounded-lg bg-blue-500/10 text-sky-400 hover:bg-blue-500/20 text-[10px] font-mono flex items-center gap-1 transition-all"
+                                    >
+                                      <ExternalLink className="h-3.5 w-3.5" /> PDF
+                                    </a>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeletePublication(pub.id)}
+                                    className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-all cursor-pointer"
+                                    title="Delete publication"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -1986,80 +3457,438 @@ USING (bucket_id = 'Teachings');
                 </div>
               )}
 
-              {/* Event Registrations Tab */}
+              {/* Event Registrations & Data Boards Tab */}
               {activeSubTab === 'registrations' && (
-                <div className="bg-charcoal/45 border border-midnight-blue rounded-2xl p-6">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 border-b border-midnight-blue pb-4">
-                    <div>
-                      <h4 className="font-display font-bold text-base text-white">
-                        Edifice Conference Registrations
-                      </h4>
-                      <p className="text-[11px] text-light-gray mt-1">
-                        Attendee registrations synchronized in PostgreSQL via Supabase database.
-                      </p>
+                <div className="space-y-6">
+                  {/* KPI Data Boards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-gradient-to-br from-charcoal/80 to-[#18233D] border border-midnight-blue p-5 rounded-2xl shadow-lg relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-all" />
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Total Registered</span>
+                        <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                          <Users className="h-4 w-4" />
+                        </div>
+                      </div>
+                      <div className="text-2xl font-bold font-display text-white mt-2">
+                        {registrations.length}
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[10px] font-mono text-emerald-400 mt-2">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>Live Supabase Database Sync</span>
+                      </div>
                     </div>
-                    <div className="relative w-full sm:w-64">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-medium-gray" />
-                      <input
-                        type="text"
-                        placeholder="Search attendees..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full bg-rich-black/95 border border-midnight-blue rounded-xl py-2 pl-9 pr-4 text-xs text-white focus:outline-none focus:border-cci-gold-500"
-                      />
+
+                    <div className="bg-gradient-to-br from-charcoal/80 to-[#18233D] border border-midnight-blue p-5 rounded-2xl shadow-lg relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl group-hover:bg-amber-500/20 transition-all" />
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Physical In-Person</span>
+                        <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                          <MapPin className="h-4 w-4" />
+                        </div>
+                      </div>
+                      <div className="text-2xl font-bold font-display text-amber-300 mt-2">
+                        {registrations.filter(r => (r.address && !r.address.toLowerCase().includes('online')) || (r.eventLocation && !r.eventLocation.toLowerCase().includes('online'))).length}
+                      </div>
+                      <div className="text-[10px] font-mono text-slate-400 mt-2">
+                        {registrations.length > 0 
+                          ? `${Math.round((registrations.filter(r => (r.address && !r.address.toLowerCase().includes('online')) || (r.eventLocation && !r.eventLocation.toLowerCase().includes('online'))).length / registrations.length) * 100)}% of total attendees`
+                          : '0% attending in person'}
+                      </div>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-charcoal/80 to-[#18233D] border border-midnight-blue p-5 rounded-2xl shadow-lg relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/10 rounded-full blur-2xl group-hover:bg-purple-500/20 transition-all" />
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Online Streamers</span>
+                        <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                          <Radio className="h-4 w-4" />
+                        </div>
+                      </div>
+                      <div className="text-2xl font-bold font-display text-purple-300 mt-2">
+                        {registrations.filter(r => (r.address && r.address.toLowerCase().includes('online')) || (r.eventLocation && r.eventLocation.toLowerCase().includes('online'))).length}
+                      </div>
+                      <div className="text-[10px] font-mono text-slate-400 mt-2">
+                        Virtual Zoom & YouTube linkers
+                      </div>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-charcoal/80 to-[#18233D] border border-midnight-blue p-5 rounded-2xl shadow-lg relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-all" />
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Active Branches</span>
+                        <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          <CheckCircle2 className="h-4 w-4" />
+                        </div>
+                      </div>
+                      <div className="text-2xl font-bold font-display text-emerald-400 mt-2">
+                        {new Set(registrations.map(r => r.userBranch || 'Lekki HQ')).size}
+                      </div>
+                      <div className="text-[10px] font-mono text-slate-400 mt-2">
+                        Spread across regional centers
+                      </div>
                     </div>
                   </div>
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs text-light-gray">
-                      <thead className="text-[10px] font-mono text-slate-400 uppercase tracking-widest border-b border-midnight-blue">
-                        <tr>
-                          <th className="py-3 px-4">Attendee Name</th>
-                          <th className="py-3 px-4">Email Address</th>
-                          <th className="py-3 px-4">Phone / Location</th>
-                          <th className="py-3 px-4">Event</th>
-                          <th className="py-3 px-4 text-right">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-midnight-blue/50">
-                        {registrations
-                          .filter(r => r.firstName.toLowerCase().includes(searchTerm.toLowerCase()) || r.surname.toLowerCase().includes(searchTerm.toLowerCase()) || r.email.toLowerCase().includes(searchTerm.toLowerCase()))
-                          .map((r) => (
-                            <tr key={r.id} className="hover:bg-midnight-blue/15 transition-all">
-                              <td className="py-3.5 px-4 font-semibold text-white">
-                                {r.surname} {r.firstName}
-                              </td>
-                              <td className="py-3.5 px-4 font-sans text-slate-300 select-all">{r.email}</td>
-                              <td className="py-3.5 px-4 font-mono text-[11px] text-slate-400">
-                                <div>{r.phone || 'N/A'}</div>
-                                <div className="text-[9px] text-slate-500">{r.location || 'Online'}</div>
-                              </td>
-                              <td className="py-3.5 px-4">
-                                <span className="bg-cci-gold-500/10 text-cci-gold-400 border border-cci-gold-500/10 px-2 py-0.5 rounded text-[10px] font-mono uppercase">
-                                  {r.eventName}
-                                </span>
-                              </td>
-                              <td className="py-3.5 px-4 text-right">
-                                <button
-                                  onClick={() => handleDeleteReg(r.id)}
-                                  className="p-1.5 text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-all"
-                                  title="Delete registration"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        {registrations.length === 0 && (
-                          <tr>
-                            <td colSpan={5} className="py-10 text-center text-slate-500 font-mono">
-                              No registrations collected yet.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+                  {/* Tab header controls & Export Buttons */}
+                  <div className="bg-charcoal/45 border border-midnight-blue rounded-2xl p-6">
+                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6 border-b border-midnight-blue pb-4">
+                      <div>
+                        <h4 className="font-display font-bold text-base text-white flex items-center gap-2">
+                          <Users className="h-5 w-5 text-cci-gold-400" />
+                          <span>Edifice Conference & Event Data Boards</span>
+                          <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[10px] font-mono font-bold">
+                            {registrations.length} Records
+                          </span>
+                        </h4>
+                        <p className="text-[11px] text-light-gray mt-1">
+                          Export complete multi-tab workbooks to Excel (.xlsx) and manage attendee check-in statuses.
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+                        {/* View Switcher: Table vs Charts */}
+                        <div className="flex items-center bg-rich-black/80 border border-midnight-blue rounded-xl p-1 text-xs">
+                          <button
+                            onClick={() => setRegViewMode('table')}
+                            className={`px-3 py-1.5 rounded-lg font-mono text-[11px] flex items-center gap-1.5 transition-all ${
+                              regViewMode === 'table'
+                                ? 'bg-royal-blue text-white font-bold shadow'
+                                : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            <Users className="h-3.5 w-3.5" />
+                            <span>Attendee Table</span>
+                          </button>
+                          <button
+                            onClick={() => setRegViewMode('charts')}
+                            className={`px-3 py-1.5 rounded-lg font-mono text-[11px] flex items-center gap-1.5 transition-all ${
+                              regViewMode === 'charts'
+                                ? 'bg-royal-blue text-white font-bold shadow'
+                                : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            <BarChart3 className="h-3.5 w-3.5 text-cci-gold-400" />
+                            <span>Data Charts</span>
+                          </button>
+                        </div>
+
+                        {/* Export to Excel (.xlsx) Button */}
+                        <button
+                          onClick={handleExportMeetingRegistrationsExcel}
+                          disabled={exportingExcel}
+                          className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white border border-emerald-400/30 text-xs font-mono font-bold rounded-xl flex items-center gap-2 transition-all shadow-md disabled:opacity-50 cursor-pointer"
+                          title="Generate complete Excel workbook with Master List, Branch Breakdown, and KPI Data Boards"
+                        >
+                          {exportingExcel ? (
+                            <>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-white" />
+                              <span>GENERATING EXCEL...</span>
+                            </>
+                          ) : (
+                            <>
+                              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-200" />
+                              <span>EXPORT EXCEL (.XLSX)</span>
+                            </>
+                          )}
+                        </button>
+
+                        {/* Export CSV Button */}
+                        <button
+                          onClick={handleExportMeetingRegistrationsCSV}
+                          disabled={exportingCsv}
+                          className="px-3 py-2 bg-midnight-blue hover:bg-midnight-blue/80 text-slate-300 hover:text-white border border-midnight-blue text-xs font-mono font-bold rounded-xl flex items-center gap-1.5 transition-all shadow disabled:opacity-50 cursor-pointer"
+                          title="Download as CSV text file"
+                        >
+                          {exportingCsv ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-300" />
+                          ) : (
+                            <Download className="h-3.5 w-3.5 text-slate-400" />
+                          )}
+                          <span>CSV</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {regViewMode === 'charts' ? (
+                      <AdminAnalyticsDashboard
+                        registrations={registrations}
+                        rawMeetingRegistrations={rawMeetingRegistrations}
+                        loading={dataLoading}
+                        onRefresh={fetchDashboardData}
+                        onExportCsv={handleExportMeetingRegistrationsCSV}
+                        exportingCsv={exportingCsv}
+                      />
+                    ) : (
+                      <>
+                        {/* Filter Bar */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-5 p-3 rounded-xl bg-rich-black/60 border border-midnight-blue">
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-medium-gray" />
+                            <input
+                              type="text"
+                              placeholder="Search attendee name, email..."
+                              value={searchTerm}
+                              onChange={(e) => setSearchTerm(e.target.value)}
+                              className="w-full bg-rich-black border border-midnight-blue rounded-lg py-2 pl-9 pr-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+
+                          <div>
+                            <select
+                              value={regBranchFilter}
+                              onChange={(e) => setRegBranchFilter(e.target.value)}
+                              className="w-full bg-rich-black border border-midnight-blue rounded-lg py-2 px-3 text-xs text-white focus:outline-none focus:border-amber-400"
+                            >
+                              <option value="ALL">All Branches</option>
+                              {Array.from(new Set(registrations.map(r => r.userBranch || 'Lekki HQ'))).map(branch => (
+                                <option key={branch} value={branch}>{branch}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <select
+                              value={regModeFilter}
+                              onChange={(e) => setRegModeFilter(e.target.value)}
+                              className="w-full bg-rich-black border border-midnight-blue rounded-lg py-2 px-3 text-xs text-white focus:outline-none focus:border-amber-400"
+                            >
+                              <option value="ALL">All Modes (Physical & Virtual)</option>
+                              <option value="PHYSICAL">Physical In-Person Only</option>
+                              <option value="VIRTUAL">Virtual Online Streamers</option>
+                            </select>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-mono text-slate-400">
+                              Showing {
+                                registrations
+                                  .filter(r => {
+                                    const matchesSearch = (r.firstName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                      (r.surname || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                      (r.userEmail || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                      (r.userBranch || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                      (r.userPhone || '').toLowerCase().includes(searchTerm.toLowerCase());
+                                    const matchesBranch = regBranchFilter === 'ALL' || (r.userBranch || 'Lekki HQ') === regBranchFilter;
+                                    const isOnline = (r.address && r.address.toLowerCase().includes('online')) || (r.eventLocation && r.eventLocation.toLowerCase().includes('online'));
+                                    const matchesMode = regModeFilter === 'ALL' || (regModeFilter === 'VIRTUAL' ? isOnline : !isOnline);
+                                    return matchesSearch && matchesBranch && matchesMode;
+                                  }).length
+                              } of {registrations.length}
+                            </span>
+                            {(searchTerm || regBranchFilter !== 'ALL' || regModeFilter !== 'ALL') && (
+                              <button
+                                onClick={() => {
+                                  setSearchTerm('');
+                                  setRegBranchFilter('ALL');
+                                  setRegModeFilter('ALL');
+                                }}
+                                className="text-[10px] font-mono text-amber-400 hover:underline"
+                              >
+                                Reset
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Attendee Table */}
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs text-light-gray">
+                            <thead className="text-[10px] font-mono text-slate-400 uppercase tracking-widest border-b border-midnight-blue">
+                              <tr>
+                                <th className="py-3 px-4">Attendee</th>
+                                <th className="py-3 px-4">Contact Info</th>
+                                <th className="py-3 px-4">Branch & Mode</th>
+                                <th className="py-3 px-4">Check-In Status</th>
+                                <th className="py-3 px-4 text-right">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-midnight-blue/50">
+                              {registrations
+                                .filter(r => {
+                                  const matchesSearch = (r.firstName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                    (r.surname || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                    (r.userEmail || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                    (r.userBranch || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                    (r.userPhone || '').toLowerCase().includes(searchTerm.toLowerCase());
+                                  const matchesBranch = regBranchFilter === 'ALL' || (r.userBranch || 'Lekki HQ') === regBranchFilter;
+                                  const isOnline = (r.address && r.address.toLowerCase().includes('online')) || (r.eventLocation && r.eventLocation.toLowerCase().includes('online'));
+                                  const matchesMode = regModeFilter === 'ALL' || (regModeFilter === 'VIRTUAL' ? isOnline : !isOnline);
+                                  return matchesSearch && matchesBranch && matchesMode;
+                                })
+                                .map((r) => {
+                                  const currentStatus = regStatusMap[r.id] || 'Confirmed';
+                                  const isOnline = (r.address && r.address.toLowerCase().includes('online')) || (r.eventLocation && r.eventLocation.toLowerCase().includes('online'));
+                                  return (
+                                    <tr key={r.id} className="hover:bg-midnight-blue/20 transition-all group">
+                                      <td className="py-3.5 px-4">
+                                        <div className="flex items-center gap-3">
+                                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-royal-blue to-electric-blue text-white font-bold text-xs flex items-center justify-center shrink-0 border border-white/10 shadow">
+                                            {(r.firstName?.[0] || 'A').toUpperCase()}{(r.surname?.[0] || 'T').toUpperCase()}
+                                          </div>
+                                          <div>
+                                            <div className="font-semibold text-white group-hover:text-amber-400 transition-colors">
+                                              {r.surname} {r.firstName}
+                                            </div>
+                                            <div className="text-[10px] font-mono text-slate-400">
+                                              {r.age || 'Adult'} • {r.gender || 'Member'}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </td>
+                                      <td className="py-3.5 px-4 font-sans">
+                                        <div className="text-slate-300 select-all">{r.userEmail}</div>
+                                        <div className="text-[11px] font-mono text-slate-400">{r.userPhone || 'N/A'}</div>
+                                      </td>
+                                      <td className="py-3.5 px-4">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className="bg-amber-500/10 text-amber-300 border border-amber-500/20 px-2 py-0.5 rounded text-[10px] font-mono uppercase font-bold">
+                                            {r.userBranch || 'Lekki HQ'}
+                                          </span>
+                                          <span className={`px-2 py-0.5 rounded text-[9px] font-mono uppercase font-semibold ${
+                                            isOnline 
+                                              ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30' 
+                                              : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                                          }`}>
+                                            {isOnline ? 'Virtual' : 'Physical'}
+                                          </span>
+                                        </div>
+                                      </td>
+                                      <td className="py-3.5 px-4">
+                                        <select
+                                          value={currentStatus}
+                                          onChange={(e) => handleStatusChange(r.id, e.target.value)}
+                                          className={`text-[10px] font-mono font-bold rounded-lg px-2.5 py-1 border transition-all cursor-pointer ${
+                                            currentStatus === 'Checked-In'
+                                              ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                              : currentStatus === 'Follow-Up'
+                                              ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                              : 'bg-blue-500/15 text-blue-300 border-blue-500/30'
+                                          }`}
+                                        >
+                                          <option value="Confirmed" className="bg-slate-900 text-white">Confirmed</option>
+                                          <option value="Checked-In" className="bg-slate-900 text-white">Checked-In</option>
+                                          <option value="Follow-Up" className="bg-slate-900 text-white">Follow-Up</option>
+                                        </select>
+                                      </td>
+                                      <td className="py-3.5 px-4 text-right">
+                                        <div className="flex items-center justify-end gap-1.5">
+                                          <button
+                                            onClick={() => setSelectedRegAttendee(r)}
+                                            className="px-2.5 py-1 text-[11px] font-mono font-bold text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 rounded-lg transition-all flex items-center gap-1"
+                                            title="View full attendee dossier"
+                                          >
+                                            <Eye className="h-3.5 w-3.5" />
+                                            <span>Details</span>
+                                          </button>
+                                          <button
+                                            onClick={() => handleDeleteReg(r.id)}
+                                            className="p-1.5 text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-all"
+                                            title="Delete registration"
+                                          >
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              {registrations.length === 0 && (
+                                <tr>
+                                  <td colSpan={5} className="py-12 text-center text-slate-500 font-mono">
+                                    No registrations collected yet.
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
+                    )}
                   </div>
+
+                  {/* Attendee Dossier Modal */}
+                  {selectedRegAttendee && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+                      <div className="bg-[#131B2E] border border-midnight-blue rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative">
+                        <div className="flex items-center justify-between pb-4 border-b border-midnight-blue">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 text-slate-950 font-bold text-base flex items-center justify-center">
+                              {(selectedRegAttendee.firstName?.[0] || 'A').toUpperCase()}
+                            </div>
+                            <div>
+                              <h3 className="text-base font-bold text-white font-display">
+                                {selectedRegAttendee.surname} {selectedRegAttendee.firstName}
+                              </h3>
+                              <p className="text-[11px] font-mono text-amber-400">Registration Dossier</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => setSelectedRegAttendee(null)}
+                            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-midnight-blue transition-all"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+
+                        <div className="space-y-4 my-5 text-xs text-slate-300">
+                          <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-rich-black/70 border border-midnight-blue">
+                            <div>
+                              <span className="text-[10px] font-mono uppercase text-slate-500 block">Email</span>
+                              <span className="text-white font-medium break-all">{selectedRegAttendee.userEmail}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-mono uppercase text-slate-500 block">Phone</span>
+                              <span className="text-white font-mono">{selectedRegAttendee.userPhone || 'N/A'}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-mono uppercase text-slate-500 block">Nearest Branch</span>
+                              <span className="text-amber-300 font-bold">{selectedRegAttendee.userBranch || 'Lekki HQ'}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-mono uppercase text-slate-500 block">Age / Gender</span>
+                              <span className="text-white">{selectedRegAttendee.age || 'N/A'} • {selectedRegAttendee.gender || 'N/A'}</span>
+                            </div>
+                          </div>
+
+                          <div className="p-3 rounded-2xl bg-rich-black/70 border border-midnight-blue">
+                            <span className="text-[10px] font-mono uppercase text-slate-500 block mb-1">Residential Address</span>
+                            <p className="text-slate-200">{selectedRegAttendee.address || selectedRegAttendee.eventLocation || 'Online Virtual Attendee'}</p>
+                          </div>
+
+                          {(selectedRegAttendee.expecations_prayer_request || selectedRegAttendee.expectations) && (
+                            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20">
+                              <span className="text-[10px] font-mono uppercase text-amber-400 block mb-1 font-bold">Expectations & Prayer Requests</span>
+                              <p className="text-slate-200 italic leading-relaxed">
+                                "{selectedRegAttendee.expecations_prayer_request || selectedRegAttendee.expectations}"
+                              </p>
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between text-[10px] font-mono text-slate-500 pt-2 border-t border-midnight-blue/60">
+                            <span>How heard: {selectedRegAttendee.how_you_heard || selectedRegAttendee.howHeard || 'Member Invitation'}</span>
+                            <span>Date: {selectedRegAttendee.created_at || selectedRegAttendee.registrationDate || 'Recent'}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 pt-2">
+                          <a
+                            href={`mailto:${selectedRegAttendee.userEmail}?subject=God's Edifice Church Conference Confirmation`}
+                            className="px-4 py-2 rounded-xl bg-midnight-blue hover:bg-midnight-blue/80 text-white font-mono text-xs flex items-center gap-1.5 transition-all"
+                          >
+                            <Mail className="h-3.5 w-3.5 text-sky-400" />
+                            <span>Email Attendee</span>
+                          </a>
+                          <button
+                            onClick={() => setSelectedRegAttendee(null)}
+                            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold font-mono text-xs transition-all"
+                          >
+                            Close
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

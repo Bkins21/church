@@ -28,18 +28,20 @@ export interface Teaching {
   size: string;
 }
 
-export type PublicationType = 'book' | 'devotional' | 'manual';
+export type PublicationType = 'bulletin' | 'devotional' | 'manual' | 'theological_paper' | 'book';
 
 export interface Publication {
   id: string;
   title: string;
-  type: PublicationType;
+  type?: PublicationType | string;
   author: string;
   description: string;
   coverUrl: string;
-  price: number; // 0 for free download, >0 for physical/ebook
-  pages: number;
   publishYear: number;
+  month?: string; // e.g. "January", "February", etc.
+  fileUrl?: string; // PDF download link
+  downloadCount?: number;
+  createdAt?: string;
 }
 
 export interface ServiceTimes {
@@ -106,6 +108,7 @@ export interface Song {
   audioUrl: string;
   coverUrl: string;
   lyrics?: string;
+  downloads?: number;
   uploadedByUser?: boolean;
 }
 

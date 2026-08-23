@@ -26,9 +26,60 @@ export default function Teachings({
 }: TeachingsProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSeries, setSelectedSeries] = useState<string>('all');
+  const [cloudTeachings, setCloudTeachings] = useState<Teaching[]>([]);
   
-  // Use prop catalog if available, otherwise fallback to static teachingsCatalog
-  const catalog = teachingsList && teachingsList.length > 0 ? teachingsList : teachingsCatalog;
+  // Supabase cloudTeachings is the authoritative source of truth, fallback to prop/static catalog if empty
+  const catalog = cloudTeachings.length > 0 
+    ? cloudTeachings 
+    : (teachingsList && teachingsList.length > 0 ? teachingsList : teachingsCatalog);
+
+  // Fetch teachings directly from Supabase teachings table
+  const fetchCloudTeachings = async () => {
+    if (!supabase) return;
+    try {
+      const { data, error } = await supabase
+        .from('teachings')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Supabase fetch failure from teachings table:', error);
+        return;
+      }
+
+      if (data) {
+        const mapped: Teaching[] = data.map((t: any) => ({
+          id: t.id,
+          title: t.title || '',
+          series: t.category || t.series || 'Sermon',
+          preacher: t.speaker || t.preacher || 'Pastor Abiodun Adebayo',
+          date: t.date || '',
+          duration: t.duration || '45 mins',
+          description: t.description || 'No description provided.',
+          audioUrl: t.audio_url || t.audioUrl || '',
+          coverUrl: t.cover_url || t.coverUrl || 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=400&auto=format&fit=crop',
+          downloadCount: t.download_count || t.downloadCount || 0,
+          size: t.size || '18.5 MB'
+        }));
+        setCloudTeachings(mapped);
+      }
+    } catch (err) {
+      console.error('Supabase fetch failure from teachings table:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchCloudTeachings();
+
+    const handleUpdate = () => {
+      fetchCloudTeachings();
+    };
+
+    window.addEventListener('gec_teachings_updated', handleUpdate);
+    return () => {
+      window.removeEventListener('gec_teachings_updated', handleUpdate);
+    };
+  }, []);
 
   // Audio Player States
   const [currentTrack, setCurrentTrack] = useState<Teaching | null>(() => catalog[0] || null);
@@ -37,6 +88,13 @@ export default function Teachings({
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(0.8);
   const [isMuted, setIsMuted] = useState(false);
+
+  // Ensure current track is populated when catalog loads
+  useEffect(() => {
+    if (!currentTrack && catalog.length > 0) {
+      setCurrentTrack(catalog[0]);
+    }
+  }, [catalog, currentTrack]);
   
   // Downloading Simulation States
   const [downloadProgress, setDownloadProgress] = useState<{ [id: string]: number }>({});
@@ -56,33 +114,90 @@ export default function Teachings({
   const [description, setDescription] = useState('');
   const [durationForm, setDurationForm] = useState('45m');
   const [audioUrl, setAudioUrl] = useState('');
+  const [uploadedStoragePath, setUploadedStoragePath] = useState('');
   const [selectedPresetCover, setSelectedPresetCover] = useState('https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=400&auto=format&fit=crop');
   const [fileSize, setFileSize] = useState('18.5 MB');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState('');
 
-  const triggerFileProcess = (file: File) => {
+  const triggerFileProcess = async (file: File) => {
+    if (!file.type.startsWith('audio/')) {
+      alert('Please select an audio file.');
+      return;
+    }
+
+    if (file.size > 50 * 1024 * 1024) {
+      alert('Audio file must be 50MB or smaller.');
+      return;
+    }
+
     setIsUploadingFile(true);
     setUploadProgress(10);
     setUploadedFileName(file.name);
 
-    // Calculate MB size
     const sizeInMB = (file.size / (1024 * 1024)).toFixed(1);
     setFileSize(`${sizeInMB} MB`);
 
-    const interval = setInterval(() => {
-      setUploadProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setIsUploadingFile(false);
-          const localUrl = URL.createObjectURL(file);
-          setAudioUrl(localUrl);
-          return 100;
-        }
-        return prev + 15;
-      });
-    }, 150);
+    try {
+      if (!supabase) {
+        throw new Error('Supabase is not configured.');
+      }
+
+      // Create a unique filename
+      const fileExtension = file.name.split('.').pop() || 'mp3';
+      const safeFileName = file.name
+        .replace(/\.[^/.]+$/, '')
+        .replace(/[^a-zA-Z0-9-_]/g, '-')
+        .toLowerCase();
+
+      const fileName = `${Date.now()}-${safeFileName}.${fileExtension}`;
+      const filePath = `teachings/${fileName}`;
+
+      setUploadProgress(25);
+
+      // Upload to Supabase Storage in Teachings bucket
+      const { error: uploadError } = await supabase.storage
+        .from('Teachings')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: file.type || 'audio/mpeg'
+        });
+
+      if (uploadError) {
+        console.error('Storage upload failure to Teachings bucket:', uploadError);
+        throw uploadError;
+      }
+
+      setUploadProgress(75);
+
+      // Get public URL
+      const { data: publicUrlData } = supabase.storage
+        .from('Teachings')
+        .getPublicUrl(filePath);
+
+      if (!publicUrlData?.publicUrl) {
+        console.error('Public URL failure for Teachings storage file:', filePath);
+        throw new Error('Could not generate public audio URL.');
+      }
+
+      setAudioUrl(publicUrlData.publicUrl);
+      setUploadedStoragePath(filePath);
+      setUploadProgress(100);
+
+      console.log('Audio uploaded successfully to Teachings bucket:', publicUrlData.publicUrl);
+    } catch (error: any) {
+      console.error('Audio storage upload failed:', error);
+      alert(`Audio upload failed: ${error.message}`);
+
+      setAudioUrl('');
+      setUploadedStoragePath('');
+      setUploadedFileName('');
+      setUploadProgress(0);
+    } finally {
+      setIsUploadingFile(false);
+    }
   };
 
   const handleAudioFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -107,46 +222,240 @@ export default function Teachings({
     if (onToggleAdmin) onToggleAdmin(false);
   };
 
-  const handlePublishTeaching = (e: FormEvent) => {
+  const handlePublishTeaching = async (e: FormEvent) => {
     e.preventDefault();
+
     if (!title.trim() || !series.trim()) {
       alert('Please fill out the Title and Series fields.');
       return;
     }
 
-    const finalAudioUrl = audioUrl.trim() || 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
+    if (!audioUrl.trim()) {
+      alert('Please upload an audio file before publishing.');
+      return;
+    }
 
-    const newTeaching: Teaching = {
-      id: `sermon-custom-${Date.now()}`,
-      title: title.trim(),
-      series: series.trim(),
-      preacher: preacher.trim(),
-      date: new Date().toISOString().split('T')[0],
-      duration: durationForm.trim(),
-      description: description.trim() || 'No description provided.',
-      audioUrl: finalAudioUrl,
-      coverUrl: selectedPresetCover,
-      downloadCount: 0,
-      size: fileSize
-    };
+    if (!supabase) {
+      alert('Supabase is not configured.');
+      return;
+    }
 
-    if (onAddTeaching) {
-      onAddTeaching(newTeaching);
+    const finalAudioUrl = audioUrl.trim();
+
+    try {
+      // Insert teaching into Supabase teachings table
+      const { data: insertedTeaching, error: insertError } =
+        await supabase
+          .from('teachings')
+          .insert([{
+            title: title.trim(),
+            speaker: preacher.trim(),
+            category: series.trim(),
+            duration: durationForm.trim(),
+            date: new Date().toISOString().split('T')[0],
+            audio_url: finalAudioUrl,
+            cover_url: selectedPresetCover,
+            description:
+              description.trim() || 'No description provided.'
+          }])
+          .select()
+          .single();
+
+      if (insertError) {
+        console.error('Database insert failure into teachings table:', insertError);
+
+        // Remove newly uploaded Storage file so we do not create an orphaned file
+        if (uploadedStoragePath) {
+          const { error: storageDelErr } = await supabase.storage
+            .from('Teachings')
+            .remove([uploadedStoragePath]);
+          if (storageDelErr) {
+            console.error('Storage cleanup failure after insert error:', storageDelErr);
+          }
+        }
+
+        alert(`Database insert failed: ${insertError.message}`);
+        return;
+      }
+
+      const newTeaching: Teaching = {
+        id: insertedTeaching.id,
+        title: insertedTeaching.title,
+        series: insertedTeaching.category || '',
+        preacher: insertedTeaching.speaker || '',
+        date: insertedTeaching.date || '',
+        duration: insertedTeaching.duration || '',
+        description: insertedTeaching.description || '',
+        audioUrl: insertedTeaching.audio_url || '',
+        coverUrl: insertedTeaching.cover_url || '',
+        downloadCount: insertedTeaching.download_count || 0,
+        size: insertedTeaching.size || fileSize
+      };
+
+      if (onAddTeaching) {
+        onAddTeaching(newTeaching);
+      }
+
+      // Re-fetch cloud teachings from database immediately
+      await fetchCloudTeachings();
+      window.dispatchEvent(new Event('gec_teachings_updated'));
+
       // Reset form and close
       setTitle('');
       setSeries('');
       setDescription('');
       setDurationForm('45m');
       setAudioUrl('');
+      setUploadedStoragePath('');
       setUploadedFileName('');
       setIsUploadModalOpen(false);
+
+      alert(`Sermon "${newTeaching.title}" published successfully!`);
+    } catch (err: any) {
+      console.error('Teaching publish error:', err);
+      alert(`Publishing failed: ${err?.message || err}`);
+    }
+  };
+
+  // Delete a single teaching and its associated storage file
+  const handleDeleteSingleTeaching = async (teachingId: string, teachingAudioUrl?: string, teachingTitle?: string) => {
+    if (!window.confirm(`Are you sure you want to delete "${teachingTitle || 'this teaching'}"?`)) {
+      return;
+    }
+
+    if (!supabase) {
+      alert('Supabase is not configured.');
+      return;
+    }
+
+    try {
+      // 1. Delete database row
+      const { error: dbDeleteError } = await supabase
+        .from('teachings')
+        .delete()
+        .eq('id', teachingId);
+
+      if (dbDeleteError) {
+        console.error('Database delete failure from teachings table:', dbDeleteError);
+        alert(`Failed to delete teaching from database: ${dbDeleteError.message}`);
+        return;
+      }
+
+      // 2. Delete associated storage file if in Teachings bucket
+      if (teachingAudioUrl) {
+        let filePath = '';
+        const marker = '/storage/v1/object/public/Teachings/';
+        if (teachingAudioUrl.includes(marker)) {
+          filePath = teachingAudioUrl.split(marker)[1];
+        } else if (teachingAudioUrl.includes('/Teachings/')) {
+          const parts = teachingAudioUrl.split('/Teachings/');
+          filePath = parts[1];
+        }
+
+        if (filePath) {
+          filePath = filePath.split('?')[0];
+          const { error: storageDeleteError } = await supabase.storage
+            .from('Teachings')
+            .remove([filePath]);
+
+          if (storageDeleteError) {
+            console.error('Storage delete failure from Teachings bucket:', storageDeleteError);
+          }
+        }
+      }
+
+      if (onDeleteTeaching) {
+        onDeleteTeaching(teachingId);
+      }
+
+      // 3. Refresh teachings from Supabase
+      await fetchCloudTeachings();
+      window.dispatchEvent(new Event('gec_teachings_updated'));
+    } catch (err: any) {
+      console.error('Delete teaching failed:', err);
+      alert(`Error deleting teaching: ${err?.message || err}`);
+    }
+  };
+
+  // Delete all teachings and their associated storage files
+  const handleDeleteAllTeachings = async () => {
+    if (!window.confirm('WARNING: Are you sure you want to delete ALL sermon teachings and their audio files? This cannot be undone.')) {
+      return;
+    }
+
+    if (!supabase) {
+      alert('Supabase is not configured.');
+      return;
+    }
+
+    try {
+      // 1. Get all teaching records
+      const { data: allRecords, error: fetchErr } = await supabase
+        .from('teachings')
+        .select('id, audio_url');
+
+      if (fetchErr) {
+        console.error('Supabase fetch failure before deleting all teachings:', fetchErr);
+        alert(`Failed to fetch teachings list: ${fetchErr.message}`);
+        return;
+      }
+
+      // 2. Delete storage files
+      if (allRecords && allRecords.length > 0) {
+        const filePathsToDelete: string[] = [];
+        const marker = '/storage/v1/object/public/Teachings/';
+
+        for (const rec of allRecords) {
+          if (rec.audio_url) {
+            if (rec.audio_url.includes(marker)) {
+              const path = rec.audio_url.split(marker)[1]?.split('?')[0];
+              if (path) filePathsToDelete.push(path);
+            } else if (rec.audio_url.includes('/Teachings/')) {
+              const path = rec.audio_url.split('/Teachings/')[1]?.split('?')[0];
+              if (path) filePathsToDelete.push(path);
+            }
+          }
+        }
+
+        if (filePathsToDelete.length > 0) {
+          const { error: storageDeleteError } = await supabase.storage
+            .from('Teachings')
+            .remove(filePathsToDelete);
+
+          if (storageDeleteError) {
+            console.error('Storage delete failure for all teachings:', storageDeleteError);
+          }
+        }
+
+        // 3. Delete all database rows
+        const idsToDelete = allRecords.map(r => r.id);
+        const { error: dbDeleteError } = await supabase
+          .from('teachings')
+          .delete()
+          .in('id', idsToDelete);
+
+        if (dbDeleteError) {
+          console.error('Database delete failure for all teachings:', dbDeleteError);
+          alert(`Failed to delete teachings rows from database: ${dbDeleteError.message}`);
+          return;
+        }
+      }
+
+      // 4. Refresh teachings from Supabase
+      await fetchCloudTeachings();
+      window.dispatchEvent(new Event('gec_teachings_updated'));
+
+      alert('All sermon teachings have been successfully deleted.');
+    } catch (err: any) {
+      console.error('Delete all teachings failed:', err);
+      alert(`Failed to delete all teachings: ${err?.message || err}`);
     }
   };
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Filter series names
-  const seriesCategories = ['all', ...Array.from(new Set(catalog.map(t => t.series)))];
+  const seriesCategories: string[] = ['all', ...Array.from(new Set<string>(catalog.map(t => t.series || 'Sermon')))];
 
   // Filter teachings
   const filteredTeachings = catalog.filter(teaching => {
@@ -331,587 +640,608 @@ export default function Teachings({
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12" id="teachings-view">
-      
-      {/* Page Header */}
-      <div className="text-center max-w-3xl mx-auto mb-16">
-        <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight text-white mb-4">
-          Crossword Media Center
-        </h2>
-        <div className="w-16 h-1 bg-gradient-to-r from-cci-gold-600 to-cci-gold-400 mx-auto mb-5 rounded-full" />
-        <p className="text-sm sm:text-base text-slate-300">
-          Feed your spirit with systematic teachings of the Gospel. Search through sermons preached by Pastor Abiodun Adebayo and Resident Pastors, and listen or download to your devices for study and meditation.
-        </p>
-      </div>
-
-      {/* Admin Quick Action Bar */}
-      {isAdmin && (
-        <div className="max-w-3xl mx-auto -mt-10 mb-12 flex items-center justify-center gap-3" id="teachings-admin-bar">
-          <div className="flex items-center gap-2 bg-emerald-950/40 border border-emerald-500/30 rounded-full py-1.5 px-4 animate-fade-in shadow-lg">
-            <ShieldCheck className="h-4 w-4 text-emerald-400 animate-pulse" />
-            <span className="text-xs font-mono font-bold text-emerald-400 uppercase tracking-wider">Admin Status: Authorized</span>
-            <span className="text-slate-400">|</span>
-            <button
-              onClick={() => setIsUploadModalOpen(true)}
-              className="text-xs font-bold text-cci-gold-400 hover:text-cci-gold-300 flex items-center gap-1 transition-colors cursor-pointer"
-              id="btn-teachings-open-upload"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Upload Sermon Audio
-            </button>
-            <span className="text-slate-400">|</span>
-            <button
-              onClick={handleDeauthAdmin}
-              className="text-[10px] font-mono text-red-400 hover:text-red-300 underline transition-colors cursor-pointer"
-              id="btn-teachings-logout"
-            >
-              Logout Admin
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Series Filter Tabs & Search Bar */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-10">
-        
-        {/* Search */}
-        <div className="lg:col-span-4">
-          <div className="relative w-full">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by topic, keyword, or series..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-cci-blue-900/40 border border-cci-blue-800/80 focus:border-cci-gold-500 rounded-xl py-3 pl-12 pr-4 text-sm text-slate-100 placeholder-slate-400 focus:outline-none transition-all"
-              id="teaching-search"
-            />
-          </div>
+    <div className="w-full bg-[#12100E] text-[#F9F6F0] transition-colors duration-300" id="teachings-view">
+      {/* Themed Page Header: Imperial Espresso & Radiant Topaz Gold */}
+      <div className="w-full bg-gradient-to-b from-[#161412] via-[#1A1714] to-[#12100E] text-[#F9F6F0] py-16 sm:py-20 border-b border-[#332C24] relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-[#E8A238]/10 rounded-full blur-3xl" />
         </div>
 
-        {/* Series Filter */}
-        <div className="lg:col-span-8 overflow-x-auto flex gap-2 pb-2 scrollbar-none items-center">
-          <span className="text-xs uppercase font-mono text-slate-500 shrink-0 mr-2">Series:</span>
-          {seriesCategories.map((series) => (
-            <button
-              key={series}
-              onClick={() => setSelectedSeries(series)}
-              className={`px-3.5 py-2 rounded-lg font-display text-xs font-semibold whitespace-nowrap transition-all
-                ${selectedSeries === series
-                  ? 'bg-cci-gold-500 text-[#040814]'
-                  : 'bg-[#0a1128] border border-cci-blue-800/60 hover:bg-cci-blue-800/40 text-slate-300'
-                }`}
-              id={`filter-series-${series.replace(/\s+/g, '-').toLowerCase()}`}
-            >
-              {series === 'all' ? 'All Messages' : series}
-            </button>
-          ))}
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10 space-y-4">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#E8A238]/15 border border-[#E8A238]/30 text-[#E8A238] text-xs font-mono font-semibold tracking-wider uppercase shadow-sm">
+            <Flame className="h-3.5 w-3.5" />
+            <span>Crossword Media Center</span>
+          </div>
+          <h1 className="font-cinzel text-3xl sm:text-5xl font-bold tracking-tight text-[#F9F6F0]">
+            Sermon Teachings & Sound Doctrine
+          </h1>
+          <div className="w-20 h-1 bg-[#E8A238] mx-auto rounded-full shadow-sm shadow-[#E8A238]/50" />
+          <p className="text-sm sm:text-base text-[#A89E92] leading-relaxed max-w-2xl mx-auto">
+            Feed your spirit with systematic teachings of the Gospel. Search through sermons preached by Pastor Abiodun Adebayo and Resident Pastors, and listen or download to your devices for study and meditation.
+          </p>
         </div>
       </div>
 
-      {/* Main Grid: Catalog / Player Column */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-20">
-        
-        {/* Catalog List (Left) */}
-        <div className="lg:col-span-7 space-y-4" id="teachings-catalog-list">
-          <h3 className="font-display font-bold text-base text-white flex items-center gap-2 mb-4">
-            <Flame className="h-4 w-4 text-cci-gold-400" />
-            Sermon Teachings Catalog
-          </h3>
-
-          {filteredTeachings.length > 0 ? (
-            filteredTeachings.map((teaching) => {
-              const isDownloaded = userDownloads.some(dl => dl.id === teaching.id);
-              const progress = downloadProgress[teaching.id] || 0;
-              const downloading = isDownloading[teaching.id];
-              const isCurrent = currentTrack?.id === teaching.id;
-
-              return (
-                <div
-                  key={teaching.id}
-                  className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between
-                    ${isCurrent 
-                      ? 'bg-gradient-to-r from-cci-blue-900/50 to-cci-blue-800/30 border-cci-gold-500/30' 
-                      : 'bg-gradient-to-r from-[#0a1128]/45 to-[#040814]/80 border-cci-blue-800/80 hover:border-cci-blue-700'
-                    }`}
-                  id={`teaching-item-${teaching.id}`}
-                >
-                  <div className="flex gap-4 items-center w-full sm:w-auto">
-                    {/* Cover Thumbnail */}
-                    <div className="relative w-16 h-16 rounded-xl overflow-hidden shrink-0 bg-slate-950 flex items-center justify-center border border-cci-blue-800">
-                      <img
-                        src={teaching.coverUrl}
-                        alt=""
-                        referrerPolicy="no-referrer"
-                        className={`w-full h-full object-cover transition-transform ${isCurrent && isPlaying ? 'scale-105 duration-[3000ms] ease-linear rotate-12' : ''}`}
-                      />
-                      
-                      {/* Play overlay */}
-                      <button
-                        onClick={() => handlePlayPause(teaching)}
-                        className="absolute inset-0 bg-black/60 flex items-center justify-center hover:bg-black/40 transition-colors"
-                        id={`btn-play-sermon-${teaching.id}`}
-                      >
-                        {isCurrent && isPlaying ? (
-                          <Pause className="h-6 w-6 text-cci-gold-400" />
-                        ) : (
-                          <Play className="h-6 w-6 text-white fill-white" />
-                        )}
-                      </button>
-                    </div>
-
-                    {/* Metadata */}
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[10px] text-cci-gold-400 font-mono font-semibold uppercase">{teaching.series}</p>
-                      <h4 className="font-display font-bold text-sm sm:text-base text-slate-100 hover:text-cci-gold-300 transition-colors truncate mt-0.5">
-                        {teaching.title}
-                      </h4>
-                      
-                      <div className="flex flex-wrap items-center gap-y-1 gap-x-3 text-[11px] text-slate-400 font-sans mt-1">
-                        <span className="flex items-center gap-1">
-                          <User className="h-3 w-3 shrink-0 text-slate-500" />
-                          {teaching.preacher}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3 shrink-0 text-slate-500" />
-                          {teaching.duration}
-                        </span>
-                        <span className="text-slate-500 font-mono text-[9px]">{teaching.size}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right Actions */}
-                  <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center w-full sm:w-auto shrink-0 border-t sm:border-t-0 border-cci-blue-800/40 pt-3 sm:pt-0 gap-2">
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                      <button
-                        onClick={() => triggerDownload(teaching)}
-                        disabled={downloading}
-                        className={`px-4 py-2.5 rounded-xl text-xs font-semibold tracking-wider transition-all flex items-center gap-1.5 w-full sm:w-auto justify-center
-                          ${isDownloaded 
-                            ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-500/30' 
-                            : downloading 
-                              ? 'bg-cci-blue-850 text-slate-400 border border-cci-blue-800 pointer-events-none' 
-                              : 'bg-[#040814] border border-cci-blue-800 hover:border-cci-gold-500/30 text-slate-300 hover:text-white'
-                          }`}
-                        id={`btn-download-sermon-${teaching.id}`}
-                      >
-                        {isDownloaded ? (
-                          <>
-                            <Check className="h-3.5 w-3.5 text-emerald-400" />
-                            <span>Saved</span>
-                          </>
-                        ) : downloading ? (
-                          <span className="flex items-center gap-1 font-mono text-[10px]">
-                            Downloading {progress}%
-                          </span>
-                        ) : (
-                          <>
-                            <Download className="h-3.5 w-3.5 text-cci-gold-400" />
-                            <span>Get Audio</span>
-                          </>
-                        )}
-                      </button>
-
-                      {isAdmin && (
-                        <button
-                          onClick={() => {
-                            if (window.confirm(`Are you sure you want to delete "${teaching.title}"?`)) {
-                              if (onDeleteTeaching) onDeleteTeaching(teaching.id);
-                            }
-                          }}
-                          className="p-2.5 bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-300 border border-red-500/30 hover:border-red-500/50 rounded-xl transition-all cursor-pointer flex items-center justify-center"
-                          title="Delete Sermon"
-                          id={`btn-delete-sermon-${teaching.id}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <div className="text-center py-12 bg-[#0a1128]/20 border border-cci-blue-800/40 rounded-2xl">
-              <p className="text-sm text-slate-400">No sermons found matching your parameters.</p>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        {/* Admin Quick Action Bar */}
+        {isAdmin && (
+          <div className="max-w-3xl mx-auto mb-10 flex items-center justify-center gap-3" id="teachings-admin-bar">
+            <div className="flex items-center gap-2 bg-[#1A1714] border border-[#E8A238]/40 rounded-full py-1.5 px-4 animate-fade-in shadow-lg">
+              <ShieldCheck className="h-4 w-4 text-[#E8A238] animate-pulse" />
+              <span className="text-xs font-mono font-bold text-[#E8A238] uppercase tracking-wider">Admin Status: Authorized</span>
+              <span className="text-[#555555]">|</span>
+              <button
+                onClick={() => setIsUploadModalOpen(true)}
+                className="text-xs font-bold text-[#E8A238] hover:text-[#fca311] flex items-center gap-1 transition-colors cursor-pointer"
+                id="btn-teachings-open-upload"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Upload Sermon Audio
+              </button>
+              {cloudTeachings.length > 0 && (
+                <>
+                  <span className="text-[#555555]">|</span>
+                  <button
+                    onClick={handleDeleteAllTeachings}
+                    className="text-[10px] font-mono text-red-400 hover:text-red-300 flex items-center gap-1 transition-colors cursor-pointer"
+                    id="btn-teachings-delete-all"
+                    title="Delete all teachings and storage files"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Delete All
+                  </button>
+                </>
+              )}
+              <span className="text-[#555555]">|</span>
+              <button
+                onClick={handleDeauthAdmin}
+                className="text-[10px] font-mono text-red-400 hover:text-red-300 underline transition-colors cursor-pointer"
+                id="btn-teachings-logout"
+              >
+                Logout Admin
+              </button>
             </div>
-          )}
+          </div>
+        )}
+
+        {/* Series Filter Tabs & Search Bar */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-10">
+          
+          {/* Search */}
+          <div className="lg:col-span-4">
+            <div className="relative w-full">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#fca311]" />
+              <input
+                type="text"
+                placeholder="Search by topic, keyword, or series..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-[#111111] border border-[#262626] focus:border-[#fca311] focus:ring-1 focus:ring-[#fca311] rounded-xl py-3 pl-12 pr-4 text-sm text-[#E5E5E5] placeholder-[#737373] focus:outline-none transition-all shadow-inner"
+                id="teaching-search"
+              />
+            </div>
+          </div>
+
+          {/* Series Filter */}
+          <div className="lg:col-span-8 overflow-x-auto flex gap-2 pb-2 scrollbar-none items-center">
+            <span className="text-xs uppercase font-mono text-[#737373] shrink-0 mr-2">Series:</span>
+            {seriesCategories.map((series) => (
+              <button
+                key={series}
+                onClick={() => setSelectedSeries(series)}
+                className={`px-3.5 py-2 rounded-lg font-display text-xs font-semibold whitespace-nowrap transition-all cursor-pointer
+                  ${selectedSeries === series
+                    ? 'bg-[#fca311] text-[#000000] font-bold shadow-md shadow-[#fca311]/25'
+                    : 'bg-[#111111] border border-[#222222] hover:border-[#fca311]/60 text-[#E5E5E5]/80 hover:text-[#fca311]'
+                  }`}
+                id={`filter-series-${series.replace(/\s+/g, '-').toLowerCase()}`}
+              >
+                {series === 'all' ? 'All Messages' : series}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Media Preview Player Column (Right) */}
-        <div className="lg:col-span-5" id="sermon-player-panel">
-          <h3 className="font-display font-bold text-base text-white flex items-center gap-2 mb-4">
-            <Disc className="h-4 w-4 text-cci-gold-400 animate-spin" style={{ animationDuration: isPlaying ? '3s' : '0s' }} />
-            Active Teaching Stream
-          </h3>
+        {/* Main Grid: Catalog / Player Column */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-20">
+          
+          {/* Catalog List (Left) */}
+          <div className="lg:col-span-7 space-y-4" id="teachings-catalog-list">
+            <h3 className="font-display font-bold text-base text-[#E5E5E5] flex items-center gap-2 mb-4">
+              <Flame className="h-4 w-4 text-[#fca311]" />
+              <span>Sermon Teachings Catalog</span>
+            </h3>
 
-          <div className="bg-[#0a1128]/60 border border-cci-blue-700/50 rounded-3xl p-6 sm:p-8 backdrop-blur-md relative overflow-hidden shadow-xl flex flex-col h-full justify-between min-h-[420px]">
-            {/* Design background */}
-            <div className="absolute -top-12 -right-12 w-48 h-48 bg-cci-gold-500/5 rounded-full blur-2xl" />
+            {filteredTeachings.length > 0 ? (
+              filteredTeachings.map((teaching) => {
+                const isDownloaded = userDownloads.some(dl => dl.id === teaching.id);
+                const progress = downloadProgress[teaching.id] || 0;
+                const downloading = isDownloading[teaching.id];
+                const isCurrent = currentTrack?.id === teaching.id;
 
-            {currentTrack ? (
-              <div className="flex-1 flex flex-col justify-between">
-                {/* Vinyl/Spin Album Visual */}
-                <div className="flex flex-col items-center text-center mt-4">
-                  <div className="relative w-40 h-40 sm:w-44 sm:h-44 rounded-full overflow-hidden p-[3px] bg-gradient-to-tr from-cci-blue-800 to-cci-gold-500 shadow-2xl">
-                    <div className="w-full h-full rounded-full bg-[#040814] overflow-hidden flex items-center justify-center p-1.5 relative">
-                      <img
-                        src={currentTrack.coverUrl}
-                        alt=""
-                        referrerPolicy="no-referrer"
-                        className={`w-full h-full rounded-full object-cover select-none ${isPlaying ? 'animate-spin duration-[15000ms] ease-linear' : ''}`}
-                        style={{ animationDuration: '25s' }}
-                      />
-                      {/* Center spindle hole */}
-                      <div className="absolute inset-0 m-auto w-8 h-8 rounded-full bg-slate-950 border-4 border-cci-blue-900 shadow-inner flex items-center justify-center">
-                        <div className="w-2.5 h-2.5 rounded-full bg-cci-gold-500" />
+                return (
+                  <div
+                    key={teaching.id}
+                    className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between
+                      ${isCurrent 
+                        ? 'bg-gradient-to-r from-[#1c1405] via-[#121212] to-[#0a0a0a] border-[#fca311]/60 shadow-lg shadow-[#fca311]/10' 
+                        : 'bg-[#0d0d0d] border-[#1f1f1f] hover:border-[#fca311]/40'
+                      }`}
+                    id={`teaching-item-${teaching.id}`}
+                  >
+                    <div className="flex gap-4 items-center w-full sm:w-auto">
+                      {/* Cover Thumbnail */}
+                      <div className="relative w-16 h-16 rounded-xl overflow-hidden shrink-0 bg-[#000000] flex items-center justify-center border border-[#262626]">
+                        <img
+                          src={teaching.coverUrl}
+                          alt=""
+                          referrerPolicy="no-referrer"
+                          className={`w-full h-full object-cover transition-transform ${isCurrent && isPlaying ? 'scale-105 duration-[3000ms] ease-linear rotate-12' : ''}`}
+                        />
+                        
+                        {/* Play overlay */}
+                        <button
+                          onClick={() => handlePlayPause(teaching)}
+                          className="absolute inset-0 bg-black/60 flex items-center justify-center hover:bg-black/40 transition-colors cursor-pointer"
+                          id={`btn-play-sermon-${teaching.id}`}
+                        >
+                          {isCurrent && isPlaying ? (
+                            <Pause className="h-6 w-6 text-[#fca311] fill-[#fca311]" />
+                          ) : (
+                            <Play className="h-6 w-6 text-[#fca311] fill-[#fca311]" />
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Metadata */}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] text-[#fca311] font-mono font-semibold uppercase">{teaching.series}</p>
+                        <h4 className="font-display font-bold text-sm sm:text-base text-[#E5E5E5] hover:text-[#fca311] transition-colors truncate mt-0.5">
+                          {teaching.title}
+                        </h4>
+                        
+                        <div className="flex flex-wrap items-center gap-y-1 gap-x-3 text-[11px] text-[#A3A3A3] font-sans mt-1">
+                          <span className="flex items-center gap-1">
+                            <User className="h-3 w-3 shrink-0 text-[#737373]" />
+                            {teaching.preacher}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3 shrink-0 text-[#737373]" />
+                            {teaching.duration}
+                          </span>
+                          <span className="text-[#737373] font-mono text-[9px]">{teaching.size}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Actions */}
+                    <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center w-full sm:w-auto shrink-0 border-t sm:border-t-0 border-[#1f1f1f] pt-3 sm:pt-0 gap-2">
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <button
+                          onClick={() => triggerDownload(teaching)}
+                          disabled={downloading}
+                          className={`px-4 py-2.5 rounded-xl text-xs font-semibold tracking-wider transition-all flex items-center gap-1.5 w-full sm:w-auto justify-center cursor-pointer
+                            ${isDownloaded 
+                              ? 'bg-[#fca311]/15 text-[#fca311] border border-[#fca311]/40 font-bold' 
+                              : downloading 
+                                ? 'bg-[#141414] text-[#737373] border border-[#262626] pointer-events-none' 
+                                : 'bg-[#141414] border border-[#fca311]/30 hover:border-[#fca311] hover:bg-[#fca311] text-[#fca311] hover:text-[#000000]'
+                            }`}
+                          id={`btn-download-sermon-${teaching.id}`}
+                        >
+                          {isDownloaded ? (
+                            <>
+                              <Check className="h-3.5 w-3.5 text-[#fca311]" />
+                              <span>Saved</span>
+                            </>
+                          ) : downloading ? (
+                            <span className="flex items-center gap-1 font-mono text-[10px]">
+                              Downloading {progress}%
+                            </span>
+                          ) : (
+                            <>
+                              <Download className="h-3.5 w-3.5 text-current" />
+                              <span>Get Audio</span>
+                            </>
+                          )}
+                        </button>
+
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleDeleteSingleTeaching(teaching.id, teaching.audioUrl, teaching.title)}
+                            className="p-2.5 bg-red-950/40 hover:bg-red-900/60 text-red-400 hover:text-red-300 border border-red-500/30 hover:border-red-500/50 rounded-xl transition-all cursor-pointer flex items-center justify-center"
+                            title="Delete Sermon"
+                            id={`btn-delete-sermon-${teaching.id}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
-
-                  <h4 className="font-display font-bold text-base sm:text-lg text-white mt-6 line-clamp-1">
-                    {currentTrack.title}
-                  </h4>
-                  <p className="text-xs text-cci-gold-400 font-mono mt-1 font-semibold uppercase">{currentTrack.series}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">{currentTrack.preacher}</p>
-                </div>
-
-                {/* Progress bar and Scrubber */}
-                <div className="mt-8">
-                  <div className="flex justify-between text-[10px] font-mono text-slate-500 mb-1.5">
-                    <span>{formatTime(currentTime)}</span>
-                    <span>{duration ? formatTime(duration) : currentTrack.duration}</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max={duration || 100}
-                    value={currentTime}
-                    onChange={handleSeek}
-                    className="w-full h-1.5 bg-cci-blue-800 focus:outline-none rounded-lg appearance-none cursor-pointer accent-cci-gold-500"
-                    id="player-scrubber"
-                  />
-                </div>
-
-                {/* Main Player controls */}
-                <div className="flex items-center justify-center gap-6 mt-6">
-                  {/* Play Button */}
-                  <button
-                    onClick={() => handlePlayPause(currentTrack)}
-                    className="w-16 h-16 rounded-full bg-gradient-to-r from-cci-gold-600 to-cci-gold-400 hover:from-cci-gold-500 hover:to-cci-gold-300 text-[#040814] flex items-center justify-center shadow-lg shadow-cci-gold-600/10 hover:shadow-cci-gold-600/25 transition-all transform hover:scale-105"
-                    id="player-play-btn"
-                  >
-                    {isPlaying ? (
-                      <Pause className="h-7 w-7 text-[#040814] fill-current" />
-                    ) : (
-                      <Play className="h-7 w-7 text-[#040814] fill-current translate-x-0.5" />
-                    )}
-                  </button>
-                </div>
-
-                {/* Volume bar */}
-                <div className="flex items-center gap-3 justify-center mt-6 pt-6 border-t border-cci-blue-800/40">
-                  <button
-                    onClick={() => setIsMuted(!isMuted)}
-                    className="text-slate-400 hover:text-white transition-colors"
-                    id="player-mute-btn"
-                  >
-                    {isMuted || volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                  </button>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value={volume}
-                    onChange={(e) => {
-                      setVolume(parseFloat(e.target.value));
-                      setIsMuted(false);
-                    }}
-                    className="w-24 h-1 bg-cci-blue-800 rounded-lg appearance-none cursor-pointer accent-cci-gold-500"
-                    id="player-volume-slider"
-                  />
-                </div>
-              </div>
+                );
+              })
             ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-center">
-                <Music className="h-10 w-10 text-slate-600 mb-2" />
-                <p className="text-sm text-slate-400">Select a teaching from the list to load the stream.</p>
+              <div className="text-center py-12 bg-[#0d0d0d] border border-[#222222] rounded-2xl">
+                <p className="text-sm text-[#737373]">No sermons found matching your search parameters.</p>
               </div>
             )}
           </div>
-        </div>
-      </div>
 
-      {/* Admin Passcode Modal */}
-      <AnimatePresence>
-        {isAdminLoginModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md" id="teachings-admin-modal-overlay">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="relative w-full max-w-sm bg-[#0a1128] border border-cci-blue-700/60 rounded-3xl overflow-hidden shadow-2xl p-6 sm:p-8"
-              id="admin-login-modal-container"
-            >
-              {/* Close Button */}
-              <button
-                onClick={() => {
-                  setIsAdminLoginModalOpen(false);
-                  setPasscode('');
-                  setPasscodeError('');
-                }}
-                className="absolute top-5 right-5 text-slate-400 hover:text-white p-1.5 bg-black/35 rounded-full transition-colors cursor-pointer"
-                id="btn-close-admin-login"
-              >
-                <X className="h-4 w-4" />
-              </button>
+          {/* Media Preview Player Column (Right) */}
+          <div className="lg:col-span-5" id="sermon-player-panel">
+            <h3 className="font-display font-bold text-base text-[#E5E5E5] flex items-center gap-2 mb-4">
+              <Disc className="h-4 w-4 text-[#fca311] animate-spin" style={{ animationDuration: isPlaying ? '3s' : '0s' }} />
+              <span>Active Teaching Stream</span>
+            </h3>
 
-              <div className="text-center mb-6">
-                <div className="w-12 h-12 bg-cci-gold-500/10 rounded-full flex items-center justify-center mx-auto mb-3 border border-cci-gold-500/20 text-cci-gold-400">
-                  <Lock className="h-5 w-5" />
-                </div>
-                <h3 className="font-display font-bold text-lg text-white">Administrator Access</h3>
-                <p className="text-xs text-slate-400 mt-1">Unlock audio uploader permission controls</p>
-              </div>
+            <div className="bg-[#0d0d0d] border border-[#222222] rounded-3xl p-6 sm:p-8 relative overflow-hidden shadow-2xl flex flex-col h-full justify-between min-h-[420px]">
+              {/* Background amber glow */}
+              <div className="absolute -top-12 -right-12 w-48 h-48 bg-[#fca311]/10 rounded-full blur-3xl pointer-events-none" />
 
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-[10px] uppercase font-mono tracking-wider text-slate-400 mb-1.5">Administrative Passcode</label>
-                  <input
-                    type="password"
-                    placeholder="Enter passcode (Hint: 'admin')"
-                    value={passcode}
-                    onChange={(e) => {
-                      setPasscode(e.target.value);
-                      setPasscodeError('');
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleAuthAdmin();
-                    }}
-                    className="w-full bg-[#040814] border border-cci-blue-800 focus:border-cci-gold-500 rounded-xl py-2.5 px-3 text-xs text-slate-100 placeholder-slate-500 focus:outline-none"
-                    id="input-teachings-passcode"
-                  />
-                  {passcodeError && (
-                    <p className="text-[10px] text-amber-500 font-mono mt-1.5">{passcodeError}</p>
-                  )}
-                </div>
-
-                <button
-                  onClick={handleAuthAdmin}
-                  className="w-full py-3 bg-gradient-to-r from-cci-gold-600 to-cci-gold-500 hover:from-cci-gold-500 hover:to-cci-gold-400 text-[#040814] text-xs font-bold uppercase tracking-wider rounded-xl transition-all shadow-sm"
-                  id="btn-teachings-submit-auth"
-                >
-                  Verify Privileges
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Upload Sermon Audio Modal */}
-      <AnimatePresence>
-        {isUploadModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto" id="teachings-upload-modal-overlay">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="relative w-full max-w-lg bg-[#0a1128] border border-cci-blue-700/60 rounded-3xl overflow-hidden shadow-2xl p-6 sm:p-8 my-8"
-              id="teachings-upload-container"
-            >
-              {/* Close button */}
-              <button
-                type="button"
-                onClick={() => {
-                  setIsUploadModalOpen(false);
-                  setUploadedFileName('');
-                  setAudioUrl('');
-                }}
-                className="absolute top-5 right-5 text-slate-400 hover:text-white p-1.5 bg-black/35 rounded-full transition-colors z-10 cursor-pointer"
-                id="btn-close-teachings-upload"
-              >
-                <X className="h-4.5 w-4.5" />
-              </button>
-
-              <div className="flex items-center gap-2.5 pb-4 border-b border-cci-blue-800/60 mb-6">
-                <FileAudio className="h-5 w-5 text-cci-gold-400" />
-                <h3 className="font-display font-bold text-lg text-white">Publish Sermon Audio</h3>
-              </div>
-
-              <form onSubmit={handlePublishTeaching} className="space-y-4 text-left">
-                {/* Title */}
-                <div>
-                  <label className="block text-[10px] uppercase font-mono tracking-wider text-slate-400 mb-1.5">Sermon Title *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g., Pneumatika: The Spiritual Gifts Explained"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    className="w-full bg-[#040814] border border-cci-blue-800 focus:border-cci-gold-500 rounded-xl py-2.5 px-3 text-xs text-slate-100 placeholder-slate-500 focus:outline-none"
-                    id="input-teachings-title"
-                  />
-                </div>
-
-                {/* Series & Duration */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] uppercase font-mono tracking-wider text-slate-400 mb-1.5">Series Name *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g., Pneumatika Series"
-                      value={series}
-                      onChange={(e) => setSeries(e.target.value)}
-                      className="w-full bg-[#040814] border border-cci-blue-800 focus:border-cci-gold-500 rounded-xl py-2.5 px-3 text-xs text-slate-100 placeholder-slate-500 focus:outline-none"
-                      id="input-teachings-series"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase font-mono tracking-wider text-slate-400 mb-1.5">Duration *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g., 55m or 1h 12m"
-                      value={durationForm}
-                      onChange={(e) => setDurationForm(e.target.value)}
-                      className="w-full bg-[#040814] border border-cci-blue-800 focus:border-cci-gold-500 rounded-xl py-2.5 px-3 text-xs text-slate-100 placeholder-slate-500 focus:outline-none"
-                      id="input-teachings-duration"
-                    />
-                  </div>
-                </div>
-
-                {/* Preacher */}
-                <div>
-                  <label className="block text-[10px] uppercase font-mono tracking-wider text-slate-400 mb-1.5">Preacher *</label>
-                  <input
-                    type="text"
-                    required
-                    value={preacher}
-                    onChange={(e) => setPreacher(e.target.value)}
-                    className="w-full bg-[#040814] border border-cci-blue-800 focus:border-cci-gold-500 rounded-xl py-2.5 px-3 text-xs text-slate-100 focus:outline-none"
-                    id="input-teachings-preacher"
-                  />
-                </div>
-
-                {/* Description */}
-                <div>
-                  <label className="block text-[10px] uppercase font-mono tracking-wider text-slate-400 mb-1.5">Sermon Description</label>
-                  <textarea
-                    placeholder="Provide a brief summary of the apostolic teaching content..."
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    rows={2}
-                    className="w-full bg-[#040814] border border-cci-blue-800 focus:border-cci-gold-500 rounded-xl py-2.5 px-3 text-xs text-slate-100 placeholder-slate-500 focus:outline-none resize-none"
-                    id="input-teachings-description"
-                  />
-                </div>
-
-                {/* Preset Cover Selector */}
-                <div>
-                  <label className="block text-[10px] uppercase font-mono tracking-wider text-slate-400 mb-2">Select Series Cover Artwork</label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {[
-                      { id: 'art-1', url: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=400&auto=format&fit=crop', label: 'Worship/Decibel' },
-                      { id: 'art-2', url: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=400&auto=format&fit=crop', label: 'Liturgy/Cross' },
-                      { id: 'art-3', url: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?q=80&w=400&auto=format&fit=crop', label: 'Bible Study' },
-                      { id: 'art-4', url: 'https://images.unsplash.com/photo-1518495973542-4542c06a5843?q=80&w=400&auto=format&fit=crop', label: 'Abundant Grace' }
-                    ].map((preset) => (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        onClick={() => setSelectedPresetCover(preset.url)}
-                        className={`relative aspect-square rounded-xl overflow-hidden border-2 transition-all p-0.5 cursor-pointer
-                          ${selectedPresetCover === preset.url 
-                            ? 'border-cci-gold-500 scale-95 shadow shadow-cci-gold-600/35' 
-                            : 'border-cci-blue-800/80 hover:border-slate-500'
-                          }`}
-                        title={preset.label}
-                      >
-                        <img src={preset.url} alt="" className="w-full h-full object-cover rounded-lg" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Drag-and-drop Audio File Uploader */}
-                <div>
-                  <label className="block text-[10px] uppercase font-mono tracking-wider text-slate-400 mb-1.5">Audio Track Attachment *</label>
-                  <div
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      setIsDragging(true);
-                    }}
-                    onDragLeave={() => setIsDragging(false)}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      setIsDragging(false);
-                      const file = e.dataTransfer.files?.[0];
-                      if (file) triggerFileProcess(file);
-                    }}
-                    className={`border-2 border-dashed rounded-2xl p-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center min-h-[110px]
-                      ${isDragging 
-                        ? 'border-cci-gold-500 bg-cci-gold-500/5' 
-                        : audioUrl 
-                          ? 'border-emerald-500/60 bg-emerald-950/10' 
-                          : 'border-cci-blue-800 hover:border-cci-blue-600 bg-black/20'
-                      }`}
-                  >
-                    <input
-                      type="file"
-                      accept="audio/*"
-                      onChange={handleAudioFileChange}
-                      className="hidden"
-                      id="file-teachings-audio-upload"
-                    />
-                    <label htmlFor="file-teachings-audio-upload" className="w-full h-full cursor-pointer flex flex-col items-center justify-center">
-                      {isUploadingFile ? (
-                        <div className="space-y-2 w-full px-4">
-                          <div className="flex justify-between text-[10px] font-mono text-slate-400">
-                            <span>Processing file...</span>
-                            <span>{uploadProgress}%</span>
-                          </div>
-                          <div className="w-full bg-[#040814] h-1.5 rounded-full overflow-hidden">
-                            <div className="bg-cci-gold-500 h-full transition-all duration-150" style={{ width: `${uploadProgress}%` }} />
-                          </div>
+              {currentTrack ? (
+                <div className="flex-1 flex flex-col justify-between">
+                  {/* Vinyl/Spin Album Visual */}
+                  <div className="flex flex-col items-center text-center mt-4">
+                    <div className="relative w-40 h-40 sm:w-44 sm:h-44 rounded-full overflow-hidden p-[3px] bg-gradient-to-tr from-[#1f1f1f] via-[#fca311] to-[#1f1f1f] shadow-2xl shadow-[#fca311]/10">
+                      <div className="w-full h-full rounded-full bg-[#000000] overflow-hidden flex items-center justify-center p-1.5 relative">
+                        <img
+                          src={currentTrack.coverUrl}
+                          alt=""
+                          referrerPolicy="no-referrer"
+                          className={`w-full h-full rounded-full object-cover select-none ${isPlaying ? 'animate-spin duration-[15000ms] ease-linear' : ''}`}
+                          style={{ animationDuration: '25s' }}
+                        />
+                        {/* Center spindle hole */}
+                        <div className="absolute inset-0 m-auto w-8 h-8 rounded-full bg-[#000000] border-4 border-[#222222] shadow-inner flex items-center justify-center">
+                          <div className="w-2.5 h-2.5 rounded-full bg-[#fca311]" />
                         </div>
-                      ) : audioUrl ? (
-                        <div className="text-center">
-                          <CheckCircle className="h-6 w-6 text-emerald-400 mx-auto mb-1" />
-                          <p className="text-[11px] font-semibold text-emerald-400 truncate max-w-[220px] mx-auto">{uploadedFileName || "Audio loaded successfully"}</p>
-                          <p className="text-[9px] text-slate-400 font-mono mt-0.5">Size: {fileSize} (Object URL created)</p>
-                          <span className="text-[9px] text-cci-gold-400 underline mt-1.5 block">Click to change track</span>
-                        </div>
+                      </div>
+                    </div>
+
+                    <h4 className="font-display font-bold text-base sm:text-lg text-[#E5E5E5] mt-6 line-clamp-1">
+                      {currentTrack.title}
+                    </h4>
+                    <p className="text-xs text-[#fca311] font-mono mt-1 font-semibold uppercase tracking-wide">{currentTrack.series}</p>
+                    <p className="text-xs text-[#A3A3A3] mt-0.5">{currentTrack.preacher}</p>
+                  </div>
+
+                  {/* Progress bar and Scrubber */}
+                  <div className="mt-8">
+                    <div className="flex justify-between text-[10px] font-mono text-[#737373] mb-1.5">
+                      <span>{formatTime(currentTime)}</span>
+                      <span>{duration ? formatTime(duration) : currentTrack.duration}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max={duration || 100}
+                      value={currentTime}
+                      onChange={handleSeek}
+                      className="w-full h-1.5 bg-[#222222] focus:outline-none rounded-lg appearance-none cursor-pointer accent-[#fca311]"
+                      id="player-scrubber"
+                    />
+                  </div>
+
+                  {/* Main Player controls */}
+                  <div className="flex items-center justify-center gap-6 mt-6">
+                    {/* Play Button */}
+                    <button
+                      onClick={() => handlePlayPause(currentTrack)}
+                      className="w-16 h-16 rounded-full bg-[#fca311] hover:bg-[#e5920a] text-[#000000] flex items-center justify-center shadow-lg shadow-[#fca311]/25 transition-all transform hover:scale-105 cursor-pointer"
+                      id="player-play-btn"
+                    >
+                      {isPlaying ? (
+                        <Pause className="h-7 w-7 text-[#000000] fill-current" />
                       ) : (
-                        <div className="text-center">
-                          <Download className="h-5 w-5 text-cci-gold-400 mx-auto mb-1.5" />
-                          <p className="text-xs text-slate-300 font-semibold">Drag & Drop MP3 or Click to browse</p>
-                          <p className="text-[10px] text-slate-500 mt-1">High quality sermon tracks up to 50MB</p>
-                        </div>
+                        <Play className="h-7 w-7 text-[#000000] fill-current translate-x-0.5" />
                       )}
-                    </label>
+                    </button>
+                  </div>
+
+                  {/* Volume bar */}
+                  <div className="flex items-center gap-3 justify-center mt-6 pt-6 border-t border-[#1f1f1f]">
+                    <button
+                      onClick={() => setIsMuted(!isMuted)}
+                      className="text-[#737373] hover:text-[#fca311] transition-colors cursor-pointer"
+                      id="player-mute-btn"
+                    >
+                      {isMuted || volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                    </button>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={volume}
+                      onChange={(e) => {
+                        setVolume(parseFloat(e.target.value));
+                        setIsMuted(false);
+                      }}
+                      className="w-24 h-1 bg-[#222222] rounded-lg appearance-none cursor-pointer accent-[#fca311]"
+                      id="player-volume-slider"
+                    />
                   </div>
                 </div>
-
-                {/* Submit button */}
-                <button
-                  type="submit"
-                  disabled={isUploadingFile}
-                  className={`w-full py-3 bg-gradient-to-r from-cci-gold-600 to-cci-gold-500 hover:from-cci-gold-500 hover:to-cci-gold-400 text-[#040814] font-display font-bold text-xs uppercase tracking-wider rounded-xl mt-4 shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer
-                    ${isUploadingFile ? 'opacity-50 pointer-events-none' : ''}`}
-                  id="btn-teachings-publish-sermon"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span>Publish Message To Portal</span>
-                </button>
-              </form>
-            </motion.div>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center text-center">
+                  <Music className="h-10 w-10 text-[#333333] mb-2" />
+                  <p className="text-sm text-[#737373]">Select a teaching from the list to load the stream.</p>
+                </div>
+              )}
+            </div>
           </div>
-        )}
-      </AnimatePresence>
+        </div>
+
+        {/* Admin Passcode Modal */}
+        <AnimatePresence>
+          {isAdminLoginModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md" id="teachings-admin-modal-overlay">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="relative w-full max-w-sm bg-[#0d0d0d] border border-[#262626] rounded-3xl overflow-hidden shadow-2xl p-6 sm:p-8"
+                id="admin-login-modal-container"
+              >
+                {/* Close Button */}
+                <button
+                  onClick={() => {
+                    setIsAdminLoginModalOpen(false);
+                    setPasscode('');
+                    setPasscodeError('');
+                  }}
+                  className="absolute top-5 right-5 text-[#737373] hover:text-[#E5E5E5] p-1.5 bg-black/50 rounded-full transition-colors cursor-pointer"
+                  id="btn-close-admin-login"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+
+                <div className="text-center mb-6">
+                  <div className="w-12 h-12 bg-[#fca311]/10 rounded-full flex items-center justify-center mx-auto mb-3 border border-[#fca311]/30 text-[#fca311]">
+                    <Lock className="h-5 w-5" />
+                  </div>
+                  <h3 className="font-display font-bold text-lg text-[#E5E5E5]">Administrator Access</h3>
+                  <p className="text-xs text-[#737373] mt-1">Unlock audio uploader permission controls</p>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] uppercase font-mono tracking-wider text-[#A3A3A3] mb-1.5">Administrative Passcode</label>
+                    <input
+                      type="password"
+                      placeholder="Enter passcode (Hint: 'admin')"
+                      value={passcode}
+                      onChange={(e) => {
+                        setPasscode(e.target.value);
+                        setPasscodeError('');
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleAuthAdmin();
+                      }}
+                      className="w-full bg-[#050505] border border-[#262626] focus:border-[#fca311] rounded-xl py-2.5 px-3 text-xs text-[#E5E5E5] placeholder-[#555555] focus:outline-none"
+                      id="input-teachings-passcode"
+                    />
+                    {passcodeError && (
+                      <p className="text-[10px] text-amber-500 font-mono mt-1.5">{passcodeError}</p>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={handleAuthAdmin}
+                    className="w-full py-3 bg-[#fca311] hover:bg-[#e5920a] text-[#000000] text-xs font-bold uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer"
+                    id="btn-teachings-submit-auth"
+                  >
+                    Verify Privileges
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Upload Sermon Audio Modal */}
+        <AnimatePresence>
+          {isUploadModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md overflow-y-auto" id="teachings-upload-modal-overlay">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="relative w-full max-w-lg bg-[#0d0d0d] border border-[#262626] rounded-3xl overflow-hidden shadow-2xl p-6 sm:p-8 my-8"
+                id="teachings-upload-container"
+              >
+                {/* Close button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsUploadModalOpen(false);
+                    setUploadedFileName('');
+                    setAudioUrl('');
+                  }}
+                  className="absolute top-5 right-5 text-[#737373] hover:text-[#E5E5E5] p-1.5 bg-black/50 rounded-full transition-colors z-10 cursor-pointer"
+                  id="btn-close-teachings-upload"
+                >
+                  <X className="h-4.5 w-4.5" />
+                </button>
+
+                <div className="flex items-center gap-2.5 pb-4 border-b border-[#222222] mb-6">
+                  <FileAudio className="h-5 w-5 text-[#fca311]" />
+                  <h3 className="font-display font-bold text-lg text-[#E5E5E5]">Publish Sermon Audio</h3>
+                </div>
+
+                <form onSubmit={handlePublishTeaching} className="space-y-4 text-left">
+                  {/* Title */}
+                  <div>
+                    <label className="block text-[10px] uppercase font-mono tracking-wider text-[#A3A3A3] mb-1.5">Sermon Title *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g., Pneumatika: The Spiritual Gifts Explained"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      className="w-full bg-[#050505] border border-[#262626] focus:border-[#fca311] rounded-xl py-2.5 px-3 text-xs text-[#E5E5E5] placeholder-[#555555] focus:outline-none"
+                      id="input-teachings-title"
+                    />
+                  </div>
+
+                  {/* Series & Duration */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] uppercase font-mono tracking-wider text-[#A3A3A3] mb-1.5">Series Name *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g., Pneumatika Series"
+                        value={series}
+                        onChange={(e) => setSeries(e.target.value)}
+                        className="w-full bg-[#050505] border border-[#262626] focus:border-[#fca311] rounded-xl py-2.5 px-3 text-xs text-[#E5E5E5] placeholder-[#555555] focus:outline-none"
+                        id="input-teachings-series"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase font-mono tracking-wider text-[#A3A3A3] mb-1.5">Duration *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g., 55m or 1h 12m"
+                        value={durationForm}
+                        onChange={(e) => setDurationForm(e.target.value)}
+                        className="w-full bg-[#050505] border border-[#262626] focus:border-[#fca311] rounded-xl py-2.5 px-3 text-xs text-[#E5E5E5] placeholder-[#555555] focus:outline-none"
+                        id="input-teachings-duration"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Preacher */}
+                  <div>
+                    <label className="block text-[10px] uppercase font-mono tracking-wider text-[#A3A3A3] mb-1.5">Preacher *</label>
+                    <input
+                      type="text"
+                      required
+                      value={preacher}
+                      onChange={(e) => setPreacher(e.target.value)}
+                      className="w-full bg-[#050505] border border-[#262626] focus:border-[#fca311] rounded-xl py-2.5 px-3 text-xs text-[#E5E5E5] focus:outline-none"
+                      id="input-teachings-preacher"
+                    />
+                  </div>
+
+                  {/* Description */}
+                  <div>
+                    <label className="block text-[10px] uppercase font-mono tracking-wider text-[#A3A3A3] mb-1.5">Sermon Description</label>
+                    <textarea
+                      placeholder="Provide a brief summary of the apostolic teaching content..."
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      rows={2}
+                      className="w-full bg-[#050505] border border-[#262626] focus:border-[#fca311] rounded-xl py-2.5 px-3 text-xs text-[#E5E5E5] placeholder-[#555555] focus:outline-none resize-none"
+                      id="input-teachings-description"
+                    />
+                  </div>
+
+                  {/* Preset Cover Selector */}
+                  <div>
+                    <label className="block text-[10px] uppercase font-mono tracking-wider text-[#A3A3A3] mb-2">Select Series Cover Artwork</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[
+                        { id: 'art-1', url: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=400&auto=format&fit=crop', label: 'Worship/Decibel' },
+                        { id: 'art-2', url: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=400&auto=format&fit=crop', label: 'Liturgy/Cross' },
+                        { id: 'art-3', url: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?q=80&w=400&auto=format&fit=crop', label: 'Bible Study' },
+                        { id: 'art-4', url: 'https://images.unsplash.com/photo-1518495973542-4542c06a5843?q=80&w=400&auto=format&fit=crop', label: 'Abundant Grace' }
+                      ].map((preset) => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => setSelectedPresetCover(preset.url)}
+                          className={`relative aspect-square rounded-xl overflow-hidden border-2 transition-all p-0.5 cursor-pointer
+                            ${selectedPresetCover === preset.url 
+                              ? 'border-[#fca311] scale-95 shadow shadow-[#fca311]/40' 
+                              : 'border-[#262626] hover:border-[#737373]'
+                            }`}
+                          title={preset.label}
+                        >
+                          <img src={preset.url} alt="" className="w-full h-full object-cover rounded-lg" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Drag-and-drop Audio File Uploader */}
+                  <div>
+                    <label className="block text-[10px] uppercase font-mono tracking-wider text-[#A3A3A3] mb-1.5">Audio Track Attachment *</label>
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setIsDragging(true);
+                      }}
+                      onDragLeave={() => setIsDragging(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setIsDragging(false);
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) triggerFileProcess(file);
+                      }}
+                      className={`border-2 border-dashed rounded-2xl p-4 text-center cursor-pointer transition-all flex flex-col items-center justify-center min-h-[110px]
+                        ${isDragging 
+                          ? 'border-[#fca311] bg-[#fca311]/10' 
+                          : audioUrl 
+                            ? 'border-[#fca311]/60 bg-[#fca311]/5' 
+                            : 'border-[#262626] hover:border-[#fca311]/50 bg-[#050505]'
+                        }`}
+                    >
+                      <input
+                        type="file"
+                        accept="audio/*"
+                        onChange={handleAudioFileChange}
+                        className="hidden"
+                        id="file-teachings-audio-upload"
+                      />
+                      <label htmlFor="file-teachings-audio-upload" className="w-full h-full cursor-pointer flex flex-col items-center justify-center">
+                        {isUploadingFile ? (
+                          <div className="space-y-2 w-full px-4">
+                            <div className="flex justify-between text-[10px] font-mono text-[#A3A3A3]">
+                              <span>Processing file...</span>
+                              <span className="text-[#fca311]">{uploadProgress}%</span>
+                            </div>
+                            <div className="w-full bg-[#000000] h-1.5 rounded-full overflow-hidden">
+                              <div className="bg-[#fca311] h-full transition-all duration-150" style={{ width: `${uploadProgress}%` }} />
+                            </div>
+                          </div>
+                        ) : audioUrl ? (
+                          <div className="text-center">
+                            <CheckCircle className="h-6 w-6 text-[#fca311] mx-auto mb-1" />
+                            <p className="text-[11px] font-semibold text-[#fca311] truncate max-w-[220px] mx-auto">{uploadedFileName || "Audio loaded successfully"}</p>
+                            <p className="text-[9px] text-[#737373] font-mono mt-0.5">Size: {fileSize} (Object URL created)</p>
+                            <span className="text-[9px] text-[#fca311] underline mt-1.5 block">Click to change track</span>
+                          </div>
+                        ) : (
+                          <div className="text-center">
+                            <Download className="h-5 w-5 text-[#fca311] mx-auto mb-1.5" />
+                            <p className="text-xs text-[#E5E5E5] font-semibold">Drag & Drop MP3 or Click to browse</p>
+                            <p className="text-[10px] text-[#737373] mt-1">High quality sermon tracks up to 50MB</p>
+                          </div>
+                        )}
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Submit button */}
+                  <button
+                    type="submit"
+                    disabled={isUploadingFile}
+                    className={`w-full py-3 bg-[#fca311] hover:bg-[#e5920a] text-[#000000] font-display font-bold text-xs uppercase tracking-wider rounded-xl mt-4 shadow-lg shadow-[#fca311]/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer
+                      ${isUploadingFile ? 'opacity-50 pointer-events-none' : ''}`}
+                    id="btn-teachings-publish-sermon"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Publish Message To Portal</span>
+                  </button>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
