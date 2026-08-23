@@ -1228,12 +1228,23 @@ const handleAddSong = async (e: React.FormEvent) => {
   // Refresh active Supabase Auth session
   if (supabase?.auth) {
     try {
-      const { data: { session: activeSession } } = await supabase.auth.getSession();
-      if (activeSession?.user) {
-        setSession(activeSession);
+      const { data: { session: activeSession }, error: sessionError } =
+        await supabase.auth.refreshSession();
+
+      if (sessionError) {
+        setSongError(sessionError.message || 'Authentication session refresh error.');
+        return;
       }
-    } catch (sessErr) {
-      console.warn('Could not retrieve active session for songs:', sessErr);
+
+      if (!activeSession?.user) {
+        setSongError('You must be signed in to upload a song.');
+        return;
+      }
+
+      setSession(activeSession);
+    } catch (sessErr: any) {
+      setSongError(sessErr?.message || 'Authentication error while refreshing session.');
+      return;
     }
   }
 
