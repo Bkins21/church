@@ -610,8 +610,7 @@ export default function Meetings({
                 </h2>
                 <div className="w-16 h-1 bg-[#F59E0B] mx-auto rounded-full shadow-sm shadow-[#F59E0B]/50" />
                 <p className="text-sm sm:text-base text-[#475569] leading-relaxed">
-                  Register for GEC meetings, lock in your official entrance passes, and join believers across our branches as we build deep scriptural clarity and experience spiritual outpouring.
-                </p>
+                  Register for our meetings, and join believers across our branches to get edified and trained for the ministry of our Lord Jesus                </p>
               </div>
 
               {/* Countdown Panel (Midnight Royal Navy + Radiant Amber Fire Accents) */}
@@ -633,7 +632,7 @@ export default function Meetings({
                     <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-[#F0F4F8] font-semibold pt-2">
                       <span className="flex items-center gap-1.5 bg-black/30 border border-white/10 px-3 py-1.5 rounded-lg">
                         <Calendar className="h-3.5 w-3.5 text-[#F59E0B]" />
-                        October 1st - 4th, 2026
+                        October 28th - November 1st, 2026
                       </span>
                       <span className="flex items-center gap-1.5 bg-black/30 border border-white/10 px-3 py-1.5 rounded-lg">
                         <MapPin className="h-3.5 w-3.5 text-[#F59E0B]" />
