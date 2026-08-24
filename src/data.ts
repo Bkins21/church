@@ -19,8 +19,8 @@ export const upcomingMeetings: ChurchEvent[] = [
     id: 'end-of-year-retreat-2026',
     title: 'End of the year Retreat',
     date: 'Coming soon in December 2026',
-    time: 'To Be Announced',
-    location: 'All GEC Branches',
+    time: 'To be announced',
+    location: 'To be announced',
     mode: 'physical',
     banner: 'https://images.unsplash.com/photo-1518495973542-4542c06a5843?q=80&w=1200&auto=format&fit=crop',
     description: 'Our annual end of year spiritual convergence to reflect on God’s saving grace, build powerful prayer habits, and receive strategic apostolic direction for the coming year.',
@@ -31,8 +31,8 @@ export const upcomingMeetings: ChurchEvent[] = [
     id: 'oasis-camp-meeting-2027',
     title: 'Oasis Camp Meeting',
     date: 'Coming soon in 2027',
-    time: 'To Be Announced',
-    location: 'GEC Camp Grounds',
+    time: 'To be announced',
+    location: 'To be announced',
     mode: 'physical',
     banner: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=1200&auto=format&fit=crop',
     description: 'A refreshing spiritual camp meeting designed for deep rejuvenation, extended corporate worship, and systematic Bible studies.',
@@ -43,8 +43,8 @@ export const upcomingMeetings: ChurchEvent[] = [
     id: 'reaching-world-campmeeting-2027',
     title: 'Reaching our World CampMeeting',
     date: 'Coming soon in 2027',
-    time: 'To Be Announced',
-    location: 'Main Arena',
+    time: 'To be announced',
+    location: 'To be announced',
     mode: 'physical',
     banner: 'https://images.unsplash.com/photo-1515162305285-0293e4767cc2?q=80&w=1200&auto=format&fit=crop',
     description: 'A powerful global gathering focused on missions expansion, global evangelism, and reaching our world with the saving message of Jesus Christ.',
@@ -64,7 +64,7 @@ export const ministryBranches: Branch[] = [
     region: 'Nigeria',
     city: 'Abeokuta',
     address: '15 Onikolobo Road, Opposite Lawson Group of Schools, Abeokuta, Ogun State',
-    residentPastor: 'Pastor Ore Adebayo',
+    residentPastor: 'Pastor Abiodun Adebayo',
     pastorPhoto: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?q=80&w=400&auto=format&fit=crop',
     contactEmail: 'onikolobo@godsedifice.org',
     contactPhone: '+234 803 111 2222',
@@ -80,10 +80,10 @@ export const ministryBranches: Branch[] = [
     name: 'GEC Lagos Mainland (Yaba)',
     region: 'Nigeria',
     city: 'Lagos',
-    address: '34 Herbert Macaulay Way, Sabo, Yaba, Lagos State',
-    residentPastor: 'Pastor Kola Asaolu',
+    address: 'NSPRI building, 32-38 Barikisu Iyede Street, off University of Lagos (UNILAG) Road, Abule Oja / Onitiri, Yaba, Lagos',
+    residentPastor: 'Pastor Kolawole Asaolu',
     pastorPhoto: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?q=80&w=400&auto=format&fit=crop',
-    contactEmail: 'yaba@godsedifice.org',
+    contactEmail: 'yabachurch@godsedifice.org',
     contactPhone: '+234 812 789 4081',
     serviceTimes: {
       sunday: ['01:00 PM'],
@@ -91,6 +91,24 @@ export const ministryBranches: Branch[] = [
     },
     liveStreamUrl: 'https://mixlr.com/gec-yaba',
     mapEmbedSearch: 'Herbert Macaulay Way, Sabo, Yaba, Lagos'
+  }
+
+   {
+    id: 'gec-itori',
+    name: 'GEC Itori',
+    region: 'Nigeria',
+    city: 'Ewekoro',
+    address: 'Testimony Group of Schools, behind Ejalonibu, Onigbedu street, Itori Ewekoro, Ogun state.',
+    residentPastor: 'Pastor Oreoluwa Adebayo',
+    pastorPhoto: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?q=80&w=400&auto=format&fit=crop',
+    contactEmail: 'itorichurch@godsedifice.org',
+    contactPhone: '+234 816 655 2066',
+    serviceTimes: {
+      sunday: ['09:00 AM'],
+      midweek: ['05:00 PM (Wednesday)']
+    },
+    liveStreamUrl: 'https://mixlr.com/gec-yaba',
+    mapEmbedSearch: 'Onigbedu street, Itori Ewekoro, Ogun state'
   }
 ];
 
