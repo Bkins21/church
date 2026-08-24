@@ -70,7 +70,7 @@ export const ministryBranches: Branch[] = [
     contactPhone: '+234 803 111 2222',
     serviceTimes: {
       sunday: ['09:00 AM'],
-      midweek: ['06:00 PM (Wednesday)']
+      midweek: ['05:00 PM (Wednesday)']
     },
     liveStreamUrl: 'https://mixlr.com/gec-onikolobo',
     mapEmbedSearch: 'Onikolobo Road, Abeokuta, Ogun State'
@@ -87,7 +87,7 @@ export const ministryBranches: Branch[] = [
     contactPhone: '+234 812 789 4081',
     serviceTimes: {
       sunday: ['01:00 PM'],
-      midweek: ['06:00 PM (Wednesday)']
+      midweek: ['05:00 PM (Wednesday)']
     },
     liveStreamUrl: 'https://mixlr.com/gec-yaba',
     mapEmbedSearch: 'Herbert Macaulay Way, Sabo, Yaba, Lagos'

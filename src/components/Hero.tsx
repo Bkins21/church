@@ -456,8 +456,8 @@ export default function Hero({ onNavigate }: HeroProps) {
               <BookOpen className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-[10px] text-[#8A8E96] font-mono uppercase tracking-wider">Midweek Bible Class</p>
-              <p className="text-xs font-bold text-[#141416]">Every Wednesday • 6:00 PM</p>
+              <p className="text-[10px] text-[#8A8E96] font-mono uppercase tracking-wider">Midweek Service</p>
+              <p className="text-xs font-bold text-[#141416]">Every Wednesday • 5:00 PM</p>
             </div>
           </div>
 

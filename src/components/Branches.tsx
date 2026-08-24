@@ -177,7 +177,7 @@ export default function Branches({}: BranchesProps) {
                     </div>
                   </div>
                   <div className="flex justify-between items-center py-2">
-                    <span className="text-[#54575E]">Midweek Study:</span>
+                    <span className="text-[#54575E]">Midweek Service:</span>
                     <div className="flex gap-1.5">
                       {selectedBranch.serviceTimes.midweek.map((time, idx) => (
                         <span key={idx} className="px-2 py-0.5 bg-white text-[#141416] font-mono rounded text-[10px] font-semibold border border-[#E4DCD0]">
