@@ -34,11 +34,11 @@ export default function Hero({ onNavigate }: HeroProps) {
     return () => clearInterval(bgInterval);
   }, []);
 
-  // Calculate dynamic countdown to Edifice Conference (October 1st, 2026, 9:00 AM)
+  // Calculate dynamic countdown to Edifice Conference (October 28th, 2026, 9:00 AM)
   useEffect(() => {
     const calculateCountdown = () => {
       const now = new Date();
-      const targetDate = new Date('2026-10-01T09:00:00');
+      const targetDate = new Date('2026-10-28T09:00:00');
       const difference = targetDate.getTime() - now.getTime();
       
       if (difference <= 0) {
@@ -358,7 +358,7 @@ export default function Hero({ onNavigate }: HeroProps) {
                 Edifice Conference 2026
               </h3>
               <p className="text-xs sm:text-sm text-[#54575E]">
-                October 1st – 4th, 2026 • In-Person & Global Broadcast
+                October 28th – November 1st, 2026 • In-Person & Global Broadcast
               </p>
             </div>
 

@@ -71,7 +71,7 @@ export default function Meetings({
 
   // Edifice Conference 2026 Countdown
   useEffect(() => {
-    const targetDate = new Date('2026-10-01T09:00:00').getTime();
+    const targetDate = new Date('2026-10-28T09:00:00').getTime();
 
     const updateCountdown = () => {
       const now = new Date().getTime();
