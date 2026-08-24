@@ -46,40 +46,36 @@ export default function Publications({ onPurchaseSuccess, userLibrary = [], cust
 
   useEffect(() => {
     const loadPublications = async () => {
-      console.log('LOADING PUBLICATIONS FROM SUPABASE');
-
-      if (!isSupabaseConfigured) {
-        console.error('SUPABASE IS NOT CONFIGURED');
+      if (!isSupabaseConfigured || !supabase) {
         return;
       }
 
-      const { data, error } = await supabase
-        .from('publications')
-        .select('*');
+      try {
+        const { data, error } = await supabase
+          .from('publications')
+          .select('*');
 
-      console.log('SUPABASE PUBLICATIONS DATA:', data);
-      console.log('SUPABASE PUBLICATIONS ERROR:', error);
+        if (error) {
+          console.warn('Failed to load publications from Supabase:', error);
+          return;
+        }
 
-      if (error) {
-        console.error('Failed to load publications:', error);
-        return;
+        const publications: Publication[] = (data || []).map((row: any) => ({
+          id: row.id,
+          title: row.title,
+          type: row.type || 'bulletin',
+          author: row.author || '',
+          description: row.description || '',
+          coverUrl: row.cover_url || '',
+          month: row.month || '',
+          publishYear: Number(row.publish_year),
+          fileUrl: row.file_url || '',
+        }));
+
+        setAllPublications(publications);
+      } catch (err) {
+        console.warn('Network error loading publications from Supabase:', err);
       }
-
-      const publications: Publication[] = (data || []).map((row: any) => ({
-        id: row.id,
-        title: row.title,
-        type: row.type || 'bulletin',
-        author: row.author || '',
-        description: row.description || '',
-        coverUrl: row.cover_url || '',
-        month: row.month || '',
-        publishYear: Number(row.publish_year),
-        fileUrl: row.file_url || '',
-      }));
-
-      console.log('MAPPED PUBLICATIONS:', publications);
-
-      setAllPublications(publications);
     };
 
     loadPublications();

@@ -1,13 +1,66 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, MapPin, Clock, Phone, Mail, Compass, Building2 } from 'lucide-react';
 import { Branch } from '../types';
 import { ministryBranches } from '../data';
 import { motion, AnimatePresence } from 'motion/react';
+import { supabase, isSupabaseConfigured } from '../supabase';
 
 interface BranchesProps {}
 
 export default function Branches({}: BranchesProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [branchImageOverrides, setBranchImageOverrides] = useState<{ [id: string]: string }>(() => {
+    try {
+      const cached = localStorage.getItem('gec_branch_image_overrides');
+      return cached ? JSON.parse(cached) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Fetch updated branch images from Supabase
+  useEffect(() => {
+    const fetchBranchImages = async () => {
+      if (!isSupabaseConfigured || !supabase) return;
+      try {
+        const { data, error } = await supabase
+          .from('branches')
+          .select('id, image_url, pastor_photo');
+
+        if (!error && data && data.length > 0) {
+          const map: { [id: string]: string } = {};
+          data.forEach((item: any) => {
+            const url = item.image_url || item.pastor_photo;
+            if (url) {
+              map[item.id] = url;
+            }
+          });
+          setBranchImageOverrides(prev => ({ ...prev, ...map }));
+          try {
+            localStorage.setItem('gec_branch_image_overrides', JSON.stringify(map));
+          } catch {}
+        }
+      } catch (err) {
+        console.warn('Could not load branch images from Supabase:', err);
+      }
+    };
+
+    fetchBranchImages();
+
+    const handleUpdate = () => {
+      fetchBranchImages();
+      try {
+        const cached = localStorage.getItem('gec_branch_image_overrides');
+        if (cached) {
+          setBranchImageOverrides(JSON.parse(cached));
+        }
+      } catch {}
+    };
+
+    window.addEventListener('gec_branches_updated', handleUpdate);
+    return () => window.removeEventListener('gec_branches_updated', handleUpdate);
+  }, []);
+
   const [selectedBranch, setSelectedBranch] = useState<Branch>(ministryBranches[0]);
 
   // Filter local churches and cell meetings by City, Pastor, or Cell Leader name
@@ -31,6 +84,8 @@ export default function Branches({}: BranchesProps) {
     const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(branch.mapEmbedSearch)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   };
+
+  const currentPastorPhoto = branchImageOverrides[selectedBranch.id] || selectedBranch.imageUrl || selectedBranch.pastorPhoto;
 
   return (
     <div className="w-full bg-[#F4F6F8] text-[#141416] transition-colors duration-300 min-h-screen" id="branches-view">
@@ -192,7 +247,7 @@ export default function Branches({}: BranchesProps) {
               {/* Resident Pastor / Cell Leader info */}
               <div className="flex gap-4 items-center p-4 bg-[#F7F5F0] border border-[#E4DCD0] rounded-2xl mb-8">
                 <img
-                  src={selectedBranch.pastorPhoto}
+                  src={currentPastorPhoto}
                   alt={selectedBranch.residentPastor}
                   referrerPolicy="no-referrer"
                   className="w-16 h-16 rounded-xl object-cover border border-[#E4DCD0] shrink-0"

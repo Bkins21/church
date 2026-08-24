@@ -7,7 +7,7 @@ export const upcomingMeetings: ChurchEvent[] = [
     id: 'edifice-conference-2026',
     title: 'Edifice Conference',
     date: 'October 28th to November 1st, 2026',
-    time: '09:00 AM - 08:00 PM Daily',
+    time: 'Thursday - 5pm, Friday - 7am, Saturday - 7am, Sunday - 6am',
     location: 'Peter Akinola Foundation, Abeokuta',
     mode: 'physical',
     banner: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1200&auto=format&fit=crop',
@@ -103,6 +103,24 @@ export const ministryBranches: Branch[] = [
     pastorPhoto: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?q=80&w=400&auto=format&fit=crop',
     contactEmail: 'itorichurch@godsedifice.org',
     contactPhone: '+234 816 655 2066',
+    serviceTimes: {
+      sunday: ['09:00 AM'],
+      midweek: ['05:00 PM (Wednesday)']
+    },
+    liveStreamUrl: 'https://mixlr.com/gec-yaba',
+    mapEmbedSearch: 'Onigbedu street, Itori Ewekoro, Ogun state'
+  },
+
+   {
+    id: 'gec-magboro',
+    name: 'GEC Magboro',
+    region: 'Nigeria',
+    city: 'Magboro',
+    address: 'Testimony Group of Schools, behind Ejalonibu, Onigbedu street, Itori Ewekoro, Ogun state.',
+    residentPastor: 'Pastor Oluwatobiloba Olabode',
+    pastorPhoto: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?q=80&w=400&auto=format&fit=crop',
+    contactEmail: 'magborochurch@godsedifice.org',
+    contactPhone: '+234 803 870 8417',
     serviceTimes: {
       sunday: ['09:00 AM'],
       midweek: ['05:00 PM (Wednesday)']

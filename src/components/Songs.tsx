@@ -362,26 +362,27 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
       const songUrl = (songItem as any).audio_url || songItem.audioUrl || '';
       
       if (songUrl) {
-        const response = await fetch(songUrl);
-        if (response.ok) {
-          const blob = await response.blob();
-          const downloadUrl = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = downloadUrl;
-          link.download = `${songItem.title.replace(/[^a-zA-Z0-9_-]/g, '_')}.mp3`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
-        } else {
+        try {
+          const response = await fetch(songUrl);
+          if (response.ok) {
+            const blob = await response.blob();
+            const downloadUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = `${songItem.title.replace(/[^a-zA-Z0-9_-]/g, '_')}.mp3`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+          } else {
+            window.open(songUrl, '_blank');
+          }
+        } catch {
           window.open(songUrl, '_blank');
         }
-      } else {
-        alert(`Anthem "${songItem.title}" saved to your personal offline downloads.`);
       }
     } catch (error: any) {
-      console.warn('Direct file download fallback:', error);
-      alert(`Anthem "${songItem.title}" recorded to your saved downloads.`);
+      console.warn('File download fallback:', error);
     } finally {
       setIsDownloading(prev => ({ ...prev, [songItem.id]: false }));
     }

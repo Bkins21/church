@@ -57,6 +57,7 @@ export interface Branch {
   address: string;
   residentPastor: string;
   pastorPhoto: string;
+  imageUrl?: string;
   contactEmail: string;
   contactPhone: string;
   serviceTimes: ServiceTimes;

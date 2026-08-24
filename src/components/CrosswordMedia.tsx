@@ -6,11 +6,11 @@ import {
   AlertCircle, Upload, Loader2, Plus, Search, FileText, Music, 
   Settings, Key, Eye, EyeOff, LayoutDashboard, Users, MessageSquare, Clipboard, ArrowLeft,
   Image as ImageIcon, Calendar, BarChart3, Download, BookOpen, Table, Play, Pause, ExternalLink,
-  FileSpreadsheet, Tag, Phone, MapPin, Check, Filter, RefreshCw, Radio, X, Globe
+  FileSpreadsheet, Tag, Phone, MapPin, Check, Filter, RefreshCw, Radio, X, Globe, Building2
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured, checkIfAdmin } from '../supabase';
-import { Teaching, Registration, Subscriber, Song, GalleryItem, ChurchEvent, Publication, PublicationType } from '../types';
-import { upcomingMeetings, galleryItems, crossworshipSongsCatalog } from '../data';
+import { Teaching, Registration, Subscriber, Song, GalleryItem, ChurchEvent, Publication, PublicationType, Branch } from '../types';
+import { upcomingMeetings, galleryItems, crossworshipSongsCatalog, ministryBranches } from '../data';
 import AdminAnalyticsDashboard, { RawMeetingRegistration } from './AdminAnalyticsDashboard';
 
 interface CrosswordMediaProps {
@@ -33,7 +33,7 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   
   // Dashboard states
-  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'analytics' | 'songs' | 'teachings' | 'publications' | 'gallery' | 'events' | 'registrations' | 'subscribers' | 'settings' | 'database'>('overview');
+  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'analytics' | 'songs' | 'teachings' | 'publications' | 'gallery' | 'events' | 'branches' | 'registrations' | 'subscribers' | 'settings' | 'database'>('overview');
   
   // Data lists
   const [teachings, setTeachings] = useState<Teaching[]>([]);
@@ -177,6 +177,31 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
   // Ref for file input
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Branch Management States
+  const [branchesList, setBranchesList] = useState<Branch[]>(() => {
+    try {
+      const cached = localStorage.getItem('gec_branch_image_overrides');
+      if (cached) {
+        const overrides = JSON.parse(cached);
+        return ministryBranches.map(b => ({
+          ...b,
+          imageUrl: overrides[b.id] || b.imageUrl || b.pastorPhoto,
+          pastorPhoto: overrides[b.id] || b.pastorPhoto
+        }));
+      }
+    } catch {}
+    return ministryBranches;
+  });
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(ministryBranches[0]?.id || 'gec-onikolobo');
+  const [branchImageFile, setBranchImageFile] = useState<File | null>(null);
+  const [branchImagePreview, setBranchImagePreview] = useState<string | null>(null);
+  const [uploadingBranchImage, setUploadingBranchImage] = useState<boolean>(false);
+  const [branchUploadProgress, setBranchUploadProgress] = useState<number>(0);
+  const [branchImageError, setBranchImageError] = useState<string | null>(null);
+  const [branchImageSuccess, setBranchImageSuccess] = useState<string | null>(null);
+  const [copiedBranchSql, setCopiedBranchSql] = useState<boolean>(false);
+  const branchFileInputRef = useRef<HTMLInputElement>(null);
+
   // Monitor Supabase Auth state
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
@@ -304,7 +329,37 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
     }
   };
 
-  // Sync songs and publications across tabs and listen for changes
+  // Fetch branch images overrides from Supabase
+  const fetchCloudBranches = async () => {
+    if (!supabase || !isSupabaseConfigured) return;
+    try {
+      const { data, error } = await supabase
+        .from('branches')
+        .select('id, name, image_url, pastor_photo');
+
+      if (!error && data && data.length > 0) {
+        const map: { [id: string]: string } = {};
+        data.forEach((item: any) => {
+          const url = item.image_url || item.pastor_photo;
+          if (url) {
+            map[item.id] = url;
+          }
+        });
+        try {
+          localStorage.setItem('gec_branch_image_overrides', JSON.stringify(map));
+        } catch {}
+        setBranchesList(prev => prev.map(b => ({
+          ...b,
+          imageUrl: map[b.id] || b.imageUrl || b.pastorPhoto,
+          pastorPhoto: map[b.id] || b.pastorPhoto
+        })));
+      }
+    } catch (err) {
+      console.warn('Could not fetch branches from Supabase in Admin:', err);
+    }
+  };
+
+  // Sync songs, publications, and branches across tabs and listen for changes
   useEffect(() => {
     // Clear stale localStorage so old items never resurrect
     try {
@@ -317,6 +372,7 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
 
     fetchCloudSongs();
     fetchCloudPublications();
+    fetchCloudBranches();
 
     const handleSongsUpdate = () => {
       fetchCloudSongs();
@@ -326,11 +382,17 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
       fetchCloudPublications();
     };
 
+    const handleBranchesUpdate = () => {
+      fetchCloudBranches();
+    };
+
     window.addEventListener('gec_songs_updated', handleSongsUpdate);
     window.addEventListener('gec_publications_updated', handlePubsUpdate);
+    window.addEventListener('gec_branches_updated', handleBranchesUpdate);
     return () => {
       window.removeEventListener('gec_songs_updated', handleSongsUpdate);
       window.removeEventListener('gec_publications_updated', handlePubsUpdate);
+      window.removeEventListener('gec_branches_updated', handleBranchesUpdate);
     };
   }, []);
 
@@ -339,8 +401,9 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
     if (!supabase) return;
     setDataLoading(true);
     try {
-      // Fetch Songs
+      // Fetch Songs & Branches
       await fetchCloudSongs();
+      await fetchCloudBranches();
 
       // 1. Fetch Sermons / Teachings
       const { data: teachingsData, error: tError } = await supabase
@@ -1598,6 +1661,272 @@ const handleResetDefaultSongs = async () => {
   await handleDeleteAllSongs();
 };
 
+// =========================================================
+// BRANCH IMAGE MANAGEMENT & SUPABASE UPLOAD HANDLERS
+// =========================================================
+
+const handleBranchFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  setBranchImageError(null);
+  setBranchImageSuccess(null);
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  // Validation: Accept JPG/JPEG, PNG, WebP
+  const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+  if (!validTypes.includes(file.type.toLowerCase())) {
+    setBranchImageError('Unsupported file format. Please choose a JPG, PNG, or WebP image.');
+    if (branchFileInputRef.current) branchFileInputRef.current.value = '';
+    setBranchImageFile(null);
+    setBranchImagePreview(null);
+    return;
+  }
+
+  // Validation: Max 5 MB
+  const maxSizeBytes = 5 * 1024 * 1024;
+  if (file.size > maxSizeBytes) {
+    setBranchImageError('File is too large. Branch images must be smaller than 5 MB.');
+    if (branchFileInputRef.current) branchFileInputRef.current.value = '';
+    setBranchImageFile(null);
+    setBranchImagePreview(null);
+    return;
+  }
+
+  setBranchImageFile(file);
+  const previewUrl = URL.createObjectURL(file);
+  setBranchImagePreview(previewUrl);
+};
+
+const handleUploadBranchImage = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!selectedBranchId) {
+    setBranchImageError('Please select a branch from the list.');
+    return;
+  }
+  if (!branchImageFile) {
+    setBranchImageError('Please select a photo file to upload.');
+    return;
+  }
+
+  setBranchImageError(null);
+  setBranchImageSuccess(null);
+
+  if (!isSupabaseConfigured || !supabase) {
+    setBranchImageError('Supabase is not configured. Please check your Supabase environment variables.');
+    return;
+  }
+
+  try {
+    setUploadingBranchImage(true);
+    setBranchUploadProgress(10);
+
+    // 1. Session Refresh & Admin Verification
+    const { data: { session: activeSession }, error: sessionErr } = await supabase.auth.refreshSession();
+    if (sessionErr) {
+      setBranchImageError(sessionErr.message || 'Authentication session refresh failed.');
+      setUploadingBranchImage(false);
+      setBranchUploadProgress(0);
+      return;
+    }
+    if (!activeSession?.user) {
+      setBranchImageError('No authenticated session found. Please log in again.');
+      setUploadingBranchImage(false);
+      setBranchUploadProgress(0);
+      return;
+    }
+    setSession(activeSession);
+
+    const isAdmin = await checkIfAdmin(activeSession.user.id);
+    const isDev = activeSession.user.email?.toLowerCase() === 'boluakintola@gmail.com';
+    if (!isAdmin && !isDev) {
+      setBranchImageError('Unauthorized: You must have an Administrator role to manage branch images.');
+      setUploadingBranchImage(false);
+      setBranchUploadProgress(0);
+      return;
+    }
+
+    // 2. Prepare Storage Path in bucket 'branch-images'
+    const currentBranch = branchesList.find(b => b.id === selectedBranchId) || ministryBranches.find(b => b.id === selectedBranchId);
+    const previousImageUrl = currentBranch?.imageUrl || currentBranch?.pastorPhoto || '';
+    
+    const cleanFileName = branchImageFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const storagePath = `branches/${selectedBranchId}/${Date.now()}_${cleanFileName}`;
+
+    setBranchUploadProgress(35);
+
+    // 3. Upload to Supabase Storage 'branch-images' bucket
+    const { error: uploadError } = await supabase.storage
+      .from('branch-images')
+      .upload(storagePath, branchImageFile, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: branchImageFile.type || 'image/jpeg'
+      });
+
+    if (uploadError) {
+      const isRls = uploadError.message?.toLowerCase().includes('row-level security') || (uploadError as any).statusCode === '403';
+      if (isRls) {
+        setBranchImageError('RLS_STORAGE_ERROR');
+      } else {
+        setBranchImageError(`Storage upload failed: ${uploadError.message}`);
+      }
+      setUploadingBranchImage(false);
+      setBranchUploadProgress(0);
+      return;
+    }
+
+    setBranchUploadProgress(65);
+
+    // 4. Retrieve Public URL
+    const { data: urlData } = supabase.storage
+      .from('branch-images')
+      .getPublicUrl(storagePath);
+
+    const publicUrl = urlData?.publicUrl;
+    if (!publicUrl) {
+      setBranchImageError('Failed to generate public URL for uploaded branch image.');
+      setUploadingBranchImage(false);
+      setBranchUploadProgress(0);
+      return;
+    }
+
+    setBranchUploadProgress(80);
+
+    // 5. Persist to public.branches table in Supabase
+    const { error: dbError } = await supabase
+      .from('branches')
+      .upsert({
+        id: selectedBranchId,
+        name: currentBranch?.name || selectedBranchId,
+        pastor_photo: publicUrl,
+        image_url: publicUrl,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' });
+
+    if (dbError) {
+      // Clean up the newly uploaded file if database insertion fails
+      try {
+        await supabase.storage.from('branch-images').remove([storagePath]);
+      } catch (cleanupErr) {
+        console.warn('Could not clean up uploaded branch image after db failure:', cleanupErr);
+      }
+
+      const isRls = dbError.code === '42501' || dbError.message?.toLowerCase().includes('row-level security');
+      if (isRls) {
+        setBranchImageError('RLS_DB_ERROR');
+      } else {
+        setBranchImageError(`Database update failed: ${dbError.message}`);
+      }
+      setUploadingBranchImage(false);
+      setBranchUploadProgress(0);
+      return;
+    }
+
+    // 6. Safe cleanup of old custom image from storage if applicable
+    if (
+      previousImageUrl && 
+      previousImageUrl !== publicUrl && 
+      previousImageUrl.includes('/branch-images/branches/' + selectedBranchId + '/')
+    ) {
+      try {
+        const oldPath = previousImageUrl.split('/branch-images/')[1]?.split('?')[0];
+        if (oldPath) {
+          await supabase.storage.from('branch-images').remove([oldPath]);
+        }
+      } catch (oldCleanupErr) {
+        console.warn('Could not remove previous branch image from storage:', oldCleanupErr);
+      }
+    }
+
+    // 7. Update local state and localStorage cache
+    try {
+      const saved = localStorage.getItem('gec_branch_image_overrides');
+      const map = saved ? JSON.parse(saved) : {};
+      map[selectedBranchId] = publicUrl;
+      localStorage.setItem('gec_branch_image_overrides', JSON.stringify(map));
+    } catch {}
+
+    setBranchesList(prev => prev.map(b => b.id === selectedBranchId ? {
+      ...b,
+      imageUrl: publicUrl,
+      pastorPhoto: publicUrl
+    } : b));
+
+    setBranchImageFile(null);
+    setBranchImagePreview(null);
+    if (branchFileInputRef.current) branchFileInputRef.current.value = '';
+
+    setUploadingBranchImage(false);
+    setBranchUploadProgress(100);
+    setBranchImageSuccess(`Successfully uploaded and updated photo for ${currentBranch?.name || 'the branch'}!`);
+
+    window.dispatchEvent(new Event('gec_branches_updated'));
+
+    setTimeout(() => {
+      setBranchUploadProgress(0);
+    }, 1500);
+
+  } catch (err: any) {
+    console.error('Error during branch image upload:', err);
+    setBranchImageError(err?.message || 'An unexpected error occurred during branch image upload.');
+    setUploadingBranchImage(false);
+    setBranchUploadProgress(0);
+  }
+};
+
+const handleResetBranchToDefault = async (branchId: string) => {
+  const defaultBranch = ministryBranches.find(b => b.id === branchId);
+  if (!defaultBranch) return;
+
+  const currentBranch = branchesList.find(b => b.id === branchId);
+  const currentImageUrl = currentBranch?.imageUrl || currentBranch?.pastorPhoto || '';
+
+  setBranchImageError(null);
+  setBranchImageSuccess(null);
+
+  try {
+    if (supabase && isSupabaseConfigured) {
+      // Upsert default pastor photo into database
+      await supabase
+        .from('branches')
+        .upsert({
+          id: branchId,
+          name: defaultBranch.name,
+          pastor_photo: defaultBranch.pastorPhoto,
+          image_url: defaultBranch.pastorPhoto,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' });
+
+      // Clean up custom image from storage if applicable
+      if (currentImageUrl.includes('/branch-images/branches/' + branchId + '/')) {
+        try {
+          const oldPath = currentImageUrl.split('/branch-images/')[1]?.split('?')[0];
+          if (oldPath) {
+            await supabase.storage.from('branch-images').remove([oldPath]);
+          }
+        } catch {}
+      }
+    }
+
+    try {
+      const saved = localStorage.getItem('gec_branch_image_overrides');
+      const map = saved ? JSON.parse(saved) : {};
+      delete map[branchId];
+      localStorage.setItem('gec_branch_image_overrides', JSON.stringify(map));
+    } catch {}
+
+    setBranchesList(prev => prev.map(b => b.id === branchId ? {
+      ...b,
+      imageUrl: defaultBranch.pastorPhoto,
+      pastorPhoto: defaultBranch.pastorPhoto
+    } : b));
+
+    setBranchImageSuccess(`Reset image for ${defaultBranch.name} to default photo.`);
+    window.dispatchEvent(new Event('gec_branches_updated'));
+  } catch (err: any) {
+    setBranchImageError(`Failed to reset branch photo: ${err?.message || err}`);
+  }
+};
+
   // Add Gallery Handler
   const handleAddGallery = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1930,6 +2259,64 @@ DROP POLICY IF EXISTS "Allow admin delete storage Teachings" ON storage.objects;
 CREATE POLICY "Allow admin delete storage Teachings" 
 ON storage.objects FOR DELETE TO authenticated 
 USING (bucket_id = 'Teachings' AND public.is_admin());
+
+-- 6. Branches Table & Policies:
+CREATE TABLE IF NOT EXISTS public.branches (
+  id TEXT PRIMARY KEY,
+  name TEXT,
+  pastor_photo TEXT,
+  image_url TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.branches ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow public select branches" ON public.branches;
+CREATE POLICY "Allow public select branches"
+ON public.branches FOR SELECT TO anon, authenticated, public
+USING (true);
+
+DROP POLICY IF EXISTS "Allow admin insert branches" ON public.branches;
+CREATE POLICY "Allow admin insert branches"
+ON public.branches FOR INSERT TO authenticated
+WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "Allow admin update branches" ON public.branches;
+CREATE POLICY "Allow admin update branches"
+ON public.branches FOR UPDATE TO authenticated
+USING (public.is_admin())
+WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "Allow admin delete branches" ON public.branches;
+CREATE POLICY "Allow admin delete branches"
+ON public.branches FOR DELETE TO authenticated
+USING (public.is_admin());
+
+-- 7. Storage Bucket & Policies: "branch-images"
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('branch-images', 'branch-images', true) 
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+DROP POLICY IF EXISTS "Allow public select storage branch-images" ON storage.objects;
+CREATE POLICY "Allow public select storage branch-images" 
+ON storage.objects FOR SELECT TO anon, authenticated, public 
+USING (bucket_id = 'branch-images');
+
+DROP POLICY IF EXISTS "Allow admin insert storage branch-images" ON storage.objects;
+CREATE POLICY "Allow admin insert storage branch-images" 
+ON storage.objects FOR INSERT TO authenticated 
+WITH CHECK (bucket_id = 'branch-images' AND public.is_admin());
+
+DROP POLICY IF EXISTS "Allow admin update storage branch-images" ON storage.objects;
+CREATE POLICY "Allow admin update storage branch-images" 
+ON storage.objects FOR UPDATE TO authenticated 
+USING (bucket_id = 'branch-images' AND public.is_admin())
+WITH CHECK (bucket_id = 'branch-images' AND public.is_admin());
+
+DROP POLICY IF EXISTS "Allow admin delete storage branch-images" ON storage.objects;
+CREATE POLICY "Allow admin delete storage branch-images" 
+ON storage.objects FOR DELETE TO authenticated 
+USING (bucket_id = 'branch-images' AND public.is_admin());
 `;
 
   const copyToClipboard = () => {
@@ -2241,6 +2628,18 @@ USING (bucket_id = 'Teachings' AND public.is_admin());
                   >
                     <Calendar className="h-4 w-4 text-sky-400" />
                     <span>MANAGE EVENTS ({eventsList.length})</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveSubTab('branches')}
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
+                      activeSubTab === 'branches' 
+                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
+                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
+                    }`}
+                  >
+                    <Building2 className="h-4 w-4 text-emerald-400" />
+                    <span>MANAGE BRANCHES ({branchesList.length})</span>
                   </button>
 
                   <button
@@ -3527,6 +3926,367 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                           </button>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Branches Management Tab */}
+              {activeSubTab === 'branches' && (
+                <div className="space-y-6">
+                  {/* Status Notifications */}
+                  {branchImageError && (
+                    <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-2xl text-xs text-red-300 flex flex-col gap-2">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold font-mono">
+                            {branchImageError === 'RLS_STORAGE_ERROR'
+                              ? 'Supabase Storage Permission Error (RLS)'
+                              : branchImageError === 'RLS_DB_ERROR'
+                              ? 'Supabase Database Permission Error (RLS)'
+                              : 'Branch Image Upload Error'}
+                          </p>
+                          <p className="mt-1 text-slate-300 leading-relaxed">
+                            {branchImageError === 'RLS_STORAGE_ERROR'
+                              ? 'Your Supabase "branch-images" storage bucket requires RLS policies allowing authenticated admin uploads.'
+                              : branchImageError === 'RLS_DB_ERROR'
+                              ? 'The "branches" database table requires RLS policies allowing authenticated admin upserts.'
+                              : branchImageError}
+                          </p>
+                        </div>
+                      </div>
+
+                      {(branchImageError === 'RLS_STORAGE_ERROR' || branchImageError === 'RLS_DB_ERROR') && (
+                        <div className="mt-2 bg-rich-black/90 p-3 rounded-xl border border-red-500/20">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-[10px] font-mono text-amber-400">Required SQL for Supabase Editor:</span>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(sqlSetupScript);
+                                setCopiedBranchSql(true);
+                                setTimeout(() => setCopiedBranchSql(false), 2000);
+                              }}
+                              className="text-[10px] font-mono text-sky-400 hover:text-sky-300 flex items-center gap-1 bg-midnight-blue/50 px-2 py-0.5 rounded cursor-pointer"
+                            >
+                              <Clipboard className="h-3 w-3" />
+                              {copiedBranchSql ? 'Copied!' : 'Copy SQL'}
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-mono">
+                            Please execute the setup SQL in your Supabase dashboard SQL Editor to enable bucket & table permissions.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {branchImageSuccess && (
+                    <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-xs text-emerald-300 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+                        <span className="font-semibold">{branchImageSuccess}</span>
+                      </div>
+                      <button
+                        onClick={() => setBranchImageSuccess(null)}
+                        className="text-slate-400 hover:text-white p-1 rounded-lg"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Branch Photo Upload Card */}
+                  <div className="bg-charcoal/45 border border-midnight-blue rounded-2xl p-6 sm:p-8">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-midnight-blue pb-4">
+                      <div className="flex items-center gap-2.5">
+                        <Building2 className="h-5 w-5 text-emerald-400" />
+                        <div>
+                          <h3 className="font-display font-bold text-lg text-white">
+                            Upload Branch & Pastor Photo
+                          </h3>
+                          <p className="text-xs text-slate-400">
+                            Upload custom photos to Supabase Storage (<code className="text-amber-400">branch-images</code>) and link them to church branches.
+                          </p>
+                        </div>
+                      </div>
+                      <span className="self-start sm:self-auto px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-xs font-mono font-bold">
+                        {branchesList.length} Total Branches
+                      </span>
+                    </div>
+
+                    <form onSubmit={handleUploadBranchImage} className="space-y-6">
+                      {/* Step 1: Branch Selector */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-2">
+                            Select Church Branch / Cell Location *
+                          </label>
+                          <select
+                            value={selectedBranchId}
+                            onChange={(e) => {
+                              setSelectedBranchId(e.target.value);
+                              setBranchImageError(null);
+                              setBranchImageSuccess(null);
+                            }}
+                            className="w-full bg-rich-black/95 border border-midnight-blue focus:border-emerald-500 rounded-xl py-3 px-4 text-xs text-white focus:outline-none transition-all cursor-pointer font-sans"
+                          >
+                            {branchesList.map((branch) => (
+                              <option key={branch.id} value={branch.id} className="bg-[#0B1120] text-white py-1">
+                                {branch.name} — {branch.city} ({branch.residentPastor})
+                              </option>
+                            ))}
+                          </select>
+
+                          {/* Selected Branch Overview Info */}
+                          {(() => {
+                            const cur = branchesList.find(b => b.id === selectedBranchId) || ministryBranches.find(b => b.id === selectedBranchId);
+                            if (!cur) return null;
+                            return (
+                              <div className="mt-4 p-4 rounded-xl bg-rich-black/60 border border-midnight-blue/70 space-y-2 text-xs">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-[10px] font-mono text-slate-400 uppercase">Resident Pastor:</span>
+                                  <span className="font-bold text-white">{cur.residentPastor}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-[10px] font-mono text-slate-400 uppercase">Location:</span>
+                                  <span className="text-slate-300 font-mono text-[11px]">{cur.city}, {cur.region}</span>
+                                </div>
+                                <div className="flex justify-between items-start gap-2">
+                                  <span className="text-[10px] font-mono text-slate-400 uppercase shrink-0">Address:</span>
+                                  <span className="text-slate-400 text-right text-[11px] truncate max-w-[220px]">{cur.address}</span>
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+
+                        {/* Current Photo Preview vs New Preview */}
+                        <div>
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-2">
+                            Current Active Photo & Live Preview
+                          </label>
+                          
+                          {(() => {
+                            const cur = branchesList.find(b => b.id === selectedBranchId) || ministryBranches.find(b => b.id === selectedBranchId);
+                            const photoSrc = cur?.imageUrl || cur?.pastorPhoto || '';
+                            const isCustomUploaded = photoSrc.includes('/storage/v1/object/public/branch-images/') || photoSrc.includes('branch-images');
+
+                            return (
+                              <div className="flex items-center gap-4 p-4 rounded-xl bg-rich-black/60 border border-midnight-blue/70">
+                                <div className="relative shrink-0">
+                                  <img
+                                    src={branchImagePreview || photoSrc}
+                                    alt={cur?.residentPastor || 'Branch Pastor'}
+                                    referrerPolicy="no-referrer"
+                                    className="w-24 h-24 rounded-2xl object-cover border-2 border-emerald-500/40 shadow-md bg-slate-900"
+                                  />
+                                  {branchImagePreview && (
+                                    <span className="absolute -bottom-2 -right-1 px-2 py-0.5 bg-amber-500 text-black text-[9px] font-mono font-bold rounded-full shadow">
+                                      New Preview
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="flex-1 min-w-0 space-y-1.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold tracking-wider uppercase border ${
+                                      isCustomUploaded 
+                                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                        : 'bg-blue-500/15 text-blue-300 border-blue-500/30'
+                                    }`}>
+                                      {isCustomUploaded ? 'Supabase Storage' : 'Default Preset'}
+                                    </span>
+                                  </div>
+                                  <h4 className="text-sm font-bold text-white truncate">{cur?.name}</h4>
+                                  <p className="text-xs text-slate-400 truncate">{cur?.residentPastor}</p>
+                                  
+                                  {isCustomUploaded && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleResetBranchToDefault(selectedBranchId)}
+                                      className="text-[10px] text-red-400 hover:text-red-300 underline font-mono cursor-pointer pt-1 block"
+                                    >
+                                      Revert to default preset
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
+
+                      {/* Step 2: Choose File Area */}
+                      <div>
+                        <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-2">
+                          Select Image File (JPG, PNG, WebP — Max 5 MB) *
+                        </label>
+
+                        <div className="border-2 border-dashed border-midnight-blue hover:border-emerald-500/50 rounded-2xl p-6 text-center bg-rich-black/40 transition-all">
+                          <input
+                            ref={branchFileInputRef}
+                            type="file"
+                            accept="image/jpeg,image/jpg,image/png,image/webp"
+                            onChange={handleBranchFileSelect}
+                            className="hidden"
+                            id="branch-image-file-input"
+                          />
+
+                          {branchImageFile ? (
+                            <div className="flex flex-col items-center justify-center gap-3">
+                              <div className="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+                                <CheckCircle2 className="h-6 w-6" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold text-white font-mono">{branchImageFile.name}</p>
+                                <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                  {(branchImageFile.size / (1024 * 1024)).toFixed(2)} MB • {branchImageFile.type}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <label
+                                  htmlFor="branch-image-file-input"
+                                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-mono cursor-pointer transition-all"
+                                >
+                                  Choose Different File
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setBranchImageFile(null);
+                                    setBranchImagePreview(null);
+                                    if (branchFileInputRef.current) branchFileInputRef.current.value = '';
+                                  }}
+                                  className="px-3 py-1.5 bg-red-500/15 text-red-400 hover:bg-red-500/25 rounded-lg text-xs font-mono transition-all"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <label
+                              htmlFor="branch-image-file-input"
+                              className="flex flex-col items-center justify-center gap-3 cursor-pointer group"
+                            >
+                              <div className="w-14 h-14 rounded-2xl bg-midnight-blue/50 text-slate-400 group-hover:text-emerald-400 group-hover:bg-emerald-500/10 flex items-center justify-center transition-all border border-midnight-blue">
+                                <Upload className="h-6 w-6" />
+                              </div>
+                              <div>
+                                <span className="text-xs font-bold text-white group-hover:text-emerald-400 transition-colors">
+                                  Click to browse or choose photo
+                                </span>
+                                <p className="text-[11px] text-slate-400 mt-1">
+                                  High-resolution photo of Pastor or Branch sanctuary (JPG, PNG, WebP)
+                                </p>
+                              </div>
+                            </label>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Upload Progress Bar */}
+                      {uploadingBranchImage && (
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-[11px] font-mono text-slate-300">
+                            <span className="flex items-center gap-1.5 text-emerald-400">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              Uploading to Supabase Storage (branch-images)...
+                            </span>
+                            <span>{branchUploadProgress}%</span>
+                          </div>
+                          <div className="w-full bg-rich-black rounded-full h-2 overflow-hidden border border-midnight-blue">
+                            <div
+                              className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full transition-all duration-300"
+                              style={{ width: `${branchUploadProgress}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Action Button */}
+                      <button
+                        type="submit"
+                        disabled={uploadingBranchImage || !branchImageFile}
+                        className="w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-xs font-bold uppercase tracking-wider text-white transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/30 disabled:opacity-50 cursor-pointer"
+                      >
+                        {uploadingBranchImage ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>Uploading & Updating Branch...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="h-4 w-4" />
+                            <span>Upload & Set Branch Image</span>
+                          </>
+                        )}
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* All Branches Visual Directory */}
+                  <div className="bg-charcoal/45 border border-midnight-blue rounded-2xl p-6">
+                    <div className="flex items-center justify-between gap-4 mb-4 pb-3 border-b border-midnight-blue">
+                      <div>
+                        <h3 className="font-display font-bold text-lg text-white">
+                          Branches & Cell Locations Directory ({branchesList.length})
+                        </h3>
+                        <p className="text-xs text-slate-400">
+                          Click on any branch card to select it for image updating.
+                        </p>
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-400">
+                        Live Preview Sync Active
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {branchesList.map((branch) => {
+                        const isSelected = branch.id === selectedBranchId;
+                        const photo = branch.imageUrl || branch.pastorPhoto;
+                        const isCustom = photo.includes('/storage/v1/object/public/branch-images/') || photo.includes('branch-images');
+
+                        return (
+                          <div
+                            key={branch.id}
+                            onClick={() => {
+                              setSelectedBranchId(branch.id);
+                              setBranchImageError(null);
+                              setBranchImageSuccess(null);
+                            }}
+                            className={`p-4 rounded-2xl border transition-all cursor-pointer flex gap-3.5 items-start ${
+                              isSelected
+                                ? 'bg-[#152238] border-emerald-500 shadow-lg shadow-emerald-950/40 ring-1 ring-emerald-500'
+                                : 'bg-rich-black/50 border-midnight-blue hover:border-slate-600 hover:bg-rich-black/80'
+                            }`}
+                          >
+                            <img
+                              src={photo}
+                              alt={branch.residentPastor}
+                              referrerPolicy="no-referrer"
+                              className="w-16 h-16 rounded-xl object-cover border border-midnight-blue shrink-0 shadow bg-slate-900"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`text-[8px] font-mono uppercase px-1.5 py-0.5 rounded font-bold ${
+                                  isCustom
+                                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                                    : 'bg-slate-800 text-slate-300 border border-slate-700'
+                                }`}>
+                                  {isCustom ? 'Uploaded Image' : 'Preset'}
+                                </span>
+                                <span className="text-[9px] font-mono text-slate-400">
+                                  {branch.city}
+                                </span>
+                              </div>
+                              <h4 className="text-xs font-bold text-white truncate mt-1">{branch.name}</h4>
+                              <p className="text-[11px] text-slate-300 truncate mt-0.5">{branch.residentPastor}</p>
+                              <p className="text-[10px] text-slate-400 font-mono truncate mt-1">{branch.contactPhone}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>

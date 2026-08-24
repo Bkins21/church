@@ -593,32 +593,35 @@ export default function Teachings({
         }, 1000);
       } else {
         if (!song.audio_url) {
-          throw new Error("Invalid audio URL");
+          throw new Error("Audio URL is not available");
         }
-        const response = await fetch(song.audio_url);
-        if (!response.ok) {
-          throw new Error("Failed to download audio");
+        try {
+          const response = await fetch(song.audio_url);
+          if (!response.ok) {
+            throw new Error("Failed to download audio");
+          }
+          const blob = await response.blob();
+          const urlWithoutQuery = song.audio_url.split("?")[0];
+          const extension = urlWithoutQuery.split(".").pop() || "mp3";
+          const downloadUrl = URL.createObjectURL(blob);
+
+          const link = document.createElement("a");
+          link.href = downloadUrl;
+          link.download = `${song.title}.${extension}`;
+
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+
+          setTimeout(() => {
+            URL.revokeObjectURL(downloadUrl);
+          }, 1000);
+        } catch {
+          window.open(song.audio_url, '_blank');
         }
-        const blob = await response.blob();
-        const urlWithoutQuery = song.audio_url.split("?")[0];
-        const extension = urlWithoutQuery.split(".").pop() || "mp3";
-        const downloadUrl = URL.createObjectURL(blob);
-
-        const link = document.createElement("a");
-        link.href = downloadUrl;
-        link.download = `${song.title}.${extension}`;
-
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-
-        setTimeout(() => {
-          URL.revokeObjectURL(downloadUrl);
-        }, 1000);
       }
     } catch (error: any) {
-      console.error("Download error:", error);
-      alert(`Download failed: ${error.message}`);
+      console.warn("Download fallback initiated:", error);
     } finally {
       setIsDownloading(prev => ({ ...prev, [teaching.id]: false }));
     }
