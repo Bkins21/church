@@ -91,7 +91,7 @@ export const ministryBranches: Branch[] = [
     },
     liveStreamUrl: 'https://mixlr.com/gec-yaba',
     mapEmbedSearch: 'Herbert Macaulay Way, Sabo, Yaba, Lagos'
-  }
+  },
 
    {
     id: 'gec-itori',
