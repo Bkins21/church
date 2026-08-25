@@ -651,16 +651,13 @@ export default function Teachings({
         </div>
 
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10 space-y-4">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#E8A238]/15 border border-[#E8A238]/30 text-[#E8A238] text-xs font-mono font-semibold tracking-wider uppercase shadow-sm">
-            <Flame className="h-3.5 w-3.5" />
-            <span>Crossword Media Center</span>
-          </div>
+         
           <h1 className="font-cinzel text-3xl sm:text-5xl font-bold tracking-tight text-[#F9F6F0]">
-            Sermon Teachings & Sound Doctrine
+          Sunday Teachings and Special Sermons
           </h1>
           <div className="w-20 h-1 bg-[#E8A238] mx-auto rounded-full shadow-sm shadow-[#E8A238]/50" />
           <p className="text-sm sm:text-base text-[#A89E92] leading-relaxed max-w-2xl mx-auto">
-            Feed your spirit with systematic teachings of the Gospel. Search through sermons preached by Pastor Abiodun Adebayo and Resident Pastors, and listen or download to your devices for study and meditation.
+            Listen to and download teachings for your edification
           </p>
         </div>
       </div>
