@@ -81,7 +81,7 @@ export default function Hero({ onNavigate }: HeroProps) {
       id: 'teachings',
       icon: Volume2,
       title: 'Get edified here',
-      description: 'Access Christ-centered sermons, theological publications, and worship music.',
+      description: 'Listen to, Read and Download our teachings, songs and publications as we trust God for your edification through them',
       cta: 'Explore Resources',
       cardBg: 'bg-gradient-to-br from-[#F59E0B] via-[#D97706] to-[#92400E] text-stone-950',
       cardBorder: 'border-[#FBBF24] hover:border-[#FEF08A]',
