@@ -6,10 +6,10 @@ export interface ChurchEvent {
   date: string;
   time: string;
   location: string;
-  mode: EventMode;
+  mode?: EventMode;
   banner: string;
-  description: string;
-  speaker: string;
+  description?: string;
+  speaker?: string;
   capacity?: number;
   registeredCount: number;
 }
@@ -45,8 +45,8 @@ export interface Publication {
 }
 
 export interface ServiceTimes {
-  sunday: string[];
-  midweek: string[];
+  sunday?: string[];
+  midweek?: string[];
 }
 
 export interface Branch {
@@ -60,7 +60,7 @@ export interface Branch {
   imageUrl?: string;
   contactEmail: string;
   contactPhone: string;
-  serviceTimes: ServiceTimes;
+  serviceTimes?: ServiceTimes;
   liveStreamUrl?: string;
   mapEmbedSearch: string; // Query for searching on map
 }

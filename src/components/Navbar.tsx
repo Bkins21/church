@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Menu, X, BookOpen, MapPin, Calendar, Music, Disc, Users } from 'lucide-react';
+import { Menu, X, BookOpen, MapPin, Calendar, Music, Disc, Users, Home } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface NavbarProps {
@@ -128,21 +128,38 @@ const navThemes: Record<string, {
     mobileMenuBg: '#11221B',
   },
   branches: {
-    bg: 'rgba(24, 31, 38, 0.92)',
-    bgScrolled: 'rgba(24, 31, 38, 0.98)',
-    border: '#32404E',
-    borderScrolled: '#425365',
-    logoColor: '#4FA3D1',
-    titleColor: '#F0F4F8',
-    inactiveText: '#95A7B8',
-    hoverText: '#FFFFFF',
-    hoverBg: 'rgba(255, 255, 255, 0.08)',
-    activeText: '#4FA3D1',
-    activeBg: 'rgba(79, 163, 209, 0.18)',
-    indicator: '#4FA3D1',
-    badgeBg: '#4FA3D1',
-    badgeText: '#0F172A',
-    mobileMenuBg: '#181F26',
+    bg: 'rgba(247, 245, 240, 0.92)',
+    bgScrolled: 'rgba(247, 245, 240, 0.98)',
+    border: '#E4DCD0',
+    borderScrolled: '#D8CEBF',
+    logoColor: '#A36B3B',
+    titleColor: '#3A2312',
+    inactiveText: '#6B5441',
+    hoverText: '#3A2312',
+    hoverBg: 'rgba(228, 220, 208, 0.5)',
+    activeText: '#A36B3B',
+    activeBg: 'rgba(163, 107, 59, 0.12)',
+    indicator: '#A36B3B',
+    badgeBg: '#A36B3B',
+    badgeText: '#FFFFFF',
+    mobileMenuBg: '#F7F5F0',
+  },
+  cells: {
+    bg: 'rgba(247, 245, 240, 0.92)',
+    bgScrolled: 'rgba(247, 245, 240, 0.98)',
+    border: '#E4DCD0',
+    borderScrolled: '#D8CEBF',
+    logoColor: '#A36B3B',
+    titleColor: '#3A2312',
+    inactiveText: '#6B5441',
+    hoverText: '#3A2312',
+    hoverBg: 'rgba(228, 220, 208, 0.5)',
+    activeText: '#A36B3B',
+    activeBg: 'rgba(163, 107, 59, 0.12)',
+    indicator: '#A36B3B',
+    badgeBg: '#A36B3B',
+    badgeText: '#FFFFFF',
+    mobileMenuBg: '#F7F5F0',
   }
 };
 

@@ -5,9 +5,7 @@ import Meetings from './components/Meetings';
 import Teachings from './components/Teachings';
 import Publications from './components/Publications';
 import Branches from './components/Branches';
-import Gallery from './components/Gallery';
 import Footer from './components/Footer';
-import Cells from './components/Cells';
 import Songs from './components/Songs';
 import AboutUs from './components/AboutUs';
 import { teachingsCatalog } from './data';
@@ -448,15 +446,17 @@ export default function App() {
             )}
 
             {activeTab === 'branches' && (
-              <Branches />
-            )}
-
-            {activeTab === 'gallery' && (
-              <Gallery />
+              <Branches 
+                initialSubTab="branches" 
+                onSubTabChange={(subTab) => setActiveTab(subTab)} 
+              />
             )}
 
             {activeTab === 'cells' && (
-              <Cells />
+              <Branches 
+                initialSubTab="cells" 
+                onSubTabChange={(subTab) => setActiveTab(subTab)} 
+              />
             )}
 
             {activeTab === 'songs' && (

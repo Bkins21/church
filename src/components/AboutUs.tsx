@@ -9,32 +9,22 @@ export default function AboutUs({ onNavigate }: AboutUsProps) {
   const values = [
     {
       title: 'Belong',
-      subtitle: 'A True Spiritual Family',
-      description: 'We believe church is a home where believers find genuine community, unconditional love, and spiritual belonging in Jesus Christ.',
+      description: 'Connecting you into the family of God — finding true community, discovering your place, and growing in relationship with fellow believers and with Christ.',
       icon: Heart,
     },
     {
-      title: 'Built',
-      subtitle: 'Systematic Biblical Discipleship',
-      description: 'Equipping saints with clear, unapologetic, verse-by-verse Christocentric teaching to build unshakeable spiritual conviction.',
+      title: 'Build',
+      description: "Equipping you to become an effective minister of the Gospel of Christ — grounded in the Word, strengthened in prayer, bold in evangelism, and empowered by the demonstration of the Spirit.",
       icon: BookOpen,
     },
     {
-      title: 'Build',
-      subtitle: 'Kingdom Advance & Mission',
-      description: 'Empowering every member with gifts, character, and apostolic passion to reach their world and establish God’s kingdom.',
+      title: 'Become',
+      description: 'Growing up into the fullness of Christ, mature in faith, established in truth, and active in the work of ministry, building up the body of Christ in love.',
       icon: Users,
     }
   ];
 
-  const pillars = [
-    'Systematic Expository Preaching',
-    'Intense Corporate Prayer Culture',
-    'Warm Fellowship & Discipleship',
-    'Active Local Campus Missions',
-    'Passionate Christ-Centered Worship',
-    'Raising Future Ministry Leaders',
-  ];
+  
 
   return (
     <div className="min-h-screen bg-[#01406D] text-[#F5FEFE]" id="gec-about-page">
@@ -46,8 +36,7 @@ export default function AboutUs({ onNavigate }: AboutUsProps) {
           </h1>
           <div className="w-20 h-1 bg-[#01B4BA] mx-auto rounded-full" />
           <p className="text-base sm:text-lg text-[#F5FEFE]/85 font-sans leading-relaxed max-w-2xl mx-auto">
-            A vibrant apostolic ministry committed to raising mature disciples, establishing believers in the truth of God’s Word, and building lives on the unshakeable foundation of Christ.
-          </p>
+           We are a family held together by God  a bond that stands the test of time. We are a community of believers who stand together through every trial, edifying one another and growing together. That's our purpose for coming together.     </p>
         </div>
       </div>
 
@@ -56,13 +45,31 @@ export default function AboutUs({ onNavigate }: AboutUsProps) {
         <div className="rounded-3xl bg-[#013256] border border-[#01B4BA]/40 p-8 sm:p-12 shadow-xl text-center max-w-4xl mx-auto">
           <div className="space-y-4">
             <span className="text-xs font-mono font-bold uppercase tracking-widest text-[#01B4BA]">
-              Our Driving Apostolic Vision
+              Our Vision Statement
             </span>
-            <blockquote className="font-cinzel text-2xl sm:text-3xl lg:text-4xl font-bold text-[#F5FEFE] leading-tight">
-              "To See All Men Saved And Come To The Knowledge Of The Truth."
+            <blockquote className="font-cinzel text-xl sm:text-2xl lg:text-3xl font-bold text-[#F5FEFE] leading-relaxed">
+              "We have a mandate to raise men for Jesus, to bring more sons into the will and plan of God; through the reconciliation message. Christ sent us; we are set on a course and we are not looking back."
             </blockquote>
             <p className="text-xs sm:text-sm font-mono text-[#01B4BA] font-semibold">
-              1 Timothy 2:4 • God's Nurturing Place
+               God's Nurturing Place
+            </p>
+          </div>
+        </div>
+
+        {/* Mission Statement Banner */}
+        <div className="rounded-3xl bg-[#013256] border border-[#01B4BA]/40 p-8 sm:p-12 shadow-xl text-center max-w-4xl mx-auto">
+          <div className="space-y-4">
+            <span className="text-xs font-mono font-bold uppercase tracking-widest text-[#01B4BA]">
+              Our Mission Statement
+            </span>
+            <div className="font-cinzel text-lg sm:text-xl font-bold text-[#F5FEFE] leading-relaxed space-y-2 max-w-2xl mx-auto">
+              <p>• "We pray without ceasing"</p>
+              <p>• "We study God's word effectively"</p>
+              <p>• "We reach the lost with the message of reconciliation"</p>
+              <p>• "We raise disciples; training them to pray, study and reach the lost"</p>
+            </div>
+            <p className="text-xs sm:text-sm font-mono text-[#01B4BA] font-semibold pt-2">
+               God's Nurturing Place
             </p>
           </div>
         </div>
@@ -97,9 +104,6 @@ export default function AboutUs({ onNavigate }: AboutUsProps) {
                       <h3 className="font-cinzel text-2xl font-bold text-[#F5FEFE]">
                         {val.title}
                       </h3>
-                      <p className="text-xs font-mono text-[#01B4BA] mt-0.5 font-bold uppercase tracking-wider">
-                        {val.subtitle}
-                      </p>
                     </div>
                     <p className="text-xs sm:text-sm text-[#F5FEFE]/85 leading-relaxed">
                       {val.description}
@@ -111,26 +115,7 @@ export default function AboutUs({ onNavigate }: AboutUsProps) {
           </div>
         </div>
 
-        {/* Core Pillars & Beliefs */}
-        <div className="rounded-3xl bg-[#013256] border border-[#01518A] p-8 sm:p-10 max-w-4xl mx-auto space-y-6 shadow-md">
-          <div className="text-center sm:text-left">
-            <h3 className="font-cinzel text-xl sm:text-2xl font-bold text-[#F5FEFE]">
-              What We Emphasize
-            </h3>
-            <p className="text-xs text-[#F5FEFE]/75 mt-1">
-              Key tenets that shape our church life across all branches
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {pillars.map((item, idx) => (
-              <div key={idx} className="flex items-center gap-3 p-3.5 rounded-xl bg-[#01406D] border border-[#01518A]">
-                <CheckCircle2 className="h-4 w-4 text-[#01B4BA] shrink-0" />
-                <span className="text-xs sm:text-sm text-[#F5FEFE] font-medium">{item}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        
 
         {/* Action Gateway */}
         <div className="text-center pt-4 space-y-4">

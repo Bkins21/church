@@ -8,6 +8,8 @@ export default function Footer({ activeTab = 'home' }: FooterProps) {
   const isSongs = activeTab === 'songs';
   const isAbout = activeTab === 'about';
   const isPublications = activeTab === 'publications';
+  const isBranches = activeTab === 'branches';
+  const isCells = activeTab === 'cells';
 
   // Dynamic palette colors for Footer based on activeTab
   let footerBg = 'bg-[#141416]';
@@ -41,6 +43,22 @@ export default function Footer({ activeTab = 'home' }: FooterProps) {
     btnIconColor = '#01406D';
     linkHoverClass = 'hover:text-[#01B4BA]';
     creditColor = 'rgba(245, 254, 254, 0.6)';
+  } else if (isBranches || isCells) {
+    // Branches & Cells portal palette: 70% Beige, 20% Brown, 10% White
+    footerBg = 'bg-[#F7F5F0]';
+    footerBorder = 'border-[#E4DCD0]';
+    footerText = 'text-[#6B5441]';
+    headingColor = 'text-[#3A2312]';
+    logoColor = 'text-[#A36B3B]';
+    subtitleColor = '#A36B3B';
+    accentColor = '#A36B3B';
+    descColor = 'text-[#6B5441]';
+    legalBorder = 'border-[#E4DCD0]';
+    legalText = 'text-[#8A7463]';
+    btnClass = 'bg-[#A36B3B] border-[#A36B3B] hover:bg-[#8D5A30] text-white shadow-sm font-semibold';
+    btnIconColor = '#FFFFFF';
+    linkHoverClass = 'hover:text-[#A36B3B]';
+    creditColor = '#8A7463';
   } else if (isSongs) {
     footerBg = 'bg-[#172836]';
     footerBorder = 'border-[#F1F6F4]/15';
@@ -115,12 +133,9 @@ export default function Footer({ activeTab = 'home' }: FooterProps) {
                 className="block text-[9px] leading-[2.0] font-mono font-bold text-left w-full mb-2 uppercase tracking-wider"
                 style={{ color: accentColor }}
               >
-                "To see all men saved and come to the knowledge of truth."
+                "God's Nurturing place"
               </span>
-              <span className="block text-left">
-                Anchored in the finished work of Christ, training the believer for evangelical boldness, theological speed, and daily prayerful discipline.
-              </span>
-            </p>
+              </p>
           </div>
 
           {/* Column 2: Headquarters */}
@@ -131,11 +146,11 @@ export default function Footer({ activeTab = 'home' }: FooterProps) {
             <ul className="space-y-3.5 text-xs">
               <li className="flex items-start gap-2.5">
                 <MapPin className="h-4 w-4 shrink-0 mt-0.5" style={{ color: accentColor }} />
-                <span>God's Edifice Hall, Macjob Secondary school, onikolobo, oluwo junction, Abeokuta, Ogun state</span>
+                <span>God's Edifice Hall, Macjob Secondary school, Onikolobo, Oluwo junction, Abeokuta, Ogun state</span>
               </li>
               <li className="flex items-center gap-2.5">
                 <Phone className="h-4 w-4 shrink-0" style={{ color: accentColor }} />
-                <span>+234 809 999 8888</span>
+                <span>+234 707 695 8715</span>
               </li>
               <li className="flex items-center gap-2.5">
                 <Mail className="h-4 w-4 shrink-0" style={{ color: accentColor }} />

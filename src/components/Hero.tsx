@@ -64,7 +64,7 @@ export default function Hero({ onNavigate }: HeroProps) {
       id: 'about',
       icon: Users,
       title: 'Who are we?',
-      description: 'Discover our story, mission, and apostolic commission as God\'s spiritual family.',
+      description: 'Discover our vision, mission, and spiritual mandate as God\'s Edifice Church',
       cta: 'Learn About Us',
       cardBg: 'bg-gradient-to-br from-[#8E1B24] via-[#78141B] to-[#4F0D13] text-white',
       cardBorder: 'border-[#A3232C] hover:border-[#FECDD3]',
@@ -197,7 +197,7 @@ export default function Hero({ onNavigate }: HeroProps) {
               transition={{ duration: 0.6 }}
               className="font-cinzel text-2xl sm:text-4xl md:text-5xl lg:text-5xl font-bold tracking-normal text-white leading-tight drop-shadow-2xl"
             >
-              Belong. Built. Build
+              Belong. Build. Become.
             </motion.h1>
 
             {/* Welcome Home with smooth staggered expanding and collapsing motion from center */}
@@ -358,7 +358,7 @@ export default function Hero({ onNavigate }: HeroProps) {
                 Edifice Conference 2026
               </h3>
               <p className="text-xs sm:text-sm text-[#54575E]">
-                October 28th – November 1st, 2026 • In-Person & Global Broadcast
+                October 28th – November 1st, 2026 
               </p>
             </div>
 
