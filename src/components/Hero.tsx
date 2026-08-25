@@ -437,42 +437,7 @@ export default function Hero({ onNavigate }: HeroProps) {
           </div>
         </div>
 
-        {/* Weekly Gathering Times Summary (Warm Editorial) */}
-        <div className="mt-14 p-6 rounded-2xl bg-white border border-[#E4DCD0] max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-around gap-6 text-center sm:text-left shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-[#F0EBE1] text-[#A36B3B] shrink-0 border border-[#E4DCD0]">
-              <Clock className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-[10px] text-[#8A8E96] font-mono uppercase tracking-wider">Sunday Worship Service</p>
-              <p className="text-xs font-bold text-[#141416]">Every Sunday • 9:00 AM</p>
-            </div>
-          </div>
-
-          <div className="hidden sm:block w-px h-8 bg-[#E4DCD0]" />
-
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-[#F0EBE1] text-[#A36B3B] shrink-0 border border-[#E4DCD0]">
-              <BookOpen className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-[10px] text-[#8A8E96] font-mono uppercase tracking-wider">Midweek Service</p>
-              <p className="text-xs font-bold text-[#141416]">Every Wednesday • 5:00 PM</p>
-            </div>
-          </div>
-
-          <div className="hidden sm:block w-px h-8 bg-[#E4DCD0]" />
-
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-[#F0EBE1] text-[#A36B3B] shrink-0 border border-[#E4DCD0]">
-              <MapPin className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-[10px] text-[#8A8E96] font-mono uppercase tracking-wider">5 Church Branches</p>
-              <p className="text-xs font-bold text-[#141416]">Abeokuta, Lagos & Environs</p>
-            </div>
-          </div>
-        </div>
+        
 
       </div>
     </div>
