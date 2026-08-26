@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from 'react';
-import { Calendar, MapPin, Clock, User, Mail, Phone, Ticket, QrCode, Printer, ChevronLeft, CheckCircle2, Trash2, ArrowRight, ShieldCheck, Sparkles, Building2, Check } from 'lucide-react';
+import { Calendar, MapPin, Clock, User, Mail, Phone, Ticket, QrCode, Printer, ChevronLeft, CheckCircle2, Trash2, ArrowRight, ShieldCheck, Sparkles, Building2 } from 'lucide-react';
 import { Registration, ChurchEvent } from '../types';
 import { upcomingMeetings } from '../data';
 import { motion, AnimatePresence } from 'motion/react';
@@ -185,11 +185,11 @@ export default function Meetings({
   };
 
   return (
-    <div className="w-full bg-[#F5EFEB] text-[#121814] py-12 transition-colors duration-300" id="meetings-view">
+    <div className="w-full bg-[#F5EFEB] text-[#0F172A] py-12 transition-colors duration-300" id="meetings-view">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <AnimatePresence mode="wait">
           
-          {/* Ticket Detail / Active Ticket View (60% Beige, 30% Green, 10% Black) */}
+          {/* Ticket Detail / Active Ticket View (Beige Base, Deep Blue Accents, White) */}
           {activeTicket && (
             <motion.div
               key="ticket-view"
@@ -202,7 +202,7 @@ export default function Meetings({
               <div className="flex justify-between items-center mb-6 no-print">
                 <button
                   onClick={() => setActiveTicket(null)}
-                  className="flex items-center gap-2 text-[#2C3E35] hover:text-[#0D3D2E] font-medium transition-colors py-2"
+                  className="flex items-center gap-2 text-[#334155] hover:text-[#0F172A] font-medium transition-colors py-2"
                 >
                   <ChevronLeft className="h-4 w-4" />
                   <span>Back to Meetings</span>
@@ -224,7 +224,7 @@ export default function Meetings({
                   )}
                   <button
                     onClick={handlePrint}
-                    className="flex items-center gap-2 bg-[#0F4C3A] hover:bg-[#0D3D2E] text-[#FAF7F2] px-4 py-2 rounded-xl text-xs font-bold shadow-md transition-colors"
+                    className="flex items-center gap-2 bg-[#0F172A] hover:bg-[#1E3A8A] text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md transition-colors"
                   >
                     <Printer className="h-4 w-4" />
                     <span>Print Pass</span>
@@ -232,25 +232,25 @@ export default function Meetings({
                 </div>
               </div>
 
-              {/* Skeuomorphic Boarding Pass / Ticket (Beige Base + Green Banner + Black Accents) */}
+              {/* Skeuomorphic Boarding Pass / Ticket (Beige Base + Deep Blue Banner + White Accents) */}
               <div className="bg-[#FAF7F2] border-2 border-[#E1D6C7] rounded-3xl overflow-hidden shadow-2xl relative">
-                {/* Top Banner Green Accent */}
-                <div className="h-3 bg-gradient-to-r from-[#0D3D2E] via-[#107C55] to-[#0D3D2E]" />
+                {/* Top Banner Deep Blue Accent */}
+                <div className="h-3 bg-gradient-to-r from-[#0F172A] via-[#1E3A8A] to-[#0F172A]" />
                 
                 {/* Ticket Body */}
                 <div className="p-8">
                   {/* Header */}
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-[#E1D6C7] pb-6 mb-6 gap-4">
                     <div>
-                      <span className="text-xs font-mono tracking-wider text-[#107C55] uppercase font-bold">
+                      <span className="text-xs font-mono tracking-wider text-[#1E3A8A] uppercase font-bold">
                         Official Attendance Pass
                       </span>
-                      <h3 className="text-xl sm:text-2xl font-display font-black text-[#121814] tracking-tight mt-1">
+                      <h3 className="text-xl sm:text-2xl font-display font-black text-[#0F172A] tracking-tight mt-1">
                         {activeTicket.eventTitle}
                       </h3>
                     </div>
-                    <div className="bg-[#107C55]/15 border border-[#107C55]/30 text-[#0F4C3A] rounded-full px-4 py-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide">
-                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#107C55]" />
+                    <div className="bg-[#1E3A8A]/10 border border-[#1E3A8A]/20 text-[#0F172A] rounded-full px-4 py-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide">
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#1E3A8A]" />
                       <span>Registered ({activeTicket.mode})</span>
                     </div>
                   </div>
@@ -259,31 +259,31 @@ export default function Meetings({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                     <div className="space-y-4">
                       <div>
-                        <span className="text-[10px] font-mono text-[#5E6862] uppercase tracking-wider block">Attendee Name</span>
-                        <span className="text-base font-bold text-[#121814] block">{activeTicket.userName}</span>
+                        <span className="text-[10px] font-mono text-[#64748B] uppercase tracking-wider block">Attendee Name</span>
+                        <span className="text-base font-bold text-[#0F172A] block">{activeTicket.userName}</span>
                       </div>
                       <div>
-                        <span className="text-[10px] font-mono text-[#5E6862] uppercase tracking-wider block">Email Address</span>
-                        <span className="text-sm text-[#232B25] block truncate">{activeTicket.userEmail}</span>
+                        <span className="text-[10px] font-mono text-[#64748B] uppercase tracking-wider block">Email Address</span>
+                        <span className="text-sm text-[#334155] block truncate">{activeTicket.userEmail}</span>
                       </div>
                       <div>
-                        <span className="text-[10px] font-mono text-[#5E6862] uppercase tracking-wider block">Phone Number</span>
-                        <span className="text-sm text-[#232B25] block">{activeTicket.userPhone || 'Not Provided'}</span>
+                        <span className="text-[10px] font-mono text-[#64748B] uppercase tracking-wider block">Phone Number</span>
+                        <span className="text-sm text-[#334155] block">{activeTicket.userPhone || 'Not Provided'}</span>
                       </div>
                     </div>
 
                     <div className="space-y-4">
                       <div>
-                        <span className="text-[10px] font-mono text-[#5E6862] uppercase tracking-wider block">Registering From</span>
-                        <span className="text-sm text-[#0F4C3A] block font-bold">{activeTicket.userBranch}</span>
+                        <span className="text-[10px] font-mono text-[#64748B] uppercase tracking-wider block">Registering From</span>
+                        <span className="text-sm text-[#1E3A8A] block font-bold">{activeTicket.userBranch}</span>
                       </div>
                       <div>
-                        <span className="text-[10px] font-mono text-[#5E6862] uppercase tracking-wider block">Event Date</span>
-                        <span className="text-sm text-[#232B25] block">{activeTicket.eventDate}</span>
+                        <span className="text-[10px] font-mono text-[#64748B] uppercase tracking-wider block">Event Date</span>
+                        <span className="text-sm text-[#334155] block">{activeTicket.eventDate}</span>
                       </div>
                       <div>
-                        <span className="text-[10px] font-mono text-[#5E6862] uppercase tracking-wider block">Location / Venue</span>
-                        <span className="text-sm text-[#232B25] block line-clamp-2">{activeTicket.eventLocation}</span>
+                        <span className="text-[10px] font-mono text-[#64748B] uppercase tracking-wider block">Location / Venue</span>
+                        <span className="text-sm text-[#334155] block line-clamp-2">{activeTicket.eventLocation}</span>
                       </div>
                     </div>
                   </div>
@@ -297,21 +297,21 @@ export default function Meetings({
                   {/* QR Code and Code Footer */}
                   <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
                     <div className="text-center sm:text-left">
-                      <span className="text-[10px] font-mono text-[#5E6862] uppercase tracking-wider block">Unique Ticket ID</span>
-                      <span className="text-xl font-mono font-bold text-[#121814] tracking-widest block mt-1">
+                      <span className="text-[10px] font-mono text-[#64748B] uppercase tracking-wider block">Unique Ticket ID</span>
+                      <span className="text-xl font-mono font-bold text-[#0F172A] tracking-widest block mt-1">
                         {activeTicket.ticketCode}
                       </span>
-                      <span className="text-[11px] text-[#5E6862] mt-1 block">Registered on: {activeTicket.registrationDate}</span>
+                      <span className="text-[11px] text-[#64748B] mt-1 block">Registered on: {activeTicket.registrationDate}</span>
                     </div>
                     
                     {/* QR Code */}
                     <div className="p-3 bg-white border border-[#E1D6C7] rounded-2xl shrink-0 flex items-center justify-center relative shadow-sm">
-                      <QrCode className="h-28 w-28 text-[#121814]" />
+                      <QrCode className="h-28 w-28 text-[#0F172A]" />
                     </div>
                   </div>
 
                   <div className="mt-8 pt-6 border-t border-[#E1D6C7] text-center no-print">
-                    <p className="text-xs text-[#5E6862] max-w-md mx-auto">
+                    <p className="text-xs text-[#64748B] max-w-md mx-auto">
                       Please present this digital pass or a printed copy at the reception desk for verification.
                     </p>
                   </div>
@@ -320,7 +320,7 @@ export default function Meetings({
             </motion.div>
           )}
 
-          {/* Registration Form View (60% Beige, 30% Green, 10% Black) */}
+          {/* Registration Form View (Beige Base, Deep Blue Accents, White) */}
           {selectedEvent && !activeTicket && (
             <motion.div
               key="register-form"
@@ -332,35 +332,35 @@ export default function Meetings({
             >
               <button
                 onClick={() => setSelectedEvent(null)}
-                className="flex items-center gap-2 text-[#2C3E35] hover:text-[#0D3D2E] font-medium transition-colors mb-6 py-2"
+                className="flex items-center gap-2 text-[#334155] hover:text-[#0F172A] font-medium transition-colors mb-6 py-2"
               >
                 <ChevronLeft className="h-4 w-4" />
                 <span>Back to Meetings</span>
               </button>
 
               <div className="bg-[#FAF7F2] border-2 border-[#E1D6C7] rounded-3xl p-6 sm:p-10 shadow-xl overflow-hidden relative">
-                {/* Decorative green accent blur */}
-                <div className="absolute top-0 right-0 w-40 h-40 bg-[#107C55]/10 rounded-full blur-3xl pointer-events-none" />
+                {/* Decorative deep blue accent blur */}
+                <div className="absolute top-0 right-0 w-40 h-40 bg-[#1E3A8A]/10 rounded-full blur-3xl pointer-events-none" />
                 
                 <div className="mb-8 border-b border-[#E1D6C7] pb-6">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#107C55]/10 border border-[#107C55]/20 text-[#0F4C3A] rounded-full text-[11px] font-mono uppercase font-bold tracking-wider mb-2">
-                    <Sparkles className="h-3 w-3 text-[#107C55]" />
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#1E3A8A]/10 border border-[#1E3A8A]/20 text-[#0F172A] rounded-full text-[11px] font-mono uppercase font-bold tracking-wider mb-2">
+                    <Sparkles className="h-3 w-3 text-[#1E3A8A]" />
                     <span>Conference Registration Form</span>
                   </div>
-                  <h3 className="text-2xl sm:text-3xl font-display font-black text-[#121814] tracking-tight">
+                  <h3 className="text-2xl sm:text-3xl font-display font-black text-[#0F172A] tracking-tight">
                     {selectedEvent.title}
                   </h3>
-                  <div className="flex flex-wrap gap-y-2 gap-x-5 mt-4 text-xs text-[#334239] font-medium">
+                  <div className="flex flex-wrap gap-y-2 gap-x-5 mt-4 text-xs text-[#334155] font-medium">
                     <span className="flex items-center gap-1.5">
-                      <Calendar className="h-3.5 w-3.5 text-[#107C55]" />
+                      <Calendar className="h-3.5 w-3.5 text-[#1E3A8A]" />
                       {selectedEvent.date}
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <Clock className="h-3.5 w-3.5 text-[#107C55]" />
+                      <Clock className="h-3.5 w-3.5 text-[#1E3A8A]" />
                       {selectedEvent.time}
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <MapPin className="h-3.5 w-3.5 text-[#107C55] shrink-0" />
+                      <MapPin className="h-3.5 w-3.5 text-[#1E3A8A] shrink-0" />
                       {selectedEvent.location}
                     </span>
                   </div>
@@ -371,34 +371,34 @@ export default function Meetings({
                   {/* Name section */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-xs font-mono text-[#121814] uppercase tracking-wider mb-2 font-bold">
+                      <label className="block text-xs font-mono text-[#0F172A] uppercase tracking-wider mb-2 font-bold">
                         First Name <span className="text-red-600">*</span>
                       </label>
                       <div className="relative">
-                        <User className="absolute left-4 top-3.5 h-4 w-4 text-[#5E6862]" />
+                        <User className="absolute left-4 top-3.5 h-4 w-4 text-[#64748B]" />
                         <input
                           type="text"
                           value={firstName}
                           onChange={(e) => setFirstName(e.target.value)}
                           placeholder="John"
-                          className="w-full bg-white border border-[#D5C9B7] focus:border-[#107C55] focus:ring-1 focus:ring-[#107C55] rounded-xl py-3 pl-11 pr-4 text-sm text-[#121814] placeholder-[#8A928B] focus:outline-none transition-colors shadow-sm"
+                          className="w-full bg-white border border-[#D5C9B7] focus:border-[#1E3A8A] focus:ring-1 focus:ring-[#1E3A8A] rounded-xl py-3 pl-11 pr-4 text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none transition-colors shadow-sm"
                         />
                       </div>
                       {errors.firstName && <span className="text-red-600 text-xs mt-1 block font-mono font-medium">{errors.firstName}</span>}
                     </div>
 
                     <div>
-                      <label className="block text-xs font-mono text-[#121814] uppercase tracking-wider mb-2 font-bold">
+                      <label className="block text-xs font-mono text-[#0F172A] uppercase tracking-wider mb-2 font-bold">
                         Surname / Last Name <span className="text-red-600">*</span>
                       </label>
                       <div className="relative">
-                        <User className="absolute left-4 top-3.5 h-4 w-4 text-[#5E6862]" />
+                        <User className="absolute left-4 top-3.5 h-4 w-4 text-[#64748B]" />
                         <input
                           type="text"
                           value={surname}
                           onChange={(e) => setSurname(e.target.value)}
                           placeholder="Doe"
-                          className="w-full bg-white border border-[#D5C9B7] focus:border-[#107C55] focus:ring-1 focus:ring-[#107C55] rounded-xl py-3 pl-11 pr-4 text-sm text-[#121814] placeholder-[#8A928B] focus:outline-none transition-colors shadow-sm"
+                          className="w-full bg-white border border-[#D5C9B7] focus:border-[#1E3A8A] focus:ring-1 focus:ring-[#1E3A8A] rounded-xl py-3 pl-11 pr-4 text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none transition-colors shadow-sm"
                         />
                       </div>
                       {errors.surname && <span className="text-red-600 text-xs mt-1 block font-mono font-medium">{errors.surname}</span>}
@@ -408,34 +408,34 @@ export default function Meetings({
                   {/* Email and Phone */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-xs font-mono text-[#121814] uppercase tracking-wider mb-2 font-bold">
+                      <label className="block text-xs font-mono text-[#0F172A] uppercase tracking-wider mb-2 font-bold">
                         Email Address <span className="text-red-600">*</span>
                       </label>
                       <div className="relative">
-                        <Mail className="absolute left-4 top-3.5 h-4 w-4 text-[#5E6862]" />
+                        <Mail className="absolute left-4 top-3.5 h-4 w-4 text-[#64748B]" />
                         <input
                           type="email"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           placeholder="john.doe@example.com"
-                          className="w-full bg-white border border-[#D5C9B7] focus:border-[#107C55] focus:ring-1 focus:ring-[#107C55] rounded-xl py-3 pl-11 pr-4 text-sm text-[#121814] placeholder-[#8A928B] focus:outline-none transition-colors shadow-sm"
+                          className="w-full bg-white border border-[#D5C9B7] focus:border-[#1E3A8A] focus:ring-1 focus:ring-[#1E3A8A] rounded-xl py-3 pl-11 pr-4 text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none transition-colors shadow-sm"
                         />
                       </div>
                       {errors.email && <span className="text-red-600 text-xs mt-1 block font-mono font-medium">{errors.email}</span>}
                     </div>
 
                     <div>
-                      <label className="block text-xs font-mono text-[#121814] uppercase tracking-wider mb-2 font-bold">
+                      <label className="block text-xs font-mono text-[#0F172A] uppercase tracking-wider mb-2 font-bold">
                         Phone Number <span className="text-red-600">*</span>
                       </label>
                       <div className="relative">
-                        <Phone className="absolute left-4 top-3.5 h-4 w-4 text-[#5E6862]" />
+                        <Phone className="absolute left-4 top-3.5 h-4 w-4 text-[#64748B]" />
                         <input
                           type="tel"
                           value={phone}
                           onChange={(e) => setPhone(e.target.value)}
                           placeholder="+234 ..."
-                          className="w-full bg-white border border-[#D5C9B7] focus:border-[#107C55] focus:ring-1 focus:ring-[#107C55] rounded-xl py-3 pl-11 pr-4 text-sm text-[#121814] placeholder-[#8A928B] focus:outline-none transition-colors shadow-sm"
+                          className="w-full bg-white border border-[#D5C9B7] focus:border-[#1E3A8A] focus:ring-1 focus:ring-[#1E3A8A] rounded-xl py-3 pl-11 pr-4 text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none transition-colors shadow-sm"
                         />
                       </div>
                       {errors.phone && <span className="text-red-600 text-xs mt-1 block font-mono font-medium">{errors.phone}</span>}
@@ -444,9 +444,9 @@ export default function Meetings({
 
                   {/* Branch selector: Which of our branches are you registering from */}
                   <div>
-                    <label className="block text-xs font-mono text-[#121814] uppercase tracking-wider mb-2 font-bold flex items-center justify-between">
+                    <label className="block text-xs font-mono text-[#0F172A] uppercase tracking-wider mb-2 font-bold flex items-center justify-between">
                       <span className="flex items-center gap-1.5">
-                        <Building2 className="h-3.5 w-3.5 text-[#107C55]" />
+                        <Building2 className="h-3.5 w-3.5 text-[#1E3A8A]" />
                         <span>Which of our branches are you registering from?</span> <span className="text-red-600">*</span>
                       </span>
                     </label>
@@ -454,13 +454,13 @@ export default function Meetings({
                       <select
                         value={branch}
                         onChange={(e) => setBranch(e.target.value)}
-                        className="w-full bg-white border border-[#D5C9B7] focus:border-[#107C55] focus:ring-1 focus:ring-[#107C55] rounded-xl py-3.5 px-4 text-sm text-[#121814] font-medium focus:outline-none transition-colors shadow-sm appearance-none cursor-pointer"
+                        className="w-full bg-white border border-[#D5C9B7] focus:border-[#1E3A8A] focus:ring-1 focus:ring-[#1E3A8A] rounded-xl py-3.5 px-4 text-sm text-[#0F172A] font-medium focus:outline-none transition-colors shadow-sm appearance-none cursor-pointer"
                       >
                         {branches.map((b) => (
-                          <option key={b} value={b} className="bg-white text-[#121814] py-1">{b}</option>
+                          <option key={b} value={b} className="bg-white text-[#0F172A] py-1">{b}</option>
                         ))}
                       </select>
-                      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-[#107C55] font-bold text-xs">
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-[#1E3A8A] font-bold text-xs">
                         ▼
                       </div>
                     </div>
@@ -468,7 +468,7 @@ export default function Meetings({
 
                   {/* Residential Address - Required if physical */}
                   <div>
-                    <label className="block text-xs font-mono text-[#121814] uppercase tracking-wider mb-2 font-bold">
+                    <label className="block text-xs font-mono text-[#0F172A] uppercase tracking-wider mb-2 font-bold">
                       Residential Address {mode === 'physical' && <span className="text-red-600">*</span>}
                     </label>
                     <textarea
@@ -476,7 +476,7 @@ export default function Meetings({
                       onChange={(e) => setAddress(e.target.value)}
                       placeholder="Provide your city or full residential address..."
                       rows={2}
-                      className="w-full bg-white border border-[#D5C9B7] focus:border-[#107C55] focus:ring-1 focus:ring-[#107C55] rounded-xl py-3 px-4 text-sm text-[#121814] placeholder-[#8A928B] focus:outline-none transition-colors resize-none shadow-sm"
+                      className="w-full bg-white border border-[#D5C9B7] focus:border-[#1E3A8A] focus:ring-1 focus:ring-[#1E3A8A] rounded-xl py-3 px-4 text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none transition-colors resize-none shadow-sm"
                     />
                     {errors.address && <span className="text-red-600 text-xs mt-1 block font-mono font-medium">{errors.address}</span>}
                   </div>
@@ -484,13 +484,13 @@ export default function Meetings({
                   {/* Demographics */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-xs font-mono text-[#121814] uppercase tracking-wider mb-2 font-bold">
+                      <label className="block text-xs font-mono text-[#0F172A] uppercase tracking-wider mb-2 font-bold">
                         Age Range
                       </label>
                       <select
                         value={ageRange}
                         onChange={(e) => setAgeRange(e.target.value)}
-                        className="w-full bg-white border border-[#D5C9B7] focus:border-[#107C55] focus:ring-1 focus:ring-[#107C55] rounded-xl py-3 px-4 text-sm text-[#121814] focus:outline-none transition-colors shadow-sm cursor-pointer"
+                        className="w-full bg-white border border-[#D5C9B7] focus:border-[#1E3A8A] focus:ring-1 focus:ring-[#1E3A8A] rounded-xl py-3 px-4 text-sm text-[#0F172A] focus:outline-none transition-colors shadow-sm cursor-pointer"
                       >
                         <option value="">Select Age range (Optional)</option>
                         <option value="Under 18">Under 18</option>
@@ -502,13 +502,13 @@ export default function Meetings({
                     </div>
 
                     <div>
-                      <label className="block text-xs font-mono text-[#121814] uppercase tracking-wider mb-2 font-bold">
+                      <label className="block text-xs font-mono text-[#0F172A] uppercase tracking-wider mb-2 font-bold">
                         Gender
                       </label>
                       <select
                         value={gender}
                         onChange={(e) => setGender(e.target.value)}
-                        className="w-full bg-white border border-[#D5C9B7] focus:border-[#107C55] focus:ring-1 focus:ring-[#107C55] rounded-xl py-3 px-4 text-sm text-[#121814] focus:outline-none transition-colors shadow-sm cursor-pointer"
+                        className="w-full bg-white border border-[#D5C9B7] focus:border-[#1E3A8A] focus:ring-1 focus:ring-[#1E3A8A] rounded-xl py-3 px-4 text-sm text-[#0F172A] focus:outline-none transition-colors shadow-sm cursor-pointer"
                       >
                         <option value="">Select Gender (Optional)</option>
                         <option value="Male">Male</option>
@@ -519,7 +519,7 @@ export default function Meetings({
 
                   {/* expectations */}
                   <div>
-                    <label className="block text-xs font-mono text-[#121814] uppercase tracking-wider mb-2 font-bold">
+                    <label className="block text-xs font-mono text-[#0F172A] uppercase tracking-wider mb-2 font-bold">
                       What are your expectations or prayer requests?
                     </label>
                     <textarea
@@ -527,19 +527,19 @@ export default function Meetings({
                       onChange={(e) => setExpectations(e.target.value)}
                       placeholder="Share what you are believing God for at this conference..."
                       rows={3}
-                      className="w-full bg-white border border-[#D5C9B7] focus:border-[#107C55] focus:ring-1 focus:ring-[#107C55] rounded-xl py-3 px-4 text-sm text-[#121814] placeholder-[#8A928B] focus:outline-none transition-colors resize-none shadow-sm"
+                      className="w-full bg-white border border-[#D5C9B7] focus:border-[#1E3A8A] focus:ring-1 focus:ring-[#1E3A8A] rounded-xl py-3 px-4 text-sm text-[#0F172A] placeholder-[#94A3B8] focus:outline-none transition-colors resize-none shadow-sm"
                     />
                   </div>
 
                   {/* how heard */}
                   <div>
-                    <label className="block text-xs font-mono text-[#121814] uppercase tracking-wider mb-2 font-bold">
+                    <label className="block text-xs font-mono text-[#0F172A] uppercase tracking-wider mb-2 font-bold">
                       How did you hear about this meeting?
                     </label>
                     <select
                       value={howHeard}
                       onChange={(e) => setHowHeard(e.target.value)}
-                      className="w-full bg-white border border-[#D5C9B7] focus:border-[#107C55] focus:ring-1 focus:ring-[#107C55] rounded-xl py-3 px-4 text-sm text-[#121814] focus:outline-none transition-colors shadow-sm cursor-pointer"
+                      className="w-full bg-white border border-[#D5C9B7] focus:border-[#1E3A8A] focus:ring-1 focus:ring-[#1E3A8A] rounded-xl py-3 px-4 text-sm text-[#0F172A] focus:outline-none transition-colors shadow-sm cursor-pointer"
                     >
                       <option value="">Select Option (Optional)</option>
                       <option value="Church Service Announcement">Church Service Announcement</option>
@@ -564,12 +564,12 @@ export default function Meetings({
                     </div>
                   )}
 
-                  {/* Submit Button (Green 30% Theme Accent) */}
+                  {/* Submit Button (Deep Blue Theme) */}
                   <div className="pt-4">
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="w-full py-4 rounded-xl font-display font-bold text-sm tracking-wider bg-[#0F4C3A] hover:bg-[#0D3D2E] disabled:opacity-60 disabled:cursor-not-allowed text-[#FAF7F2] flex items-center justify-center gap-2 shadow-lg shadow-[#0F4C3A]/25 transition-all transform hover:-translate-y-0.5"
+                      className="w-full py-4 rounded-xl font-display font-bold text-sm tracking-wider bg-[#0F172A] hover:bg-[#1E3A8A] disabled:opacity-60 disabled:cursor-not-allowed text-white flex items-center justify-center gap-2 shadow-lg shadow-[#0F172A]/25 transition-all transform hover:-translate-y-0.5"
                     >
                       {isSubmitting ? (
                         <>
@@ -578,7 +578,7 @@ export default function Meetings({
                         </>
                       ) : (
                         <>
-                          <Ticket className="h-4 w-4 text-[#FAF7F2]" />
+                          <Ticket className="h-4 w-4 text-white" />
                           <span>Complete Registration</span>
                         </>
                       )}
@@ -590,7 +590,7 @@ export default function Meetings({
             </motion.div>
           )}
 
-          {/* Catalog and Countdown (Active Meetings Dashboard - 60% Beige, 30% Green, 10% Black) */}
+          {/* Catalog and Countdown (Beige, Deep Blue, White) */}
           {!selectedEvent && !activeTicket && (
             <motion.div
               key="meetings-dashboard"
@@ -599,49 +599,46 @@ export default function Meetings({
               exit={{ opacity: 0 }}
               className="space-y-16"
             >
-              {/* Themed Header: Midnight Royal Navy & Radiant Amber Fire */}
+              {/* Themed Header: Deep Blue & Beige */}
               <div className="text-center max-w-3xl mx-auto mb-12 space-y-4">
-                <div className="inline-flex items-center gap-1.5 px-3.5 py-1 bg-[#F59E0B]/15 border border-[#F59E0B]/30 text-[#F59E0B] rounded-full text-xs font-mono uppercase font-bold tracking-wider shadow-sm">
-                  <Building2 className="h-3.5 w-3.5 text-[#F59E0B]" />
-                  <span>God's Edifice Church Gatherings</span>
-                </div>
-                <h2 className="font-cinzel text-3xl sm:text-5xl font-bold tracking-tight text-[#141A29]">
+                <h2 className="font-cinzel text-3xl sm:text-5xl font-bold tracking-tight text-[#0F172A]">
                   Upcoming Meetings & Conferences
                 </h2>
-                <div className="w-16 h-1 bg-[#F59E0B] mx-auto rounded-full shadow-sm shadow-[#F59E0B]/50" />
+                <div className="w-16 h-1 bg-[#1E3A8A] mx-auto rounded-full shadow-sm" />
                 <p className="text-sm sm:text-base text-[#475569] leading-relaxed">
-                  Register for our meetings, and join believers across our branches to get edified and trained for the ministry of our Lord Jesus                </p>
+                  Register for our meetings, and join believers across our branches to get edified and trained for the ministry of our Lord Jesus
+                </p>
               </div>
 
-              {/* Countdown Panel (Midnight Royal Navy + Radiant Amber Fire Accents) */}
-              <div className="relative overflow-hidden bg-gradient-to-br from-[#141A29] via-[#1E2738] to-[#101522] border-2 border-[#2A3654] rounded-3xl p-6 sm:p-10 shadow-2xl text-white" id="hero-countdown-panel">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-[#F59E0B]/15 rounded-full blur-3xl pointer-events-none" />
+              {/* Countdown Panel (Deep Blue Container + Crisp White / Light Blue Accents) */}
+              <div className="relative overflow-hidden bg-gradient-to-br from-[#0B132B] via-[#141A29] to-[#0F172A] border-2 border-[#1E293B] rounded-3xl p-6 sm:p-10 shadow-2xl text-white" id="hero-countdown-panel">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-[#1E3A8A]/20 rounded-full blur-3xl pointer-events-none" />
                 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center relative z-10">
                   <div className="lg:col-span-7 space-y-4">
-                    <div className="inline-flex items-center gap-1.5 px-3.5 py-1 bg-[#F59E0B]/20 text-[#FBBF24] border border-[#F59E0B]/40 rounded-full text-[11px] font-mono uppercase font-black tracking-wider shadow-sm">
-                      <Sparkles className="h-3 w-3 text-[#F59E0B]" />
+                    <div className="inline-flex items-center gap-1.5 px-3.5 py-1 bg-[#1E3A8A]/40 text-[#BFDBFE] border border-[#3B82F6]/30 rounded-full text-[11px] font-mono uppercase font-bold tracking-wider shadow-sm">
+                      <Sparkles className="h-3 w-3 text-[#93C5FD]" />
                       <span>Our next special meeting is...</span>
                     </div>
-                    <h3 className="text-2xl sm:text-3xl lg:text-4xl font-cinzel font-black text-[#F0F4F8] tracking-tight">
+                    <h3 className="text-2xl sm:text-3xl lg:text-4xl font-cinzel font-black text-white tracking-tight">
                       Edifice Conference 2026
                     </h3>
                     <p className="text-sm text-[#CBD5E1] leading-relaxed max-w-xl">
                       Register now for the premier spiritual gathering of the year. Build a rigorous scriptural foundation, clarify Christian doctrines, and build intense prayer capacity with Pastor Abiodun Adebayo and guest ministers.
                     </p>
-                    <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-[#F0F4F8] font-semibold pt-2">
-                      <span className="flex items-center gap-1.5 bg-black/30 border border-white/10 px-3 py-1.5 rounded-lg">
-                        <Calendar className="h-3.5 w-3.5 text-[#F59E0B]" />
+                    <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-white font-semibold pt-2">
+                      <span className="flex items-center gap-1.5 bg-white/10 border border-white/15 px-3 py-1.5 rounded-lg">
+                        <Calendar className="h-3.5 w-3.5 text-[#93C5FD]" />
                         October 28th - November 1st, 2026
                       </span>
-                      <span className="flex items-center gap-1.5 bg-black/30 border border-white/10 px-3 py-1.5 rounded-lg">
-                        <MapPin className="h-3.5 w-3.5 text-[#F59E0B]" />
+                      <span className="flex items-center gap-1.5 bg-white/10 border border-white/15 px-3 py-1.5 rounded-lg">
+                        <MapPin className="h-3.5 w-3.5 text-[#93C5FD]" />
                         GEC Onikolobo & Branch Campuses
                       </span>
                     </div>
                   </div>
 
-                  {/* Countdown Timer Block (Midnight Background with Amber Digits) */}
+                  {/* Countdown Timer Block (Deep Blue with Crisp White Digits) */}
                   <div className="lg:col-span-5 flex flex-col items-center justify-center space-y-4">
                     <div className="grid grid-cols-4 gap-3 sm:gap-4 w-full">
                       {[
@@ -650,8 +647,8 @@ export default function Meetings({
                         { label: 'Minutes', value: countdown.minutes },
                         { label: 'Seconds', value: countdown.seconds }
                       ].map((item, i) => (
-                        <div key={i} className="flex flex-col items-center bg-[#0F1420]/80 border border-[#2A3654] rounded-2xl py-3 px-2 sm:py-4 shadow-md">
-                          <span className="text-2xl sm:text-3xl font-mono font-black text-[#F59E0B]">
+                        <div key={i} className="flex flex-col items-center bg-[#0B132B]/90 border border-[#1E293B] rounded-2xl py-3 px-2 sm:py-4 shadow-md">
+                          <span className="text-2xl sm:text-3xl font-mono font-black text-white">
                             {String(item.value).padStart(2, '0')}
                           </span>
                           <span className="text-[10px] font-mono text-[#94A3B8] uppercase font-bold tracking-wider mt-1.5">
@@ -667,9 +664,9 @@ export default function Meetings({
                           const pass = userRegistrations.find(r => r.eventId === 'edifice-conference-2026');
                           if (pass) setActiveTicket(pass);
                         }}
-                        className="w-full py-3.5 rounded-xl font-display font-bold text-xs uppercase tracking-wider bg-[#FAF7F2] hover:bg-white text-[#0D3D2E] flex items-center justify-center gap-2 transition-all shadow-md"
+                        className="w-full py-3.5 rounded-xl font-display font-bold text-xs uppercase tracking-wider bg-white hover:bg-[#F5EFEB] text-[#0F172A] flex items-center justify-center gap-2 transition-all shadow-md"
                       >
-                        <ShieldCheck className="h-4 w-4 text-[#107C55]" />
+                        <ShieldCheck className="h-4 w-4 text-[#1E3A8A]" />
                         <span>View My Active Pass</span>
                       </button>
                     ) : (
@@ -678,9 +675,9 @@ export default function Meetings({
                           const edificeEvent = upcomingMeetings.find(e => e.id === 'edifice-conference-2026');
                           if (edificeEvent) setSelectedEvent(edificeEvent);
                         }}
-                        className="w-full py-3.5 rounded-xl font-display font-black text-xs uppercase tracking-wider bg-[#FAF7F2] hover:bg-white text-[#0D3D2E] flex items-center justify-center gap-2 shadow-lg transition-all transform hover:-translate-y-0.5"
+                        className="w-full py-3.5 rounded-xl font-display font-black text-xs uppercase tracking-wider bg-white hover:bg-[#F5EFEB] text-[#0F172A] flex items-center justify-center gap-2 shadow-lg transition-all transform hover:-translate-y-0.5"
                       >
-                        <Ticket className="h-4 w-4 text-[#107C55]" />
+                        <Ticket className="h-4 w-4 text-[#1E3A8A]" />
                         <span>Register to Attend</span>
                       </button>
                     )}
@@ -688,14 +685,14 @@ export default function Meetings({
                 </div>
               </div>
 
-              {/* Upcoming Events Catalog List (Beige Cards, Green Accents, Black Typography) */}
+              {/* Upcoming Events Catalog List (Beige Cards, Deep Blue Accents, White) */}
               <div className="space-y-6">
                 <div className="flex items-center justify-between border-b border-[#E1D6C7] pb-4">
-                  <h3 className="font-display text-xl sm:text-2xl font-bold text-[#121814] tracking-tight flex items-center gap-2">
-                    <Calendar className="h-5 w-5 text-[#107C55]" />
+                  <h3 className="font-display text-xl sm:text-2xl font-bold text-[#0F172A] tracking-tight flex items-center gap-2">
+                    <Calendar className="h-5 w-5 text-[#1E3A8A]" />
                     <span>Event Calendar</span>
                   </h3>
-                  <span className="text-xs font-mono text-[#5E6862]">All GEC Branches</span>
+                  <span className="text-xs font-mono text-[#64748B]">All GEC Branches</span>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -706,7 +703,7 @@ export default function Meetings({
                     return (
                       <div
                         key={event.id}
-                        className="flex flex-col bg-[#FAF7F2] border-2 border-[#E1D6C7] hover:border-[#107C55]/60 rounded-3xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 group"
+                        className="flex flex-col bg-[#FAF7F2] border-2 border-[#E1D6C7] hover:border-[#1E3A8A]/60 rounded-3xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 group"
                       >
                         {/* Banner Image */}
                         <div className="h-48 overflow-hidden relative">
@@ -716,29 +713,29 @@ export default function Meetings({
                             referrerPolicy="no-referrer"
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                           />
-                          <div className="absolute inset-0 bg-gradient-to-t from-[#121814]/80 via-transparent to-transparent" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-[#0F172A]/80 via-transparent to-transparent" />
                           <div className="absolute bottom-3 left-4 right-4">
-                            <span className="inline-block bg-[#0D3D2E]/90 text-[#FAF7F2] text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-1 rounded-md">
+                            <span className="inline-block bg-[#0F172A]/90 text-white text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-1 rounded-md">
                               {event.date}
                             </span>
                           </div>
                         </div>
 
-                        {/* Card Content (60% Beige interior, 10% Black titles, 30% Green CTA) */}
+                        {/* Card Content (Beige interior, Deep Blue Titles & CTAs) */}
                         <div className="p-6 flex-1 flex flex-col justify-between space-y-4">
                           <div className="space-y-2">
-                            <h4 className="font-display text-lg sm:text-xl font-bold text-[#121814] leading-snug group-hover:text-[#0D3D2E] transition-colors">
+                            <h4 className="font-display text-lg sm:text-xl font-bold text-[#0F172A] leading-snug group-hover:text-[#1E3A8A] transition-colors">
                               {event.title}
                             </h4>
-                            <p className="text-xs text-[#3B443D] leading-relaxed line-clamp-3">
+                            <p className="text-xs text-[#334155] leading-relaxed line-clamp-3">
                               {event.description}
                             </p>
                           </div>
 
                           {/* Speaker & Meta info */}
-                          <div className="pt-2 border-t border-[#E1D6C7] space-y-2 text-xs text-[#334239]">
+                          <div className="pt-2 border-t border-[#E1D6C7] space-y-2 text-xs text-[#334155]">
                             <div className="flex items-center gap-1.5">
-                              <MapPin className="h-3.5 w-3.5 text-[#107C55] shrink-0" />
+                              <MapPin className="h-3.5 w-3.5 text-[#1E3A8A] shrink-0" />
                               <span className="truncate">{event.location}</span>
                             </div>
                           </div>
@@ -750,9 +747,9 @@ export default function Meetings({
                                 <div className="flex gap-2">
                                   <button
                                     onClick={() => setActiveTicket(regDetails)}
-                                    className="flex-1 py-3 bg-[#107C55]/15 hover:bg-[#107C55]/25 border border-[#107C55]/40 text-[#0F4C3A] rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors"
+                                    className="flex-1 py-3 bg-[#1E3A8A]/10 hover:bg-[#1E3A8A]/20 border border-[#1E3A8A]/30 text-[#0F172A] rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors"
                                   >
-                                    <Ticket className="h-4 w-4 text-[#107C55]" />
+                                    <Ticket className="h-4 w-4 text-[#1E3A8A]" />
                                     <span>My Pass / Code</span>
                                   </button>
                                 </div>
@@ -761,7 +758,7 @@ export default function Meetings({
                                   onClick={() => {
                                     setSelectedEvent(event);
                                   }}
-                                  className="w-full py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all bg-[#0F4C3A] hover:bg-[#0D3D2E] text-[#FAF7F2] shadow-md transform hover:-translate-y-0.5"
+                                  className="w-full py-3 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all bg-[#0F172A] hover:bg-[#1E3A8A] text-white shadow-md transform hover:-translate-y-0.5"
                                 >
                                   <span>Register to Attend</span>
                                   <ArrowRight className="h-3.5 w-3.5" />
@@ -770,7 +767,7 @@ export default function Meetings({
                             ) : (
                               <button
                                 disabled
-                                className="w-full py-3 bg-[#EAE2D5] border border-[#D5C9B7] text-[#8A928B] rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-not-allowed"
+                                className="w-full py-3 bg-[#EAE2D5] border border-[#D5C9B7] text-[#94A3B8] rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-not-allowed"
                               >
                                 <span>Registration Opens Later</span>
                               </button>
@@ -783,12 +780,12 @@ export default function Meetings({
                 </div>
               </div>
 
-              {/* My Active Passes Summary (Beige Cards, Green Icons, Black Headings) */}
+              {/* My Active Passes Summary (Beige Cards, Deep Blue Icons, Deep Blue Headings) */}
               {userRegistrations.length > 0 && (
                 <div className="pt-8 border-t border-[#E1D6C7] space-y-6">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <h3 className="font-display text-xl sm:text-2xl font-bold text-[#121814] tracking-tight flex items-center gap-2">
-                      <Ticket className="h-5 w-5 text-[#107C55]" />
+                    <h3 className="font-display text-xl sm:text-2xl font-bold text-[#0F172A] tracking-tight flex items-center gap-2">
+                      <Ticket className="h-5 w-5 text-[#1E3A8A]" />
                       <span>My Active Registration Passes ({userRegistrations.length})</span>
                     </h3>
                     {onClearRegistrations && (
@@ -815,20 +812,20 @@ export default function Meetings({
                       <button
                         key={pass.id}
                         onClick={() => setActiveTicket(pass)}
-                        className="flex items-center justify-between p-4 bg-[#FAF7F2] border-2 border-[#E1D6C7] hover:border-[#107C55] rounded-2xl shadow-sm hover:shadow-md transition-all group text-left"
+                        className="flex items-center justify-between p-4 bg-[#FAF7F2] border-2 border-[#E1D6C7] hover:border-[#1E3A8A] rounded-2xl shadow-sm hover:shadow-md transition-all group text-left"
                       >
                         <div className="space-y-1 pr-4 truncate">
-                          <span className="text-[9px] font-mono uppercase tracking-wider text-[#107C55] font-black">
+                          <span className="text-[9px] font-mono uppercase tracking-wider text-[#1E3A8A] font-black">
                             {pass.ticketCode}
                           </span>
-                          <h4 className="text-sm font-bold text-[#121814] truncate group-hover:text-[#0D3D2E] transition-colors">
+                          <h4 className="text-sm font-bold text-[#0F172A] truncate group-hover:text-[#1E3A8A] transition-colors">
                             {pass.eventTitle}
                           </h4>
-                          <span className="text-[11px] text-[#5E6862] block truncate">
+                          <span className="text-[11px] text-[#64748B] block truncate">
                             {pass.userName} • {pass.userBranch}
                           </span>
                         </div>
-                        <div className="bg-[#107C55]/10 group-hover:bg-[#107C55] text-[#107C55] group-hover:text-white p-2.5 rounded-xl transition-colors shrink-0">
+                        <div className="bg-[#1E3A8A]/10 group-hover:bg-[#1E3A8A] text-[#1E3A8A] group-hover:text-white p-2.5 rounded-xl transition-colors shrink-0">
                           <Ticket className="h-4 w-4" />
                         </div>
                       </button>
@@ -845,3 +842,4 @@ export default function Meetings({
     </div>
   );
 }
+

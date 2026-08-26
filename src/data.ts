@@ -64,7 +64,7 @@ export const ministryBranches: Branch[] = [
     residentPastor: 'Boluwatife Akintola',
     pastorPhoto: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?q=80&w=400&auto=format&fit=crop',
     contactEmail: 'onikolobo@godsedifice.org',
-    contactPhone: '+234 803 111 2222',
+    contactPhone: '+234 817 480 3005',
     
     liveStreamUrl: 'https://mixlr.com/gec-onikolobo',
     mapEmbedSearch: 'Onikolobo Road, Abeokuta, Ogun State'

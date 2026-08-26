@@ -359,9 +359,7 @@ export default function Hero({ onNavigate }: HeroProps) {
             
             <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
               <div className="space-y-2 text-center md:text-left">
-                <div className="inline-flex items-center gap-2 text-[#A36B3B] text-xs font-mono font-bold uppercase tracking-wider">
-                  <span>Next Flagship Gathering</span>
-                </div>
+                
                 <h3 className="font-display text-xl sm:text-2xl font-bold text-[#141416]">
                   Edifice Conference 2026
                 </h3>
