@@ -203,7 +203,7 @@ export default function Hero({ onNavigate }: HeroProps) {
       
       {/* SECTION 1: Full-Bleed Grand Architectural Viewport Hero */}
       <section 
-        className="relative w-full min-h-[calc(100svh-135px)] md:min-h-[calc(100svh-120px)] flex items-center justify-center overflow-hidden"
+        className="relative w-full min-h-[100svh] sm:min-h-[calc(100svh-120px)] flex items-center justify-center overflow-hidden"
         id="hero-main-viewport"
       >
         {/* Dynamic Motion Background Image Layer with Ken Burns Effect - Spanning 100% full width and height */}
@@ -233,7 +233,7 @@ export default function Hero({ onNavigate }: HeroProps) {
                   repeatType: "mirror",
                   ease: "easeInOut" 
                 }}
-                className="w-full h-full object-cover object-center filter brightness-60 contrast-110 will-change-transform"
+                className="w-full h-full object-cover object-center filter brightness-70 contrast-105 will-change-transform"
               />
             </motion.div>
           </AnimatePresence>
@@ -264,157 +264,81 @@ export default function Hero({ onNavigate }: HeroProps) {
             ))}
           </div>
 
-          {/* Full Edge-to-Edge Cinematic Gradient Overlays for Supreme Readability */}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#141416]/95 via-[#141416]/65 to-[#141416]/40 z-[2]" />
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_transparent_20%,_#141416_85%)] opacity-80 z-[2]" />
+          {/* Tasteful Premium Gradient Overlays - Dark tone transitioning to warm gold tone */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#141416]/95 via-[#141416]/60 to-[#141416]/40 z-[2]" />
+          <div className="absolute inset-0 bg-gradient-to-tr from-[#A36B3B]/25 via-transparent to-[#E6C35C]/15 mix-blend-screen pointer-events-none z-[2]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(20,20,22,0.25)_0%,_rgba(20,20,22,0.85)_100%)] pointer-events-none z-[2]" />
         </div>
 
         {/* Heading & Action Content Overlay - Centered Responsive Container */}
-        <div className="relative z-10 w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24 lg:py-32 flex flex-col items-center justify-center text-center space-y-6 sm:space-y-8">
+        <div className="relative z-10 w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-20 sm:py-24 lg:py-32 flex flex-col items-center justify-center text-center space-y-6 sm:space-y-8">
           
-          <motion.h1
-            initial={{ opacity: 0, y: 25 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="font-cinzel text-3xl sm:text-5xl md:text-6xl lg:text-6xl font-bold tracking-tight text-white leading-tight drop-shadow-2xl"
-          >
-            Belong. Build. Become.
-          </motion.h1>
-
-          {/* Welcome Home with smooth staggered expanding and collapsing motion from center */}
+          {/* Main Title: Mobile Vertical Stack / Desktop Horizontal Row */}
           <motion.div
-            initial={{ opacity: 0, y: 15 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-            className="w-full flex items-center justify-center overflow-visible py-2"
+            transition={{ duration: 0.7, ease: [0.25, 1, 0.5, 1] }}
+            className="font-cinzel font-bold text-white tracking-tight drop-shadow-2xl"
           >
-            <div className="relative flex items-center justify-center w-full max-w-4xl px-2 sm:px-4">
-              {/* Left spreading gold accent ray */}
-              <motion.span
-                animate={{
-                  scaleX: [0.2, 1, 0.2],
-                  opacity: [0.2, 0.85, 0.2],
-                }}
-                transition={{
-                  duration: 4.5,
-                  repeat: Infinity,
-                  ease: "easeInOut",
-                }}
-                className="hidden sm:block h-[1px] flex-1 bg-gradient-to-r from-transparent via-[#E6C35C]/60 to-[#E6C35C] origin-right mr-3 sm:mr-6"
-              />
+            {/* Mobile Vertical Stack */}
+            <h1 className="flex sm:hidden flex-col items-center justify-center space-y-2 text-4xl sm:text-5xl leading-tight">
+              <span>Belong.</span>
+              <span>Build.</span>
+              <span>Become.</span>
+            </h1>
+            {/* Desktop / Laptop Horizontal */}
+            <h1 className="hidden sm:block text-5xl md:text-6xl lg:text-7xl leading-tight">
+              Belong. Build. Become.
+            </h1>
+          </motion.div>
 
-              {/* Staggered outward expanding & collapsing container */}
-              <div className="flex items-center justify-center select-none">
-                {/* WELCOME - Letters expanding left from center with outward stagger */}
-                <div className="inline-flex items-center">
-                  {['W', 'E', 'L', 'C', 'O', 'M', 'E'].map((char, idx) => {
-                    const distFromCenter = 6 - idx + 1;
-                    const targetX = -distFromCenter * 5.2;
-                    const staggerDelay = (6 - idx) * 0.07;
+          {/* Welcome Home with elegant, smooth entrance animation and responsive gold line styling */}
+          <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.2, ease: [0.25, 1, 0.5, 1] }}
+            className="w-full flex flex-col items-center justify-center overflow-visible"
+          >
+            {/* Desktop / Laptop: Golden lines beside WELCOME HOME */}
+            <div className="hidden sm:flex items-center justify-center w-full max-w-2xl px-4">
+              <span className="h-[1px] flex-1 bg-gradient-to-r from-transparent via-[#E6C35C]/70 to-[#E6C35C] mr-4" />
+              <span className="text-sm md:text-base lg:text-lg font-sans font-medium text-white/95 uppercase tracking-[0.3em] drop-shadow-xl select-none whitespace-nowrap">
+                WELCOME HOME
+              </span>
+              <span className="h-[1px] flex-1 bg-gradient-to-l from-transparent via-[#E6C35C]/70 to-[#E6C35C] ml-4" />
+            </div>
 
-                    return (
-                      <motion.span
-                        key={`welcome-${idx}`}
-                        animate={{
-                          x: [0, targetX, 0],
-                          opacity: [0.8, 1, 0.8],
-                          scale: [1, 1.06, 1],
-                        }}
-                        transition={{
-                          duration: 4.5,
-                          repeat: Infinity,
-                          ease: "easeInOut",
-                          delay: staggerDelay,
-                        }}
-                        className="text-xs sm:text-sm md:text-base lg:text-lg font-sans font-medium text-white/95 uppercase drop-shadow-xl inline-block tracking-[0.2em] sm:tracking-[0.3em]"
-                      >
-                        {char}
-                      </motion.span>
-                    );
-                  })}
-                </div>
-
-                {/* Expanding & contracting center gap between Welcome and Home */}
-                <motion.span
-                  animate={{
-                    width: ["0.6rem", "2.2rem", "0.6rem"],
-                  }}
-                  transition={{
-                    duration: 4.5,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                  }}
-                  className="inline-block"
-                />
-
-                {/* HOME - Letters expanding right from center with outward stagger */}
-                <div className="inline-flex items-center">
-                  {['H', 'O', 'M', 'E'].map((char, idx) => {
-                    const distFromCenter = idx + 1;
-                    const targetX = distFromCenter * 8.5;
-                    const staggerDelay = idx * 0.07;
-
-                    return (
-                      <motion.span
-                        key={`home-${idx}`}
-                        animate={{
-                          x: [0, targetX, 0],
-                          opacity: [0.8, 1, 0.8],
-                          scale: [1, 1.06, 1],
-                        }}
-                        transition={{
-                          duration: 4.5,
-                          repeat: Infinity,
-                          ease: "easeInOut",
-                          delay: staggerDelay,
-                        }}
-                        className="text-xs sm:text-sm md:text-base lg:text-lg font-sans font-medium text-white/95 uppercase drop-shadow-xl inline-block tracking-[0.2em] sm:tracking-[0.3em]"
-                      >
-                        {char}
-                      </motion.span>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Right spreading gold accent ray */}
-              <motion.span
-                animate={{
-                  scaleX: [0.2, 1, 0.2],
-                  opacity: [0.2, 0.85, 0.2],
-                }}
-                transition={{
-                  duration: 4.5,
-                  repeat: Infinity,
-                  ease: "easeInOut",
-                }}
-                className="hidden sm:block h-[1px] flex-1 bg-gradient-to-l from-transparent via-[#E6C35C]/60 to-[#E6C35C] origin-left ml-3 sm:ml-6"
-              />
+            {/* Mobile: WELCOME HOME with golden decorative line BELOW it */}
+            <div className="flex sm:hidden flex-col items-center justify-center space-y-2.5 select-none">
+              <span className="text-xs font-sans font-medium text-white/95 uppercase tracking-[0.3em] drop-shadow-xl">
+                WELCOME HOME
+              </span>
+              <div className="w-24 h-[1.5px] bg-gradient-to-r from-transparent via-[#E6C35C] to-transparent rounded-full shadow-sm shadow-[#E6C35C]/50" />
             </div>
           </motion.div>
 
           {/* Primary Action Buttons (Warm Bronze & Editorial Translucent) */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.25 }}
-            className="flex flex-wrap items-center justify-center gap-4 sm:gap-5 pt-2 sm:pt-4"
+            transition={{ duration: 0.7, delay: 0.35, ease: [0.25, 1, 0.5, 1] }}
+            className="flex flex-col sm:flex-row items-center justify-center gap-3.5 sm:gap-5 w-full sm:w-auto pt-3 sm:pt-4"
           >
             <button
               onClick={() => onNavigate('meetings')}
-              className="px-8 sm:px-10 py-4 rounded-2xl font-display font-bold text-sm sm:text-base tracking-wide bg-[#A36B3B] hover:bg-[#8D5A30] text-white flex items-center justify-center gap-2.5 shadow-xl shadow-[#A36B3B]/30 hover:shadow-[#A36B3B]/45 transition-all cursor-pointer transform hover:-translate-y-0.5"
+              className="w-full sm:w-auto px-8 sm:px-10 py-4 rounded-2xl font-display font-bold text-sm sm:text-base tracking-wide bg-[#A36B3B] hover:bg-[#8D5A30] text-white flex items-center justify-center gap-2.5 shadow-xl shadow-[#A36B3B]/30 hover:shadow-[#A36B3B]/45 transition-all cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0"
               id="hero-btn-meetings"
             >
-              <Calendar className="h-5 w-5" />
+              <Calendar className="h-5 w-5 shrink-0" />
               <span>Register for Meetings</span>
             </button>
 
             <button
               onClick={() => onNavigate('teachings')}
-              className="px-8 sm:px-10 py-4 rounded-2xl font-display font-bold text-sm sm:text-base tracking-wide bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/30 hover:border-white text-white flex items-center justify-center gap-2.5 transition-all cursor-pointer transform hover:-translate-y-0.5 shadow-lg"
+              className="w-full sm:w-auto px-8 sm:px-10 py-4 rounded-2xl font-display font-bold text-sm sm:text-base tracking-wide bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/30 hover:border-white text-white flex items-center justify-center gap-2.5 transition-all cursor-pointer transform hover:-translate-y-0.5 active:translate-y-0 shadow-lg"
               id="hero-btn-teachings"
             >
-              <Music className="h-5 w-5 text-[#EFEAE1]" />
+              <Music className="h-5 w-5 text-[#EFEAE1] shrink-0" />
               <span>Listen to Teachings</span>
             </button>
           </motion.div>
