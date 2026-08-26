@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Registration } from '../types';
 import choirHeroBg from '../assets/images/gec_worship_choir_bg_1786828117713.jpg';
 import congregationHeroBg from '../assets/images/gec_hero_worship_bg_1786827665903.jpg';
+import { supabase, isSupabaseConfigured } from '../supabase';
 
 interface HeroProps {
   onNavigate: (tab: string) => void;
@@ -11,28 +12,112 @@ interface HeroProps {
   onStartRegistration?: (firstName: string, surname: string, email: string) => void;
 }
 
+interface HeroBackground {
+  src: string;
+  alt: string;
+}
+
+const FALLBACK_BACKGROUNDS: HeroBackground[] = [
+  {
+    src: choirHeroBg,
+    alt: "God's Edifice Church Choir & Crossworship Ministration",
+  },
+  {
+    src: congregationHeroBg,
+    alt: "God's Edifice Church Congregation Worship Atmosphere",
+  }
+];
+
+function formatAltText(filename: string): string {
+  const nameWithoutExt = filename.replace(/\.[^/.]+$/, '');
+  const cleaned = nameWithoutExt
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  const capitalized = cleaned
+    .split(' ')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+  
+  if (capitalized.toLowerCase().includes("god's edifice") || capitalized.toLowerCase().includes("gec")) {
+    return capitalized;
+  }
+  return `God's Edifice Church ${capitalized}`;
+}
+
 export default function Hero({ onNavigate }: HeroProps) {
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+  const [heroBackgrounds, setHeroBackgrounds] = useState<HeroBackground[]>(FALLBACK_BACKGROUNDS);
   const [currentBgIndex, setCurrentBgIndex] = useState(0);
 
-  const heroBackgrounds = [
-    {
-      src: choirHeroBg,
-      alt: "God's Edifice Church Choir & Crossworship Ministration",
-    },
-    {
-      src: congregationHeroBg,
-      alt: "God's Edifice Church Congregation Worship Atmosphere",
-    }
-  ];
-
-  // Rotate between worship atmosphere pictures smoothly
+  // Fetch dynamic hero images from Supabase Storage bucket "hero-images"
   useEffect(() => {
+    let isMounted = true;
+
+    const fetchHeroImages = async () => {
+      if (!isSupabaseConfigured || !supabase) return;
+
+      try {
+        const { data, error } = await supabase.storage
+          .from('hero-images')
+          .list('', {
+            limit: 100,
+            offset: 0,
+            sortBy: { column: 'name', order: 'asc' },
+          });
+
+        if (error) {
+          console.warn('Could not load hero images from Supabase:', error);
+          return;
+        }
+
+        if (!data || data.length === 0) return;
+
+        const validImageRegex = /\.(jpe?g|png|webp)$/i;
+        const validFiles = data
+          .filter((item: any) => item.name && validImageRegex.test(item.name))
+          .sort((a: any, b: any) => a.name.localeCompare(b.name));
+
+        if (validFiles.length === 0) return;
+
+        const dynamicBackgrounds: HeroBackground[] = validFiles.map((file: any) => {
+          const { data: urlData } = supabase.storage
+            .from('hero-images')
+            .getPublicUrl(file.name);
+
+          return {
+            src: urlData.publicUrl,
+            alt: formatAltText(file.name),
+          };
+        });
+
+        if (isMounted && dynamicBackgrounds.length > 0) {
+          setHeroBackgrounds(dynamicBackgrounds);
+          setCurrentBgIndex(0);
+        }
+      } catch (err) {
+        console.warn('Could not load hero images from Supabase:', err);
+      }
+    };
+
+    fetchHeroImages();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Rotate between worship atmosphere pictures smoothly every 7.5 seconds
+  useEffect(() => {
+    if (heroBackgrounds.length <= 1) return;
+
     const bgInterval = setInterval(() => {
       setCurrentBgIndex((prev) => (prev + 1) % heroBackgrounds.length);
     }, 7500);
+
     return () => clearInterval(bgInterval);
-  }, []);
+  }, [heroBackgrounds.length]);
 
   // Calculate dynamic countdown to Edifice Conference (October 28th, 2026, 9:00 AM)
   useEffect(() => {
@@ -98,7 +183,7 @@ export default function Hero({ onNavigate }: HeroProps) {
       id: 'branches',
       icon: MapPin,
       title: 'Worship with us',
-      description: 'Find a welcoming GEC campus near you in Onikolobo, Yaba, Magboro, FUNAAB, or Itori.',
+      description: 'Find the nearest assembly near you in Onikolobo, Yaba, Magboro, FUNAAB, or Itori.',
       cta: 'Find a Branch',
       cardBg: 'bg-gradient-to-br from-[#166534] via-[#0D4428] to-[#052E16] text-white',
       cardBorder: 'border-[#15803D] hover:border-[#86EFAC]',
@@ -137,8 +222,8 @@ export default function Hero({ onNavigate }: HeroProps) {
                 className="absolute inset-0 w-full h-full"
               >
                 <motion.img
-                  src={heroBackgrounds[currentBgIndex].src}
-                  alt={heroBackgrounds[currentBgIndex].alt}
+                  src={(heroBackgrounds[currentBgIndex] || heroBackgrounds[0])?.src}
+                  alt={(heroBackgrounds[currentBgIndex] || heroBackgrounds[0])?.alt}
                   referrerPolicy="no-referrer"
                   initial={{ scale: 1.02, x: 0, y: 0 }}
                   animate={{ 
