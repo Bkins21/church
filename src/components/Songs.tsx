@@ -390,47 +390,33 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
 
   return (
     <div 
-      className="min-h-screen text-[#F1F6F4] relative transition-colors duration-500"
-      style={{
-        background: '#172836'
-      }}
+      className="min-h-screen text-[#F7F5F0] relative transition-colors duration-500 bg-[#3A2312]"
+      id="songs-main-page"
     >
-      <div className="py-8 sm:py-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto font-sans relative z-10" id="songs-main-page">
+      <div className="py-8 sm:py-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto font-sans relative z-10">
         
-        {/* Header Banner with 70% #172836, 20% #F1F6F4, 10% #FFC801 Palette Accent */}
+        {/* Header Banner with 70% Brown (#3A2312), 20% Beige (#F7F5F0), 10% Bronze (#A36B3B) Palette Accent */}
         <div 
-          className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-6 pb-6 border-b"
-          style={{ borderColor: 'rgba(241, 246, 244, 0.15)' }}
+          className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-6 pb-6"
         >
           <div>
             <div className="flex items-center gap-2 mb-2">
               <span 
-                className="p-1.5 rounded-lg border shadow-sm flex items-center justify-center"
-                style={{
-                  background: '#0E1B26',
-                  borderColor: '#FFC801',
-                  color: '#FFC801'
-                }}
+                className="p-1.5 rounded-lg border shadow-sm flex items-center justify-center bg-[#25160B] border-[#E4DCD0]/30 text-[#F7F5F0]"
               >
                 <Music className="h-4 w-4" />
               </span>
-              <span className="text-xs font-bold tracking-widest uppercase flex items-center gap-1.5 text-[#FFC801]">
+              <span className="text-xs font-bold tracking-widest uppercase flex items-center gap-1.5 text-[#F7F5F0] font-mono">
                 Crossworship Ministry • God's Edifice Church
               </span>
             </div>
             
-            {/* Headline with custom Proportional Palette Accent Line */}
-            <h2 className="font-cinzel font-bold text-3xl sm:text-4xl text-[#F1F6F4] tracking-tight drop-shadow-sm">
+            {/* Headline */}
+            <h2 className="font-cinzel font-bold text-3xl sm:text-4xl text-[#F7F5F0] tracking-tight drop-shadow-sm">
               worship with us in Psalms and Spiritual songs
             </h2>
-            
-            <div className="mt-2 flex items-center gap-0.5 w-44 h-2 rounded-full overflow-hidden border border-[#F1F6F4]/30">
-              <div className="h-full w-[10%]" style={{ backgroundColor: '#FFC801' }} title="10% #FFC801" />
-              <div className="h-full w-[70%]" style={{ backgroundColor: '#172836' }} title="70% #172836" />
-              <div className="h-full w-[20%]" style={{ backgroundColor: '#F1F6F4' }} title="20% #F1F6F4" />
-            </div>
 
-            <p className="text-sm mt-2 max-w-2xl text-[#F1F6F4]/80 font-medium">
+            <p className="text-sm mt-3 max-w-2xl text-[#F7F5F0]/80 font-medium font-sans">
               Listen and get edified to Spiritual songs inspired by the Holy Ghost
             </p>
           </div>
@@ -440,16 +426,12 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
             <div className="flex items-center gap-3">
               <a
                 href="/crosswordmedia"
-                className="px-4 py-2.5 rounded-xl border text-[#172836] text-xs font-semibold flex items-center gap-2 transition-all shadow-md hover:bg-[#FFC801]/90"
-                style={{
-                  background: '#FFC801',
-                  borderColor: '#FFC801'
-                }}
+                className="px-4 py-2.5 rounded-xl border text-white text-xs font-semibold flex items-center gap-2 transition-all shadow-md bg-[#A37F3B] hover:bg-[#8F6D2F] border-[#A37F3B]"
                 title="Manage and upload songs in Admin Portal"
               >
-                <ShieldCheck className="h-4 w-4 text-[#172836]" />
+                <ShieldCheck className="h-4 w-4 text-white" />
                 <span>Admin Songs Manager</span>
-                <ExternalLink className="h-3 w-3 text-[#172836]" />
+                <ExternalLink className="h-3 w-3 text-white" />
               </a>
             </div>
           )}
@@ -463,54 +445,47 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
 
             {/* Search Box */}
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-[#FFC801]" />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-[#8A7463]" />
               <input
                 type="text"
                 placeholder="Search by song title, singer, album, or lyrics..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full border rounded-2xl py-3 pl-11 pr-4 text-xs sm:text-sm text-[#F1F6F4] placeholder-[#F1F6F4]/50 focus:outline-none focus:border-[#FFC801] transition-all shadow-md"
-                style={{
-                  background: '#0E1B26',
-                  borderColor: 'rgba(241, 246, 244, 0.2)'
-                }}
+                className="w-full border rounded-2xl py-3 pl-11 pr-4 text-xs sm:text-sm text-[#3A2312] placeholder-[#8A7463]/70 focus:outline-none focus:border-[#A37F3B] transition-all shadow-md border-[#E1D6C7]"
+                style={{ backgroundColor: 'rgba(247, 245, 240, 0.90)' }}
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono hover:underline px-2 py-1 text-[#FFC801]"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono hover:underline px-2 py-1 text-[#8A7463] hover:text-[#3A2312]"
                 >
                   Clear
                 </button>
               )}
             </div>
 
-            {/* Playlist Container with Refined Catalogue Layout */}
+            {/* Playlist Container in High-Contrast Warm Beige Layout */}
             <div 
-              className="border rounded-3xl p-4 sm:p-5 shadow-xl space-y-3"
-              style={{
-                background: '#0E1B26',
-                borderColor: 'rgba(241, 246, 244, 0.15)'
-              }}
+              className="border rounded-3xl p-4 sm:p-5 shadow-xl space-y-3 border-[#E1D6C7]"
+              style={{ backgroundColor: 'rgba(247, 245, 240, 0.90)' }}
             >
               {/* Header Bar */}
               <div 
-                className="flex items-center justify-between pb-3 px-3 border-b"
-                style={{ borderColor: 'rgba(241, 246, 244, 0.12)' }}
+                className="flex items-center justify-between pb-3 px-3 border-b border-[#E1D6C7]"
               >
                 <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#FFC801' }} />
-                  <span className="font-cinzel text-xs font-bold uppercase tracking-wider text-[#F1F6F4]">
+                  <span className="w-2 h-2 rounded-full bg-[#A37F3B]" />
+                  <span className="font-cinzel text-xs font-bold uppercase tracking-wider text-[#3A2312]">
                     Worship Catalogue
                   </span>
                 </div>
-                <span className="text-[11px] font-mono font-medium text-[#FFC801] px-2 py-0.5 rounded-md bg-[#172836] border border-[#FFC801]/30">
+                <span className="text-[11px] font-mono font-medium text-[#3A2312] px-2.5 py-0.5 rounded-md bg-white/70 border border-[#E1D6C7]">
                   {filteredPlaylist.length} {filteredPlaylist.length === 1 ? 'Track' : 'Tracks'}
                 </span>
               </div>
 
               {/* Column Titles for desktop */}
-              <div className="hidden sm:grid grid-cols-12 gap-3 px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-[#F1F6F4]/50 border-b border-[#F1F6F4]/5">
+              <div className="hidden sm:grid grid-cols-12 gap-3 px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-[#8A7463] border-b border-[#E1D6C7]/70">
                 <div className="col-span-1 text-center">#</div>
                 <div className="col-span-6">Title & Artist</div>
                 <div className="col-span-3">Album</div>
@@ -518,12 +493,12 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
               </div>
 
               {filteredPlaylist.length === 0 ? (
-                <div className="py-16 text-center text-[#F1F6F4]/70 space-y-3 px-4">
-                  <Music className="h-12 w-12 mx-auto" style={{ color: '#FFC801' }} />
-                  <p className="text-base font-semibold text-[#F1F6F4]">
+                <div className="py-16 text-center text-[#737C82] space-y-3 px-4">
+                  <Music className="h-12 w-12 mx-auto text-[#A37F3B]" />
+                  <p className="text-base font-semibold text-[#1C242B]">
                     {searchQuery ? 'No songs matching your search' : 'No songs currently in the catalog'}
                   </p>
-                  <p className="text-xs text-[#F1F6F4]/70 max-w-sm mx-auto">
+                  <p className="text-xs text-[#737C82] max-w-sm mx-auto">
                     {searchQuery
                       ? 'Try adjusting your search terms or clearing the filter.'
                       : 'Church administrators can upload audio tracks, worship anthems, and lyrics directly in the Admin Portal.'}
@@ -541,13 +516,13 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                         onClick={() => handleSelectSong(song)}
                         className={`group relative flex items-center justify-between p-2.5 sm:p-3 rounded-xl cursor-pointer transition-all duration-200 border ${
                           isCurrent
-                            ? 'shadow-md border-[#FFC801] bg-[#172836]'
-                            : 'hover:bg-[#132533] border-transparent hover:border-[#F1F6F4]/15 bg-[#0A141D]'
+                            ? 'shadow-md border-[#A37F3B] bg-white'
+                            : 'hover:bg-white/80 border-transparent hover:border-[#E1D6C7] bg-white/50'
                         }`}
                       >
                         {/* Active Accent Indicator Left Border */}
                         {isCurrent && (
-                          <div className="absolute left-0 top-2 bottom-2 w-1 rounded-r bg-[#FFC801]" />
+                          <div className="absolute left-0 top-2 bottom-2 w-1 rounded-r bg-[#A37F3B]" />
                         )}
 
                         <div className="flex items-center gap-3 min-w-0 flex-1 pl-1">
@@ -555,12 +530,12 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                           <div className="w-6 text-center shrink-0 flex items-center justify-center">
                             {isCurrentPlaying ? (
                               <div className="flex items-end gap-0.5 h-3.5">
-                                <span className="w-0.5 animate-[bounce_0.8s_infinite_100ms] h-full rounded-full bg-[#FFC801]" />
-                                <span className="w-0.5 animate-[bounce_0.8s_infinite_300ms] h-2/3 rounded-full bg-[#F1F6F4]" />
-                                <span className="w-0.5 animate-[bounce_0.8s_infinite_200ms] h-1/2 rounded-full bg-[#FFC801]" />
+                                <span className="w-0.5 animate-[bounce_0.8s_infinite_100ms] h-full rounded-full bg-[#A37F3B]" />
+                                <span className="w-0.5 animate-[bounce_0.8s_infinite_300ms] h-2/3 rounded-full bg-[#3A2312]" />
+                                <span className="w-0.5 animate-[bounce_0.8s_infinite_200ms] h-1/2 rounded-full bg-[#A37F3B]" />
                               </div>
                             ) : (
-                              <span className={`text-xs font-mono font-medium ${isCurrent ? 'text-[#FFC801] font-bold' : 'text-[#F1F6F4]/50 group-hover:text-[#F1F6F4]'}`}>
+                              <span className={`text-xs font-mono font-medium ${isCurrent ? 'text-[#A37F3B] font-bold' : 'text-[#8A7463] group-hover:text-[#3A2312]'}`}>
                                 {String(index + 1).padStart(2, '0')}
                               </span>
                             )}
@@ -568,8 +543,8 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
 
                           {/* Cover Artwork */}
                           <div 
-                            className="relative w-11 h-11 rounded-lg overflow-hidden shrink-0 border bg-[#050C12]"
-                            style={{ borderColor: isCurrent ? '#FFC801' : 'rgba(241, 246, 244, 0.15)' }}
+                            className="relative w-11 h-11 rounded-lg overflow-hidden shrink-0 border bg-[#FAF7F2]"
+                            style={{ borderColor: isCurrent ? '#A37F3B' : 'rgba(225, 214, 199, 0.9)' }}
                           >
                             <img
                               src={song.coverUrl || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&auto=format&fit=crop'}
@@ -577,13 +552,13 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                               referrerPolicy="no-referrer"
                             />
-                            <div className={`absolute inset-0 bg-[#172836]/70 flex items-center justify-center transition-opacity ${
+                            <div className={`absolute inset-0 bg-[#3A2312]/60 flex items-center justify-center transition-opacity ${
                               isCurrent ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                             }`}>
                               {isCurrentPlaying ? (
-                                <Pause className="h-4 w-4 fill-current text-[#FFC801]" />
+                                <Pause className="h-4 w-4 fill-current text-white" />
                               ) : (
-                                <Play className="h-4 w-4 fill-current text-[#FFC801] ml-0.5" />
+                                <Play className="h-4 w-4 fill-current text-white ml-0.5" />
                               )}
                             </div>
                           </div>
@@ -592,26 +567,26 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                           <div className="min-w-0 flex-1 pr-2">
                             <div className="flex items-center gap-2">
                               <h4 className={`text-xs sm:text-sm font-semibold truncate leading-snug ${
-                                isCurrent ? 'text-[#FFC801] font-bold' : 'text-[#F1F6F4] group-hover:text-[#FFC801] transition-colors'
+                                isCurrent ? 'text-[#3A2312] font-bold' : 'text-[#3A2312] group-hover:text-[#A37F3B] transition-colors'
                               }`}>
                                 {song.title}
                               </h4>
                               {isCurrent && (
-                                <span className="hidden md:inline-flex text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-[#FFC801]/15 text-[#FFC801] font-bold border border-[#FFC801]/30">
+                                <span className="hidden md:inline-flex text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-[#A37F3B]/15 text-[#A37F3B] font-bold border border-[#A37F3B]/30">
                                   Playing
                                 </span>
                               )}
                             </div>
-                            <div className="flex items-center gap-1.5 text-[11px] text-[#F1F6F4]/65 truncate mt-0.5">
+                            <div className="flex items-center gap-1.5 text-[11px] text-[#8A7463] truncate mt-0.5">
                               <span className="truncate">{song.artist}</span>
-                              <span className="sm:hidden text-[#F1F6F4]/40">•</span>
-                              <span className="sm:hidden truncate text-[#F1F6F4]/50">{song.album}</span>
+                              <span className="sm:hidden text-[#8A7463]/50">•</span>
+                              <span className="sm:hidden truncate text-[#8A7463]/70">{song.album}</span>
                             </div>
                           </div>
 
                           {/* Album (Desktop column) */}
-                          <div className="hidden sm:block w-32 shrink-0 truncate text-[11px] text-[#F1F6F4]/60 pr-2">
-                            <span className="px-2 py-0.5 rounded-md bg-[#172836]/70 border border-[#F1F6F4]/10 truncate inline-block max-w-full">
+                          <div className="hidden sm:block w-32 shrink-0 truncate text-[11px] text-[#8A7463] pr-2">
+                            <span className="px-2 py-0.5 rounded-md bg-white/70 border border-[#E1D6C7] truncate inline-block max-w-full text-[#6B5441]">
                               {song.album}
                             </span>
                           </div>
@@ -619,7 +594,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
 
                         {/* Right controls: Duration and Download */}
                         <div className="flex items-center gap-2.5 shrink-0 ml-2">
-                          <span className="text-[11px] font-mono text-[#F1F6F4]/60 hidden sm:inline-block w-10 text-right">
+                          <span className="text-[11px] font-mono text-[#8A7463] hidden sm:inline-block w-10 text-right">
                             {song.duration || '4:30'}
                           </span>
 
@@ -627,16 +602,16 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                             type="button"
                             onClick={(e) => triggerSongDownload(song, e)}
                             disabled={isDownloading[song.id]}
-                            className="p-1.5 rounded-lg transition-all cursor-pointer hover:bg-[#172836] border border-transparent hover:border-[#FFC801]/30"
-                            style={{ color: isCurrent ? '#FFC801' : '#F1F6F4' }}
+                            className="p-1.5 rounded-lg transition-all cursor-pointer hover:bg-white border border-transparent hover:border-[#E1D6C7]"
+                            style={{ color: isCurrent ? '#A37F3B' : '#8A7463' }}
                             title="Save anthem download"
                           >
                             {userSongDownloads.some(s => s.id === song.id) ? (
-                              <Check className="h-4 w-4 text-emerald-400" />
+                              <Check className="h-4 w-4 text-emerald-600" />
                             ) : isDownloading[song.id] ? (
-                              <Loader2 className="h-4 w-4 animate-spin text-[#FFC801]" />
+                              <Loader2 className="h-4 w-4 animate-spin text-[#A37F3B]" />
                             ) : (
-                              <Download className="h-4 w-4 hover:text-[#FFC801]" />
+                              <Download className="h-4 w-4 hover:text-[#A37F3B]" />
                             )}
                           </button>
                         </div>
@@ -652,13 +627,9 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
           {/* Active Player Card & Lyrics (Right side: 5 cols) */}
           <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-24">
 
-            {/* Master Player Deck with Solid 70% #172836, 20% #F1F6F4, 10% #FFC801 Theme */}
+            {/* Master Player Deck with Proportional Theme */}
             <div 
-              className="border rounded-3xl p-6 shadow-2xl space-y-6 text-[#F1F6F4]"
-              style={{
-                background: '#0E1B26',
-                borderColor: 'rgba(241, 246, 244, 0.15)'
-              }}
+              className="border rounded-3xl p-6 shadow-2xl space-y-6 text-[#F7F5F0] bg-[#25160B] border-[#4A2D17]"
             >
 
               {currentSong ? (
@@ -666,8 +637,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
 
                   {/* Album Cover & Status */}
                   <div 
-                    className="relative aspect-square w-full rounded-2xl overflow-hidden border shadow-xl bg-[#0B151E] group"
-                    style={{ borderColor: '#FFC801' }}
+                    className="relative aspect-square w-full rounded-2xl overflow-hidden border shadow-xl bg-[#150B05] group border-[#A37F3B]/50"
                   >
                     <img
                       src={currentSong.coverUrl || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop'}
@@ -679,27 +649,22 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
 
                     {/* Playing Indicator Pill */}
                     <div 
-                      className="absolute top-4 left-4 flex items-center gap-1.5 px-3 py-1 rounded-full border text-[10px] font-mono shadow-md"
-                      style={{
-                        background: '#0F1C27',
-                        borderColor: '#FFC801'
-                      }}
+                      className="absolute top-4 left-4 flex items-center gap-1.5 px-3 py-1 rounded-full border text-[10px] font-mono shadow-md bg-[#1D1108]/90 border-[#A37F3B]/60"
                     >
                       <span 
-                        className={`w-2 h-2 rounded-full ${isPlaying ? 'animate-ping' : ''}`}
-                        style={{ backgroundColor: '#FFC801' }}
+                        className={`w-2 h-2 rounded-full ${isPlaying ? 'animate-ping' : ''} bg-[#A37F3B]`}
                       />
-                      <span style={{ color: '#FFC801' }}>
+                      <span className="text-[#A37F3B] font-semibold">
                         {isPlaying ? 'Now Playing' : 'Paused'}
                       </span>
                     </div>
 
                     {/* Title & Artist Overlay */}
-                    <div className="absolute bottom-4 left-4 right-4 bg-[#172836]/80 p-3 rounded-xl backdrop-blur-sm border border-[#FFC801]/30">
-                      <h3 className="text-lg font-bold font-display text-[#F1F6F4] leading-tight">
+                    <div className="absolute bottom-4 left-4 right-4 bg-[#25160B]/85 p-3 rounded-xl backdrop-blur-sm border border-[#A37F3B]/40">
+                      <h3 className="text-lg font-bold font-display text-[#F7F5F0] leading-tight font-cinzel">
                         {currentSong.title}
                       </h3>
-                      <p className="text-xs mt-0.5 font-medium" style={{ color: '#FFC801' }}>
+                      <p className="text-xs mt-0.5 font-medium text-[#A37F3B]">
                         {currentSong.artist} • {currentSong.album}
                       </p>
                     </div>
@@ -717,14 +682,14 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                         onChange={handleSeekChange}
                         className="w-full h-2 rounded-lg cursor-pointer transition-all hover:h-2.5"
                         style={{
-                          accentColor: '#FFC801',
-                          backgroundColor: '#0F1C27'
+                          accentColor: '#A37F3B',
+                          backgroundColor: '#1D1108'
                         }}
                       />
                     </div>
                     <div className="flex justify-between text-[11px] font-mono font-medium">
-                      <span style={{ color: '#FFC801' }}>{formatTime(currentTime)}</span>
-                      <span className="text-[#F1F6F4]/70">{formatTime(duration || 0)}</span>
+                      <span className="text-[#A37F3B]">{formatTime(currentTime)}</span>
+                      <span className="text-[#F7F5F0]/70">{formatTime(duration || 0)}</span>
                     </div>
                   </div>
 
@@ -734,9 +699,9 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                       onClick={() => setIsShuffling(!isShuffling)}
                       className="p-2.5 rounded-xl transition-all cursor-pointer border"
                       style={{
-                        background: isShuffling ? '#FFC801' : '#0F1C27',
-                        borderColor: isShuffling ? '#FFC801' : 'rgba(241, 246, 244, 0.2)',
-                        color: isShuffling ? '#172836' : '#F1F6F4'
+                        background: isShuffling ? '#A37F3B' : '#1D1108',
+                        borderColor: isShuffling ? '#A37F3B' : '#4A2D17',
+                        color: isShuffling ? '#FFFFFF' : '#F7F5F0'
                       }}
                       title={isShuffling ? 'Shuffle is On' : 'Shuffle is Off'}
                     >
@@ -745,33 +710,28 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
 
                     <button
                       onClick={handlePrev}
-                      className="p-3 rounded-full hover:bg-white/10 text-[#F1F6F4] transition-all cursor-pointer active:scale-95"
+                      className="p-3 rounded-full hover:bg-[#3A2312] text-[#F7F5F0] transition-all cursor-pointer active:scale-95"
                       title="Previous Song"
                     >
                       <SkipBack className="h-5 w-5" />
                     </button>
 
-                    {/* Master Play Button: Solid #FFC801, border #F1F6F4, icon #172836 */}
+                    {/* Master Play Button without border */}
                     <button
                       onClick={togglePlay}
-                      className="p-5 rounded-full text-[#172836] shadow-xl transition-all cursor-pointer active:scale-95 flex items-center justify-center hover:scale-105"
-                      style={{
-                        background: '#FFC801',
-                        border: '2px solid #F1F6F4',
-                        boxShadow: '0 8px 25px rgba(255, 200, 1, 0.4)'
-                      }}
+                      className="p-5 rounded-full text-white shadow-xl transition-all cursor-pointer active:scale-95 flex items-center justify-center hover:scale-105 bg-[#A37F3B] hover:bg-[#8F6D2F] shadow-[#A37F3B]/30"
                       title={isPlaying ? 'Pause Song' : 'Play Song'}
                     >
                       {isPlaying ? (
-                        <Pause className="h-6 w-6 fill-current text-[#172836]" />
+                        <Pause className="h-6 w-6 fill-current text-white" />
                       ) : (
-                        <Play className="h-6 w-6 fill-current ml-0.5 text-[#172836]" />
+                        <Play className="h-6 w-6 fill-current ml-0.5 text-white" />
                       )}
                     </button>
 
                     <button
                       onClick={handleNext}
-                      className="p-3 rounded-full hover:bg-white/10 text-[#F1F6F4] transition-all cursor-pointer active:scale-95"
+                      className="p-3 rounded-full hover:bg-[#3A2312] text-[#F7F5F0] transition-all cursor-pointer active:scale-95"
                       title="Next Song"
                     >
                       <SkipForward className="h-5 w-5" />
@@ -781,9 +741,9 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                       onClick={() => setIsLooping(!isLooping)}
                       className="p-2.5 rounded-xl transition-all cursor-pointer border"
                       style={{
-                        background: isLooping ? '#FFC801' : '#0F1C27',
-                        borderColor: isLooping ? '#FFC801' : 'rgba(241, 246, 244, 0.2)',
-                        color: isLooping ? '#172836' : '#F1F6F4'
+                        background: isLooping ? '#A37F3B' : '#1D1108',
+                        borderColor: isLooping ? '#A37F3B' : '#4A2D17',
+                        color: isLooping ? '#FFFFFF' : '#F7F5F0'
                       }}
                       title={isLooping ? 'Loop is On' : 'Loop is Off'}
                     >
@@ -795,8 +755,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                   <div className="flex items-center gap-3 pt-2">
                     <button
                       onClick={() => setIsMuted(!isMuted)}
-                      className="hover:text-white transition-colors cursor-pointer"
-                      style={{ color: '#FFC801' }}
+                      className="hover:text-white transition-colors cursor-pointer text-[#A37F3B]"
                       title={isMuted ? 'Unmute' : 'Mute'}
                     >
                       {isMuted || volume === 0 ? (
@@ -814,57 +773,50 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                       onChange={handleVolumeChange}
                       className="w-full h-1.5 rounded-lg cursor-pointer"
                       style={{
-                        accentColor: '#FFC801',
-                        backgroundColor: '#0F1C27'
+                        accentColor: '#A37F3B',
+                        backgroundColor: '#1D1108'
                       }}
                     />
-                    <span className="text-[10px] font-mono w-8 text-right font-medium" style={{ color: '#F1F6F4' }}>
+                    <span className="text-[10px] font-mono w-8 text-right font-medium text-[#F7F5F0]">
                       {isMuted ? '0%' : `${Math.round(volume * 100)}%`}
                     </span>
                   </div>
 
                   {/* Lyrics & Download Toggle */}
                   <div 
-                    className="flex justify-between items-center pt-3 border-t gap-3"
-                    style={{ borderColor: 'rgba(241, 246, 244, 0.15)' }}
+                    className="flex justify-between items-center pt-3 border-t border-[#4A2D17] gap-3"
                   >
                     <button
                       onClick={() => setShowLyrics(!showLyrics)}
-                      className="text-[11px] font-semibold tracking-wider uppercase flex items-center gap-2 px-3.5 py-2 rounded-xl border transition-all cursor-pointer hover:brightness-110"
+                      className="text-[11px] font-semibold tracking-wider uppercase flex items-center gap-2 px-3.5 py-2 rounded-xl border transition-all cursor-pointer hover:brightness-110 font-mono"
                       style={{
-                        background: showLyrics ? '#FFC801' : '#0F1C27',
-                        borderColor: '#FFC801',
-                        color: showLyrics ? '#172836' : '#F1F6F4'
+                        background: showLyrics ? '#A37F3B' : '#1D1108',
+                        borderColor: '#A37F3B',
+                        color: showLyrics ? '#FFFFFF' : '#F7F5F0'
                       }}
                     >
-                      <FileText className="h-3.5 w-3.5" style={{ color: showLyrics ? '#172836' : '#FFC801' }} />
+                      <FileText className="h-3.5 w-3.5" style={{ color: showLyrics ? '#FFFFFF' : '#A37F3B' }} />
                       {showLyrics ? 'Hide Lyrics' : 'View Lyrics'}
                     </button>
 
                     <button
                       onClick={() => triggerSongDownload(currentSong)}
                       disabled={isDownloading[currentSong.id]}
-                      className="text-[11px] font-semibold tracking-wider uppercase flex items-center gap-2 px-4 py-2 rounded-xl border transition-all cursor-pointer hover:scale-105 shadow-md"
-                      style={{
-                        background: '#FFC801',
-                        borderColor: '#FFC801',
-                        color: '#172836',
-                        fontWeight: 'bold'
-                      }}
+                      className="text-[11px] font-semibold tracking-wider uppercase flex items-center gap-2 px-4 py-2 rounded-xl border transition-all cursor-pointer hover:bg-[#8F6D2F] shadow-md bg-[#A37F3B] border-[#A37F3B] text-white font-mono"
                     >
                       {userSongDownloads.some(s => s.id === currentSong.id) ? (
                         <>
-                          <Check className="h-3.5 w-3.5 text-[#172836]" />
+                          <Check className="h-3.5 w-3.5 text-white" />
                           <span>Saved</span>
                         </>
                       ) : isDownloading[currentSong.id] ? (
                         <>
-                          <Loader2 className="h-3.5 w-3.5 animate-spin text-[#172836]" />
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-white" />
                           <span>Saving...</span>
                         </>
                       ) : (
                         <>
-                          <Download className="h-3.5 w-3.5 text-[#172836]" />
+                          <Download className="h-3.5 w-3.5 text-white" />
                           <span className="font-extrabold">Download</span>
                         </>
                       )}
@@ -873,10 +825,10 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
 
                 </div>
               ) : (
-                <div className="text-center py-16 text-[#F1F6F4]/70 space-y-3 px-4">
-                  <Disc className="h-12 w-12 mx-auto" style={{ color: '#FFC801' }} />
-                  <p className="text-sm font-semibold text-[#F1F6F4]">No Song Selected</p>
-                  <p className="text-xs text-[#F1F6F4]/60 max-w-xs mx-auto">
+                <div className="text-center py-16 text-[#F7F5F0]/70 space-y-3 px-4">
+                  <Disc className="h-12 w-12 mx-auto text-[#A37F3B]" />
+                  <p className="text-sm font-semibold text-[#F7F5F0]">No Song Selected</p>
+                  <p className="text-xs text-[#F7F5F0]/60 max-w-xs mx-auto">
                     {playlist.length > 0
                       ? 'Select a song from the playlist to begin playback.'
                       : 'Add songs in the Admin Portal to begin playing worship anthems.'}
@@ -893,23 +845,18 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 10 }}
-                  className="border rounded-3xl p-5 shadow-xl max-h-[380px] overflow-y-auto font-sans leading-relaxed text-[#F1F6F4]"
-                  style={{
-                    background: '#0F1C27',
-                    borderColor: 'rgba(241, 246, 244, 0.2)'
-                  }}
+                  className="border rounded-3xl p-5 shadow-xl max-h-[380px] overflow-y-auto font-sans leading-relaxed text-[#F7F5F0] bg-[#25160B] border-[#4A2D17]"
                 >
                   <div 
-                    className="flex items-center justify-between pb-3 mb-4 border-b"
-                    style={{ borderColor: 'rgba(241, 246, 244, 0.15)' }}
+                    className="flex items-center justify-between pb-3 mb-4 border-b border-[#4A2D17]"
                   >
                     <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4" style={{ color: '#FFC801' }} />
-                      <h4 className="font-display font-bold text-xs tracking-wider uppercase text-[#FFC801]">
-                        Song Lyrics & Meditations
+                      <FileText className="h-4 w-4 text-[#A37F3B]" />
+                      <h4 className="font-display font-bold text-xs tracking-wider uppercase text-[#A37F3B] font-mono">
+                        Song Lyrics
                       </h4>
                     </div>
-                    <span className="text-[10px] font-mono font-medium text-[#F1F6F4]">
+                    <span className="text-[10px] font-mono font-medium text-[#F7F5F0]">
                       {currentSong.title}
                     </span>
                   </div>
@@ -919,7 +866,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                       const match = line.match(/^\[(\d+):(\d+)\](.*)/);
                       const lyricText = match ? match[3].trim() : line;
                       return (
-                        <p key={idx} className="hover:text-[#FFC801] text-[#F1F6F4]/90 transition-colors py-0.5">
+                        <p key={idx} className="hover:text-[#A37F3B] text-[#F7F5F0]/90 transition-colors py-0.5">
                           {lyricText}
                         </p>
                       );

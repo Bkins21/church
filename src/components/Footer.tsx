@@ -5,91 +5,21 @@ interface FooterProps {
 }
 
 export default function Footer({ activeTab = 'home' }: FooterProps) {
-  const isSongs = activeTab === 'songs';
-  const isAbout = activeTab === 'about';
-  const isPublications = activeTab === 'publications';
-  const isBranches = activeTab === 'branches';
-  const isCells = activeTab === 'cells';
-
-  // Dynamic palette colors for Footer based on activeTab
-  let footerBg = 'bg-[#141416]';
-  let footerBorder = 'border-[#2A2724]';
-  let footerText = 'text-[#D5C9B8]';
-  let headingColor = 'text-white';
-  let logoColor = 'text-white';
-  let subtitleColor = '#C28B57';
-  let accentColor = '#C28B57';
-  let descColor = 'text-[#8A8E96]';
-  let legalBorder = 'border-[#2A2724]';
-  let legalText = 'text-[#8A8E96]';
-  let btnClass = 'bg-[#222326] border-[#383A3F] hover:border-[#C28B57] hover:bg-[#383A3F] text-[#D5C9B8] hover:text-white';
-  let btnIconColor: string | undefined = undefined;
-  let linkHoverClass = 'hover:text-white';
-  let creditColor = '#8A8E96';
-
-  if (isAbout) {
-    // Strict Who We Are portal palette: 70% #01406D, 20% #01B4BA, 10% #F5FEFE
-    footerBg = 'bg-[#01406D]';
-    footerBorder = 'border-[#01518A]';
-    footerText = 'text-[#F5FEFE]';
-    headingColor = 'text-[#F5FEFE]';
-    logoColor = 'text-[#01B4BA]';
-    subtitleColor = '#01B4BA';
-    accentColor = '#01B4BA';
-    descColor = 'text-[#F5FEFE]/80';
-    legalBorder = 'border-[#01518A]';
-    legalText = 'text-[#F5FEFE]/70';
-    btnClass = 'bg-[#01B4BA] hover:bg-[#019DA3] border-[#01B4BA] text-[#01406D] font-bold shadow-md';
-    btnIconColor = '#01406D';
-    linkHoverClass = 'hover:text-[#01B4BA]';
-    creditColor = 'rgba(245, 254, 254, 0.6)';
-  } else if (isBranches || isCells) {
-    // Branches & Cells portal palette: 70% Beige, 20% Brown, 10% White
-    footerBg = 'bg-[#F7F5F0]';
-    footerBorder = 'border-[#E4DCD0]';
-    footerText = 'text-[#6B5441]';
-    headingColor = 'text-[#3A2312]';
-    logoColor = 'text-[#A36B3B]';
-    subtitleColor = '#A36B3B';
-    accentColor = '#A36B3B';
-    descColor = 'text-[#6B5441]';
-    legalBorder = 'border-[#E4DCD0]';
-    legalText = 'text-[#8A7463]';
-    btnClass = 'bg-[#A36B3B] border-[#A36B3B] hover:bg-[#8D5A30] text-white shadow-sm font-semibold';
-    btnIconColor = '#FFFFFF';
-    linkHoverClass = 'hover:text-[#A36B3B]';
-    creditColor = '#8A7463';
-  } else if (isSongs) {
-    footerBg = 'bg-[#172836]';
-    footerBorder = 'border-[#F1F6F4]/15';
-    footerText = 'text-[#F1F6F4]';
-    headingColor = 'text-[#F1F6F4]';
-    logoColor = 'text-[#FFC801]';
-    subtitleColor = '#FFC801';
-    accentColor = '#FFC801';
-    descColor = 'text-[#F1F6F4]/80';
-    legalBorder = 'border-[#F1F6F4]/15';
-    legalText = 'text-[#F1F6F4]/70';
-    btnClass = 'bg-[#FFC801] border-[#FFC801] hover:bg-[#FFC801]/90 text-[#172836] shadow-sm font-semibold';
-    btnIconColor = '#172836';
-    linkHoverClass = 'hover:text-[#FFC801]';
-    creditColor = 'rgba(241, 246, 244, 0.6)';
-  } else if (isPublications) {
-    footerBg = 'bg-[#0D1A14]';
-    footerBorder = 'border-[#234436]';
-    footerText = 'text-[#F2F7F4]';
-    headingColor = 'text-[#F2F7F4]';
-    logoColor = 'text-[#52B788]';
-    subtitleColor = '#52B788';
-    accentColor = '#52B788';
-    descColor = 'text-[#F2F7F4]/80';
-    legalBorder = 'border-[#234436]';
-    legalText = 'text-[#F2F7F4]/70';
-    btnClass = 'bg-[#52B788] border-[#52B788] hover:bg-[#40916C] text-[#0D1A14] shadow-sm font-bold';
-    btnIconColor = '#0D1A14';
-    linkHoverClass = 'hover:text-[#52B788]';
-    creditColor = 'rgba(242, 247, 244, 0.6)';
-  }
+  // Universal Home Footer Palette & Design across all pages
+  const footerBg = 'bg-[#141416]';
+  const footerBorder = 'border-[#2A2724]';
+  const footerText = 'text-[#D5C9B8]';
+  const headingColor = 'text-white';
+  const logoColor = 'text-white';
+  const subtitleColor = '#C28B57';
+  const accentColor = '#C28B57';
+  const descColor = 'text-[#8A8E96]';
+  const legalBorder = 'border-[#2A2724]';
+  const legalText = 'text-[#8A8E96]';
+  const btnClass = 'bg-[#222326] border-[#383A3F] hover:border-[#C28B57] hover:bg-[#383A3F] text-[#D5C9B8] hover:text-white';
+  const btnIconColor: string | undefined = undefined;
+  const linkHoverClass = 'hover:text-white';
+  const creditColor = '#8A8E96';
 
   return (
     <footer 
@@ -154,7 +84,7 @@ export default function Footer({ activeTab = 'home' }: FooterProps) {
               </li>
               <li className="flex items-center gap-2.5">
                 <Mail className="h-4 w-4 shrink-0" style={{ color: accentColor }} />
-                <span className="truncate">info@godsedifice.org</span>
+                <span className="truncate">godsedificechurch@gmail.com</span>
               </li>
             </ul>
           </div>
@@ -179,11 +109,13 @@ export default function Footer({ activeTab = 'home' }: FooterProps) {
             <ArrowUp className="h-3.5 w-3.5 group-hover:-translate-y-0.5 transition-transform duration-300" style={{ color: btnIconColor }} />
           </button>
 
+          {/* 
           <div className="flex gap-4">
             <span className={`cursor-pointer transition-colors ${linkHoverClass}`}>Terms of Service</span>
             <span className={`cursor-pointer transition-colors ${linkHoverClass}`}>Privacy Policy</span>
             <span className={`cursor-pointer transition-colors ${linkHoverClass}`}>Doctrinal Statement</span>
-          </div>
+          </div> 
+          */}
         </div>
 
         {/* Designer Credit Row */}

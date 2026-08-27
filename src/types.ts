@@ -1,4 +1,4 @@
-export type EventMode = 'physical' | 'virtual' | 'hybrid';
+
 
 export interface ChurchEvent {
   id: string;
@@ -6,7 +6,7 @@ export interface ChurchEvent {
   date: string;
   time: string;
   location: string;
-  mode?: EventMode;
+  mode?: 'physical' | 'virtual' | 'hybrid' | string;
   banner: string;
   description?: string;
   speaker?: string;
@@ -28,7 +28,7 @@ export interface Teaching {
   size: string;
 }
 
-export type PublicationType = 'bulletin' | 'devotional' | 'manual' | 'theological_paper' | 'book';
+export type PublicationType = 'bulletin' | 'book';
 
 export interface Publication {
   id: string;
@@ -52,7 +52,7 @@ export interface ServiceTimes {
 export interface Branch {
   id: string;
   name: string;
-  region: 'Nigeria' | 'Africa' | 'Europe' | 'North America';
+  region: 'Nigeria';
   city: string;
   address: string;
   residentPastor: string;
@@ -77,9 +77,9 @@ export interface Registration {
   userEmail: string;
   userPhone: string;
   userBranch: string;
-  ticketCode: string;
+  ticketCode?: string;
   registrationDate: string;
-  mode: 'physical' | 'virtual';
+  mode?: 'physical' | 'virtual' | 'hybrid' | string;
   ageRange?: string;
   gender?: string;
   denomination?: string;
@@ -95,7 +95,7 @@ export interface GalleryItem {
   id: string;
   title: string;
   description: string;
-  category: 'Worship' | 'Preaching' | 'Outreach' | 'Community' | 'Reboot Camp';
+  category: 'Worship' | 'Preaching' | 'Outreach' | 'Community' | 'Reboot Camp' | string;
   imageUrl: string;
   date: string;
 }
