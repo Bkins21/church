@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, ChangeEvent, FormEvent } from 'react';
-import { Search, Play, Pause, Download, Volume2, Music, Clock, User, Disc, Check, Flame, ChevronRight, VolumeX, ShieldAlert, ShieldCheck, Lock, Unlock, Plus, FileAudio, X, Key, CheckCircle, Trash2, Loader2 } from 'lucide-react';
+import { Search, Play, Pause, Download, Volume2, Music, Clock, User, Disc, Check, Flame, ChevronRight, VolumeX, ShieldAlert, ShieldCheck, Lock, Unlock, Plus, FileAudio, X, Key, CheckCircle, Trash2, Loader2, Repeat, Repeat1, RotateCcw, RotateCw } from 'lucide-react';
 import { Teaching } from '../types';
 import { teachingsCatalog } from '../data';
 import { motion, AnimatePresence } from 'motion/react';
@@ -88,6 +88,7 @@ export default function Teachings({
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(0.8);
   const [isMuted, setIsMuted] = useState(false);
+  const [isRepeating, setIsRepeating] = useState(false);
 
   // Ensure current track is populated when catalog loads
   useEffect(() => {
@@ -490,8 +491,13 @@ export default function Teachings({
     const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
     const handleDurationChange = () => setDuration(audio.duration || 0);
     const handleEnded = () => {
-      setIsPlaying(false);
-      setCurrentTime(0);
+      if (isRepeating && audioRef.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch(() => {});
+      } else {
+        setIsPlaying(false);
+        setCurrentTime(0);
+      }
     };
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
@@ -503,7 +509,7 @@ export default function Teachings({
       audio.removeEventListener('durationchange', handleDurationChange);
       audio.removeEventListener('ended', handleEnded);
     };
-  }, []);
+  }, [isRepeating]);
 
   // Handle src changes
   useEffect(() => {
@@ -924,11 +930,27 @@ export default function Teachings({
                   </div>
 
                   {/* Main Player controls */}
-                  <div className="flex items-center justify-center gap-6 mt-6">
+                  <div className="flex items-center justify-center gap-4 mt-6">
+                    {/* Rewind 10s */}
+                    <button
+                      onClick={() => {
+                        if (audioRef.current) {
+                          const nextTime = Math.max(0, audioRef.current.currentTime - 10);
+                          audioRef.current.currentTime = nextTime;
+                          setCurrentTime(nextTime);
+                        }
+                      }}
+                      className="p-2.5 rounded-full bg-[#181818] border border-[#2A2A2A] text-[#A3A3A3] hover:text-[#fca311] hover:border-[#fca311]/50 transition-all cursor-pointer active:scale-95 flex items-center gap-0.5 text-xs font-mono"
+                      title="Rewind 10 seconds"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                      <span className="text-[9px]">10s</span>
+                    </button>
+
                     {/* Play Button */}
                     <button
                       onClick={() => handlePlayPause(currentTrack)}
-                      className="w-16 h-16 rounded-full bg-[#fca311] hover:bg-[#e5920a] text-[#000000] flex items-center justify-center shadow-lg shadow-[#fca311]/25 transition-all transform hover:scale-105 cursor-pointer"
+                      className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[#fca311] hover:bg-[#e5920a] text-[#000000] flex items-center justify-center shadow-lg shadow-[#fca311]/25 transition-all transform hover:scale-105 cursor-pointer"
                       id="player-play-btn"
                     >
                       {isPlaying ? (
@@ -936,6 +958,35 @@ export default function Teachings({
                       ) : (
                         <Play className="h-7 w-7 text-[#000000] fill-current translate-x-0.5" />
                       )}
+                    </button>
+
+                    {/* Fast Forward 10s */}
+                    <button
+                      onClick={() => {
+                        if (audioRef.current) {
+                          const nextTime = Math.min(duration || 99999, audioRef.current.currentTime + 10);
+                          audioRef.current.currentTime = nextTime;
+                          setCurrentTime(nextTime);
+                        }
+                      }}
+                      className="p-2.5 rounded-full bg-[#181818] border border-[#2A2A2A] text-[#A3A3A3] hover:text-[#fca311] hover:border-[#fca311]/50 transition-all cursor-pointer active:scale-95 flex items-center gap-0.5 text-xs font-mono"
+                      title="Forward 10 seconds"
+                    >
+                      <span className="text-[9px]">10s</span>
+                      <RotateCw className="h-4 w-4" />
+                    </button>
+
+                    {/* Repeat Toggle Button */}
+                    <button
+                      onClick={() => setIsRepeating(!isRepeating)}
+                      className={`p-2.5 rounded-full transition-all cursor-pointer border active:scale-95 relative ${
+                        isRepeating
+                          ? 'bg-[#fca311] border-[#fca311] text-[#000000] shadow-md shadow-[#fca311]/30'
+                          : 'bg-[#181818] border-[#2A2A2A] text-[#737373] hover:text-[#fca311] hover:border-[#fca311]/50'
+                      }`}
+                      title={isRepeating ? 'Repeat: ON (Click to turn off)' : 'Repeat: OFF (Click to repeat sermon)'}
+                    >
+                      {isRepeating ? <Repeat1 className="h-4 w-4" /> : <Repeat className="h-4 w-4" />}
                     </button>
                   </div>
 

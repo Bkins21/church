@@ -1,9 +1,17 @@
-import { useState, useRef, useEffect, ChangeEvent, MouseEvent } from 'react';
-import { Play, Pause, Music, Search, Volume2, VolumeX, SkipBack, SkipForward, Disc, RefreshCw, Shuffle, FileText, Download, Check, Sparkles, Loader2, Radio, ExternalLink, ShieldCheck } from 'lucide-react';
+import { useState, useRef, useEffect, useMemo, ChangeEvent, MouseEvent } from 'react';
+import { 
+  Play, Pause, Music, Search, Volume2, VolumeX, SkipBack, SkipForward, 
+  Disc, RefreshCw, Shuffle, Repeat, Repeat1, FileText, Download, Check, Loader2, 
+  ExternalLink, ShieldCheck, RotateCcw, RotateCw, Sparkles, Navigation
+} from 'lucide-react';
 import { Song } from '../types';
+import { crossworshipSongsCatalog } from '../data';
+import { parseSyncedLyrics, getActiveLyricIndex, formatLyricTime, LyricLine } from '../utils/lyricsParser';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../supabase';
 import { worshipSynth } from '../utils/audioSynth';
+
+export type RepeatMode = 'off' | 'all' | 'one';
 
 interface SongsProps {
   userSongDownloads?: Song[];
@@ -19,11 +27,13 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(0.85);
   const [isMuted, setIsMuted] = useState(false);
-  const [isLooping, setIsLooping] = useState(false);
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>('all');
   const [isShuffling, setIsShuffling] = useState(false);
   const [showLyrics, setShowLyrics] = useState(true);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [userScrolledManually, setUserScrolledManually] = useState(false);
   const [isUsingSynth, setIsUsingSynth] = useState(false);
-  const [songs, setSongs] = useState<Song[]>([]);
+  const [songs, setSongs] = useState<Song[]>(() => crossworshipSongsCatalog);
 
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
     if (propIsAdmin !== undefined) return propIsAdmin;
@@ -40,6 +50,13 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playPromiseRef = useRef<Promise<void> | null>(null);
   const synthTimerRef = useRef<any>(null);
+  const rafAnimationRef = useRef<number | null>(null);
+  const scrollRafRef = useRef<number | null>(null);
+  const lyricsContainerRef = useRef<HTMLDivElement | null>(null);
+  const lyricLineRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const userScrollTimeoutRef = useRef<any>(null);
+  const isProgrammaticScrollRef = useRef<boolean>(false);
+  const programmaticTimeoutRef = useRef<any>(null);
 
   // Sync admin state
   useEffect(() => {
@@ -54,7 +71,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
     }
   }, [propIsAdmin]);
 
-  // Fetch songs strictly from the dedicated Supabase public."Songs" table
+  // Fetch songs strictly from Supabase public."Songs" table, fallback to catalog if empty
   useEffect(() => {
     let isSubscribed = true;
 
@@ -73,20 +90,23 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
         }
 
         if (isSubscribed) {
-          const mapped: Song[] = (data || []).map((song: any) => ({
-            id: song.id,
-            title: song.title || '',
-            artist: song.artist || 'Crossworship',
-            album: song.album || 'Edifice Anthem Single',
-            duration: song.duration || '4:30',
-            audioUrl: song.audio_url || '',
-            coverUrl: song.artwork || '',
-            lyrics: song.description || '',
-            downloads: song.downloads || 0,
-            uploadedByUser: false
-          }));
-
-          setSongs(mapped);
+          if (data && data.length > 0) {
+            const mapped: Song[] = data.map((song: any) => ({
+              id: song.id,
+              title: song.title || '',
+              artist: song.artist || 'Crossworship',
+              album: song.album || 'Edifice Anthem Single',
+              duration: song.duration || '4:30',
+              audioUrl: song.audio_url || '',
+              coverUrl: song.artwork || '',
+              lyrics: song.description || '',
+              downloads: song.downloads || 0,
+              uploadedByUser: false
+            }));
+            setSongs(mapped);
+          } else {
+            setSongs(crossworshipSongsCatalog);
+          }
         }
       } catch (err) {
         console.error('Could not sync songs from Supabase:', err);
@@ -107,7 +127,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
     };
   }, []);
 
-  // Filter list by search query directly from Supabase songs
+  // Filter list by search query
   const filteredPlaylist = songs.filter(song => {
     return song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
            song.artist.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -146,11 +166,10 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
     };
 
     const handleEnded = () => {
-      handleNext();
+      handleTrackEnded();
     };
 
     const handleError = () => {
-      // If audio file stream fails, fallback to worship synth seamlessly
       if (isPlaying && currentSong) {
         startSynthPlayback(currentSong);
       }
@@ -161,7 +180,25 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('error', handleError);
 
+    // High-frequency 60fps RAF ticker while audio is actively playing for instantaneous lyrics tracking
+    let isTracking = true;
+    const ticker = () => {
+      if (isTracking && isPlaying && !isUsingSynth && audioRef.current) {
+        setCurrentTime(audioRef.current.currentTime);
+        rafAnimationRef.current = requestAnimationFrame(ticker);
+      }
+    };
+
+    if (isPlaying && !isUsingSynth) {
+      rafAnimationRef.current = requestAnimationFrame(ticker);
+    }
+
     return () => {
+      isTracking = false;
+      if (rafAnimationRef.current) {
+        cancelAnimationFrame(rafAnimationRef.current);
+        rafAnimationRef.current = null;
+      }
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('durationchange', handleDurationChange);
       audio.removeEventListener('ended', handleEnded);
@@ -169,14 +206,13 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
       worshipSynth.stop();
       if (synthTimerRef.current) clearInterval(synthTimerRef.current);
     };
-  }, [currentSong, isShuffling, isLooping, isUsingSynth, isPlaying]);
+  }, [currentSong, isShuffling, repeatMode, isUsingSynth, isPlaying, playlist]);
 
-  // Synth Fallback Logic
+  // Synth Fallback Logic (High frequency ticker)
   const startSynthPlayback = (song: Song) => {
     setIsUsingSynth(true);
     worshipSynth.playTrack(song.id, isMuted ? 0 : volume);
     
-    // Virtual duration if none exists
     const [mins, secs] = (song.duration || '4:30').split(':').map(Number);
     const totalSecs = (mins || 4) * 60 + (secs || 30);
     setDuration(totalSecs);
@@ -185,12 +221,12 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
     synthTimerRef.current = setInterval(() => {
       setCurrentTime(prev => {
         if (prev >= totalSecs) {
-          handleNext();
+          handleTrackEnded();
           return 0;
         }
-        return prev + 1;
+        return prev + 0.1;
       });
-    }, 1000);
+    }, 100);
   };
 
   const stopSynthPlayback = () => {
@@ -209,7 +245,6 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
 
     if (!audio) return;
 
-    // Check if song has a valid audio URL
     if (song.audioUrl && (song.audioUrl.startsWith('http') || song.audioUrl.startsWith('blob:'))) {
       try {
         if (audio.src !== song.audioUrl) {
@@ -222,7 +257,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
         setIsPlaying(true);
         setIsUsingSynth(false);
       } catch (err: any) {
-        console.warn('Direct stream playback error, falling back to Web Audio Synth:', err);
+        console.warn('Direct stream playback fallback to Web Audio Synth:', err);
         startSynthPlayback(song);
         setIsPlaying(true);
       }
@@ -246,6 +281,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
   const handleSelectSong = (song: Song) => {
     setCurrentSong(song);
     setCurrentTime(0);
+    setUserScrolledManually(false);
     playAudioTrack(song);
   };
 
@@ -272,14 +308,42 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
     worshipSynth.setVolume(currentVol);
   }, [volume, isMuted]);
 
-  // Next Track Logic
-  const handleNext = () => {
-    if (playlist.length === 0) return;
-    if (isLooping && currentSong) {
+  // Track Ended Handler respecting Repeat Modes (off | all | one) for consecutive playback
+  const handleTrackEnded = () => {
+    if (!currentSong || playlist.length === 0) return;
+
+    // Repeat One: Replay the active song from beginning
+    if (repeatMode === 'one') {
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+      }
       setCurrentTime(0);
+      setUserScrolledManually(false);
       playAudioTrack(currentSong);
       return;
     }
+
+    const currentIndex = playlist.findIndex(s => s.id === currentSong.id);
+    const isLastTrack = currentIndex === playlist.length - 1;
+
+    // Repeat Off: Stop at the end of the playlist
+    if (repeatMode === 'off' && isLastTrack && !isShuffling) {
+      setIsPlaying(false);
+      setCurrentTime(0);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+      return;
+    }
+
+    // Default / Repeat All: Advance consecutively to next track
+    handleNext();
+  };
+
+  // Next Track Logic (Consecutive playback)
+  const handleNext = () => {
+    if (playlist.length === 0) return;
 
     let nextIndex = 0;
     if (isShuffling) {
@@ -292,6 +356,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
     const nextSong = playlist[nextIndex];
     setCurrentSong(nextSong);
     setCurrentTime(0);
+    setUserScrolledManually(false);
     playAudioTrack(nextSong);
   };
 
@@ -299,6 +364,13 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
   const handlePrev = () => {
     if (playlist.length === 0 || !currentSong) return;
     
+    // If audio is past 3 seconds, previous restarts the current track first
+    if (currentTime > 3 && audioRef.current) {
+      audioRef.current.currentTime = 0;
+      setCurrentTime(0);
+      return;
+    }
+
     let prevIndex = 0;
     if (isShuffling) {
       prevIndex = Math.floor(Math.random() * playlist.length);
@@ -310,7 +382,17 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
     const prevSong = playlist[prevIndex];
     setCurrentSong(prevSong);
     setCurrentTime(0);
+    setUserScrolledManually(false);
     playAudioTrack(prevSong);
+  };
+
+  // Toggle Repeat Mode between Off -> All -> One -> Off
+  const toggleRepeatMode = () => {
+    setRepeatMode(prev => {
+      if (prev === 'off') return 'all';
+      if (prev === 'all') return 'one';
+      return 'off';
+    });
   };
 
   // Seek bar handler
@@ -320,6 +402,32 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
     if (!isUsingSynth && audioRef.current) {
       audioRef.current.currentTime = newTime;
     }
+    setUserScrolledManually(false);
+  };
+
+  // Fast forward or rewind by delta seconds (e.g. +10s, -10s)
+  const handleSkipTime = (deltaSeconds: number) => {
+    const maxDur = duration || 240;
+    const newTime = Math.max(0, Math.min(maxDur, currentTime + deltaSeconds));
+    setCurrentTime(newTime);
+    if (!isUsingSynth && audioRef.current) {
+      audioRef.current.currentTime = newTime;
+    }
+    setUserScrolledManually(false);
+  };
+
+  // Jump to specific lyric timestamp on line click
+  const handleJumpToLyric = (lineStartTime: number) => {
+    const maxDur = duration || 240;
+    const target = Math.max(0, Math.min(maxDur, lineStartTime));
+    setCurrentTime(target);
+    if (!isUsingSynth && audioRef.current) {
+      audioRef.current.currentTime = target;
+    }
+    if (!isPlaying && currentSong) {
+      playAudioTrack(currentSong);
+    }
+    setUserScrolledManually(false);
   };
 
   // Volume slider handler
@@ -335,6 +443,102 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
     const mins = Math.floor(time / 60);
     const secs = Math.floor(time % 60);
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  // Synchronized Lyrics Engine
+  const parsedLyrics: LyricLine[] = useMemo(() => {
+    if (!currentSong || !currentSong.lyrics) return [];
+    const songDur = duration > 0 ? duration : (() => {
+      const [m, s] = (currentSong.duration || '4:30').split(':').map(Number);
+      return (m || 4) * 60 + (s || 30);
+    })();
+    return parseSyncedLyrics(currentSong.lyrics, songDur);
+  }, [currentSong?.lyrics, currentSong?.duration, duration]);
+
+  const activeLyricIndex = useMemo(() => {
+    return getActiveLyricIndex(parsedLyrics, currentTime);
+  }, [parsedLyrics, currentTime]);
+
+  // Fast, responsive programmatic scrolling with custom cubic-out easing (160ms)
+  const scrollToLyricIndex = (index: number, immediate: boolean = false) => {
+    if (index < 0) return;
+    const container = lyricsContainerRef.current;
+    const activeEl = lyricLineRefs.current[index];
+    if (!container || !activeEl) return;
+
+    const containerHeight = container.clientHeight;
+    const elementTop = activeEl.offsetTop;
+    const elementHeight = activeEl.clientHeight;
+    // Optical focus line: 38% from top provides perfect viewing angle for reading ahead
+    const targetScrollTop = Math.max(0, elementTop - (containerHeight * 0.38) + (elementHeight / 2));
+
+    if (scrollRafRef.current) {
+      cancelAnimationFrame(scrollRafRef.current);
+      scrollRafRef.current = null;
+    }
+
+    if (immediate) {
+      isProgrammaticScrollRef.current = true;
+      container.scrollTop = targetScrollTop;
+      if (programmaticTimeoutRef.current) clearTimeout(programmaticTimeoutRef.current);
+      programmaticTimeoutRef.current = setTimeout(() => {
+        isProgrammaticScrollRef.current = false;
+      }, 50);
+      return;
+    }
+
+    const startScrollTop = container.scrollTop;
+    const distance = targetScrollTop - startScrollTop;
+    if (Math.abs(distance) < 2) return;
+
+    isProgrammaticScrollRef.current = true;
+    const startTime = performance.now();
+    const duration = 160; // Snappy 160ms animation
+
+    const step = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      // Fast cubic ease-out
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+      container.scrollTop = startScrollTop + distance * easeOut;
+
+      if (progress < 1) {
+        scrollRafRef.current = requestAnimationFrame(step);
+      } else {
+        container.scrollTop = targetScrollTop;
+        scrollRafRef.current = null;
+        if (programmaticTimeoutRef.current) clearTimeout(programmaticTimeoutRef.current);
+        programmaticTimeoutRef.current = setTimeout(() => {
+          isProgrammaticScrollRef.current = false;
+        }, 50);
+      }
+    };
+
+    scrollRafRef.current = requestAnimationFrame(step);
+  };
+
+  // Immediate and responsive Automatic Scrolling when activeLyricIndex changes or on seek/rewind/fast-forward
+  useEffect(() => {
+    if (!autoScroll || userScrolledManually || activeLyricIndex < 0) return;
+    scrollToLyricIndex(activeLyricIndex, false);
+  }, [activeLyricIndex, autoScroll, userScrolledManually]);
+
+  // Handle user manual scroll interaction inside lyrics container
+  const handleLyricsUserInteraction = () => {
+    if (!autoScroll) return;
+    if (isProgrammaticScrollRef.current) return;
+    setUserScrolledManually(true);
+    if (userScrollTimeoutRef.current) clearTimeout(userScrollTimeoutRef.current);
+    userScrollTimeoutRef.current = setTimeout(() => {
+      setUserScrolledManually(false);
+      // Seamlessly snap back to current line when timeout expires
+      scrollToLyricIndex(activeLyricIndex, false);
+    }, 2800); // Resumes smooth auto-scroll after 2.8 seconds
+  };
+
+  const reCenterLyrics = () => {
+    setUserScrolledManually(false);
+    scrollToLyricIndex(activeLyricIndex, false);
   };
 
   // Download song handler
@@ -395,7 +599,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
     >
       <div className="py-8 sm:py-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto font-sans relative z-10">
         
-        {/* Header Banner with 70% Brown (#3A2312), 20% Beige (#F7F5F0), 10% Bronze (#A36B3B) Palette Accent */}
+        {/* Header Banner */}
         <div 
           className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-6 pb-6"
         >
@@ -404,7 +608,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
               <span 
                 className="p-1.5 rounded-lg border shadow-sm flex items-center justify-center bg-[#25160B] border-[#E4DCD0]/30 text-[#F7F5F0]"
               >
-                <Music className="h-4 w-4" />
+                <Music className="h-4 w-4 text-[#A37F3B]" />
               </span>
               <span className="text-xs font-bold tracking-widest uppercase flex items-center gap-1.5 text-[#F7F5F0] font-mono">
                 Crossworship Ministry • God's Edifice Church
@@ -417,7 +621,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
             </h2>
 
             <p className="text-sm mt-3 max-w-2xl text-[#F7F5F0]/80 font-medium font-sans">
-              Listen and get edified to Spiritual songs inspired by the Holy Ghost
+              Listen and get edified to Spiritual songs inspired by the Holy Ghost with live synchronized lyrics.
             </p>
           </div>
 
@@ -464,7 +668,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
               )}
             </div>
 
-            {/* Playlist Container in High-Contrast Warm Beige Layout */}
+            {/* Playlist Container */}
             <div 
               className="border rounded-3xl p-4 sm:p-5 shadow-xl space-y-3 border-[#E1D6C7]"
               style={{ backgroundColor: 'rgba(247, 245, 240, 0.90)' }}
@@ -505,7 +709,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                   </p>
                 </div>
               ) : (
-                <div className="space-y-1.5 max-h-[580px] overflow-y-auto pr-1">
+                <div className="space-y-3">
                   {filteredPlaylist.map((song, index) => {
                     const isCurrent = currentSong?.id === song.id;
                     const isCurrentPlaying = isCurrent && isPlaying;
@@ -513,108 +717,482 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                     return (
                       <div
                         key={song.id}
-                        onClick={() => handleSelectSong(song)}
-                        className={`group relative flex items-center justify-between p-2.5 sm:p-3 rounded-xl cursor-pointer transition-all duration-200 border ${
+                        className={`group relative rounded-2xl transition-all duration-300 border overflow-hidden ${
                           isCurrent
-                            ? 'shadow-md border-[#A37F3B] bg-white'
-                            : 'hover:bg-white/80 border-transparent hover:border-[#E1D6C7] bg-white/50'
+                            ? 'shadow-xl border-[#A37F3B] bg-white ring-2 ring-[#A37F3B]/30'
+                            : 'hover:bg-white/90 border-[#E1D6C7]/80 hover:border-[#A37F3B]/60 bg-white/60 shadow-xs'
                         }`}
                       >
-                        {/* Active Accent Indicator Left Border */}
+                        {/* Active Left Indicator Bar */}
                         {isCurrent && (
-                          <div className="absolute left-0 top-2 bottom-2 w-1 rounded-r bg-[#A37F3B]" />
+                          <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#A37F3B]" />
                         )}
 
-                        <div className="flex items-center gap-3 min-w-0 flex-1 pl-1">
-                          {/* Track Number / Playing Wave */}
-                          <div className="w-6 text-center shrink-0 flex items-center justify-center">
-                            {isCurrentPlaying ? (
-                              <div className="flex items-end gap-0.5 h-3.5">
-                                <span className="w-0.5 animate-[bounce_0.8s_infinite_100ms] h-full rounded-full bg-[#A37F3B]" />
-                                <span className="w-0.5 animate-[bounce_0.8s_infinite_300ms] h-2/3 rounded-full bg-[#3A2312]" />
-                                <span className="w-0.5 animate-[bounce_0.8s_infinite_200ms] h-1/2 rounded-full bg-[#A37F3B]" />
-                              </div>
-                            ) : (
-                              <span className={`text-xs font-mono font-medium ${isCurrent ? 'text-[#A37F3B] font-bold' : 'text-[#8A7463] group-hover:text-[#3A2312]'}`}>
-                                {String(index + 1).padStart(2, '0')}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Cover Artwork */}
-                          <div 
-                            className="relative w-11 h-11 rounded-lg overflow-hidden shrink-0 border bg-[#FAF7F2]"
-                            style={{ borderColor: isCurrent ? '#A37F3B' : 'rgba(225, 214, 199, 0.9)' }}
-                          >
-                            <img
-                              src={song.coverUrl || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&auto=format&fit=crop'}
-                              alt={song.title}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                              referrerPolicy="no-referrer"
-                            />
-                            <div className={`absolute inset-0 bg-[#3A2312]/60 flex items-center justify-center transition-opacity ${
-                              isCurrent ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                            }`}>
+                        {/* Top Song Summary Row */}
+                        <div 
+                          onClick={() => handleSelectSong(song)}
+                          className="flex items-center justify-between p-3 sm:p-4 cursor-pointer"
+                        >
+                          <div className="flex items-center gap-3 min-w-0 flex-1 pl-1">
+                            {/* Track Number / Wave Indicator */}
+                            <div className="w-7 text-center shrink-0 flex items-center justify-center">
                               {isCurrentPlaying ? (
-                                <Pause className="h-4 w-4 fill-current text-white" />
+                                <div className="flex items-end gap-0.5 h-4">
+                                  <span className="w-1 animate-[bounce_0.8s_infinite_100ms] h-full rounded-full bg-[#A37F3B]" />
+                                  <span className="w-1 animate-[bounce_0.8s_infinite_300ms] h-2/3 rounded-full bg-[#3A2312]" />
+                                  <span className="w-1 animate-[bounce_0.8s_infinite_200ms] h-1/2 rounded-full bg-[#A37F3B]" />
+                                </div>
                               ) : (
-                                <Play className="h-4 w-4 fill-current text-white ml-0.5" />
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Title & Artist */}
-                          <div className="min-w-0 flex-1 pr-2">
-                            <div className="flex items-center gap-2">
-                              <h4 className={`text-xs sm:text-sm font-semibold truncate leading-snug ${
-                                isCurrent ? 'text-[#3A2312] font-bold' : 'text-[#3A2312] group-hover:text-[#A37F3B] transition-colors'
-                              }`}>
-                                {song.title}
-                              </h4>
-                              {isCurrent && (
-                                <span className="hidden md:inline-flex text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-[#A37F3B]/15 text-[#A37F3B] font-bold border border-[#A37F3B]/30">
-                                  Playing
+                                <span className={`text-xs font-mono font-bold ${isCurrent ? 'text-[#A37F3B]' : 'text-[#8A7463] group-hover:text-[#3A2312]'}`}>
+                                  {String(index + 1).padStart(2, '0')}
                                 </span>
                               )}
                             </div>
-                            <div className="flex items-center gap-1.5 text-[11px] text-[#8A7463] truncate mt-0.5">
-                              <span className="truncate">{song.artist}</span>
-                              <span className="sm:hidden text-[#8A7463]/50">•</span>
-                              <span className="sm:hidden truncate text-[#8A7463]/70">{song.album}</span>
+
+                            {/* Cover Artwork with Quick Play/Pause */}
+                            <div 
+                              className="relative w-12 h-12 rounded-xl overflow-hidden shrink-0 border bg-[#FAF7F2] shadow-xs"
+                              style={{ borderColor: isCurrent ? '#A37F3B' : 'rgba(225, 214, 199, 0.9)' }}
+                            >
+                              <img
+                                src={song.coverUrl || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&auto=format&fit=crop'}
+                                alt={song.title}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                referrerPolicy="no-referrer"
+                              />
+                              <div className={`absolute inset-0 bg-[#3A2312]/60 flex items-center justify-center transition-opacity ${
+                                isCurrent ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                              }`}>
+                                {isCurrentPlaying ? (
+                                  <Pause className="h-4 w-4 fill-current text-white" />
+                                ) : (
+                                  <Play className="h-4 w-4 fill-current text-white ml-0.5" />
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Title, Artist, & Album */}
+                            <div className="min-w-0 flex-1 pr-2">
+                              <div className="flex items-center gap-2">
+                                <h4 className={`text-sm sm:text-base font-bold truncate leading-snug ${
+                                  isCurrent ? 'text-[#3A2312]' : 'text-[#3A2312] group-hover:text-[#A37F3B] transition-colors'
+                                }`}>
+                                  {song.title}
+                                </h4>
+                                {isCurrent && (
+                                  <span className="inline-flex text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded-full bg-[#A37F3B] text-white shadow-xs">
+                                    {isPlaying ? 'Playing' : 'Active'}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-[#8A7463] truncate mt-0.5">
+                                <span className="font-medium text-[#5E4736] truncate">{song.artist}</span>
+                                <span>•</span>
+                                <span className="truncate text-[#8A7463]/90">{song.album}</span>
+                              </div>
+                            </div>
+
+                            {/* Album Badge (Desktop) */}
+                            <div className="hidden md:block w-36 shrink-0 truncate text-xs text-[#8A7463] pr-2">
+                              <span className="px-2.5 py-1 rounded-lg bg-[#FAF7F2] border border-[#E1D6C7] truncate inline-block max-w-full text-[#6B5441] font-medium">
+                                {song.album}
+                              </span>
                             </div>
                           </div>
 
-                          {/* Album (Desktop column) */}
-                          <div className="hidden sm:block w-32 shrink-0 truncate text-[11px] text-[#8A7463] pr-2">
-                            <span className="px-2 py-0.5 rounded-md bg-white/70 border border-[#E1D6C7] truncate inline-block max-w-full text-[#6B5441]">
-                              {song.album}
+                          {/* Quick Right controls: Duration and Download */}
+                          <div className="flex items-center gap-2 shrink-0 ml-2" onClick={(e) => e.stopPropagation()}>
+                            <span className="text-xs font-mono text-[#8A7463] font-medium hidden sm:inline-block w-12 text-right">
+                              {song.duration || '4:30'}
                             </span>
+
+                            <button
+                              type="button"
+                              onClick={(e) => triggerSongDownload(song, e)}
+                              disabled={isDownloading[song.id]}
+                              className="p-2 rounded-xl transition-all cursor-pointer hover:bg-[#FAF7F2] border border-transparent hover:border-[#E1D6C7] text-[#8A7463] hover:text-[#A37F3B]"
+                              title="Download anthem"
+                            >
+                              {userSongDownloads.some(s => s.id === song.id) ? (
+                                <Check className="h-4 w-4 text-emerald-600" />
+                              ) : isDownloading[song.id] ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-[#A37F3B]" />
+                              ) : (
+                                <Download className="h-4 w-4" />
+                              )}
+                            </button>
                           </div>
                         </div>
 
-                        {/* Right controls: Duration and Download */}
-                        <div className="flex items-center gap-2.5 shrink-0 ml-2">
-                          <span className="text-[11px] font-mono text-[#8A7463] hidden sm:inline-block w-10 text-right">
-                            {song.duration || '4:30'}
-                          </span>
+                        {/* EMBEDDED IN-CARD PLAYER (Reveals directly inside the active song card) */}
+                        {isCurrent && (
+                          <div className="border-t border-[#E1D6C7] bg-[#25160B] text-[#F7F5F0] p-4 sm:p-5 space-y-4">
+                            
+                            {/* Player Subheader Pill Status */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                              <div className="flex items-center gap-2">
+                                <span className={`w-2 h-2 rounded-full ${isPlaying ? 'animate-ping' : ''} bg-[#A37F3B]`} />
+                                <span className="font-mono font-bold text-[#E5B869] text-[11px] uppercase tracking-wider">
+                                  {isPlaying ? 'Now Playing in Church Deck' : 'Paused - Click Play to Resume'}
+                                </span>
+                              </div>
 
-                          <button
-                            type="button"
-                            onClick={(e) => triggerSongDownload(song, e)}
-                            disabled={isDownloading[song.id]}
-                            className="p-1.5 rounded-lg transition-all cursor-pointer hover:bg-white border border-transparent hover:border-[#E1D6C7]"
-                            style={{ color: isCurrent ? '#A37F3B' : '#8A7463' }}
-                            title="Save anthem download"
-                          >
-                            {userSongDownloads.some(s => s.id === song.id) ? (
-                              <Check className="h-4 w-4 text-emerald-600" />
-                            ) : isDownloading[song.id] ? (
-                              <Loader2 className="h-4 w-4 animate-spin text-[#A37F3B]" />
-                            ) : (
-                              <Download className="h-4 w-4 hover:text-[#A37F3B]" />
+                              <div className="flex items-center gap-2">
+                                {(repeatMode !== 'off' || isShuffling) && (
+                                  <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[10px] font-mono bg-[#1D1108] border-[#A37F3B]/60 text-[#E5B869]">
+                                    {repeatMode === 'one' && (
+                                      <span className="flex items-center gap-1">
+                                        <Repeat1 className="h-3 w-3 text-[#A37F3B]" />
+                                        <span>Repeat 1</span>
+                                      </span>
+                                    )}
+                                    {repeatMode === 'all' && (
+                                      <span className="flex items-center gap-1">
+                                        <Repeat className="h-3 w-3 text-[#A37F3B]" />
+                                        <span>Repeat All</span>
+                                      </span>
+                                    )}
+                                    {isShuffling && (
+                                      <span className="flex items-center gap-1 pl-1 border-l border-[#A37F3B]/40">
+                                        <Shuffle className="h-3 w-3 text-[#A37F3B]" />
+                                        <span>Shuffle</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Scrubber / Progress Bar */}
+                            <div className="space-y-1.5">
+                              <div className="relative">
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={duration || 100}
+                                  step={0.1}
+                                  value={currentTime}
+                                  onChange={handleSeekChange}
+                                  className="w-full h-2 rounded-lg cursor-pointer transition-all hover:h-2.5"
+                                  style={{
+                                    accentColor: '#A37F3B',
+                                    backgroundColor: '#1D1108'
+                                  }}
+                                />
+                              </div>
+                              <div className="flex justify-between text-[11px] font-mono font-semibold">
+                                <span className="text-[#E5B869]">{formatTime(currentTime)}</span>
+                                <span className="text-[#F7F5F0]/70">{formatTime(duration || 0)}</span>
+                              </div>
+                            </div>
+
+                            {/* Main Inline Controls */}
+                            <div className="flex items-center justify-between gap-1 sm:gap-2 pt-1">
+                              {/* Shuffle Button */}
+                              <button
+                                type="button"
+                                onClick={() => setIsShuffling(!isShuffling)}
+                                className="p-2.5 rounded-xl transition-all cursor-pointer border"
+                                style={{
+                                  background: isShuffling ? '#A37F3B' : '#1D1108',
+                                  borderColor: isShuffling ? '#A37F3B' : '#4A2D17',
+                                  color: isShuffling ? '#FFFFFF' : '#F7F5F0'
+                                }}
+                                title={isShuffling ? 'Shuffle is On' : 'Shuffle is Off'}
+                              >
+                                <Shuffle className="h-4 w-4" />
+                              </button>
+
+                              {/* Rewind 10s */}
+                              <button
+                                type="button"
+                                onClick={() => handleSkipTime(-10)}
+                                className="p-2.5 rounded-xl bg-[#1D1108] border border-[#4A2D17] hover:border-[#A37F3B] text-[#F7F5F0] hover:text-[#A37F3B] transition-all cursor-pointer active:scale-95 flex items-center justify-center gap-1"
+                                title="Rewind 10 seconds"
+                              >
+                                <RotateCcw className="h-4 w-4" />
+                                <span className="text-[9px] font-mono font-bold">10s</span>
+                              </button>
+
+                              {/* Previous Song */}
+                              <button
+                                type="button"
+                                onClick={handlePrev}
+                                className="p-2.5 rounded-full hover:bg-[#3A2312] text-[#F7F5F0] transition-all cursor-pointer active:scale-95"
+                                title="Previous Song"
+                              >
+                                <SkipBack className="h-5 w-5" />
+                              </button>
+
+                              {/* Master Play / Pause Button */}
+                              <button
+                                type="button"
+                                onClick={togglePlay}
+                                className="p-3.5 sm:p-4 rounded-full text-white shadow-xl transition-all cursor-pointer active:scale-95 flex items-center justify-center hover:scale-105 bg-[#A37F3B] hover:bg-[#8F6D2F] shadow-[#A37F3B]/30"
+                                title={isPlaying ? 'Pause Song' : 'Play Song'}
+                              >
+                                {isPlaying ? (
+                                  <Pause className="h-6 w-6 fill-current text-white" />
+                                ) : (
+                                  <Play className="h-6 w-6 fill-current ml-0.5 text-white" />
+                                )}
+                              </button>
+
+                              {/* Next Song */}
+                              <button
+                                type="button"
+                                onClick={handleNext}
+                                className="p-2.5 rounded-full hover:bg-[#3A2312] text-[#F7F5F0] transition-all cursor-pointer active:scale-95"
+                                title="Next Song (Plays consecutively)"
+                              >
+                                <SkipForward className="h-5 w-5" />
+                              </button>
+
+                              {/* Fast-Forward 10s */}
+                              <button
+                                type="button"
+                                onClick={() => handleSkipTime(10)}
+                                className="p-2.5 rounded-xl bg-[#1D1108] border border-[#4A2D17] hover:border-[#A37F3B] text-[#F7F5F0] hover:text-[#A37F3B] transition-all cursor-pointer active:scale-95 flex items-center justify-center gap-1"
+                                title="Fast Forward 10 seconds"
+                              >
+                                <span className="text-[9px] font-mono font-bold">10s</span>
+                                <RotateCw className="h-4 w-4" />
+                              </button>
+
+                              {/* Repeat Mode (Off -> All -> One) */}
+                              <button
+                                type="button"
+                                onClick={toggleRepeatMode}
+                                className="p-2.5 rounded-xl transition-all cursor-pointer border relative flex items-center justify-center active:scale-95"
+                                style={{
+                                  background: repeatMode !== 'off' ? '#A37F3B' : '#1D1108',
+                                  borderColor: repeatMode !== 'off' ? '#A37F3B' : '#4A2D17',
+                                  color: repeatMode !== 'off' ? '#FFFFFF' : '#F7F5F0'
+                                }}
+                                title={
+                                  repeatMode === 'off'
+                                    ? 'Repeat: Off (Plays once through)'
+                                    : repeatMode === 'all'
+                                    ? 'Repeat: All Tracks (Loops consecutive playlist)'
+                                    : 'Repeat: Current Track (Loops active song)'
+                                }
+                              >
+                                {repeatMode === 'one' ? (
+                                  <Repeat1 className="h-4 w-4" />
+                                ) : (
+                                  <Repeat className="h-4 w-4" />
+                                )}
+                                {repeatMode === 'one' && (
+                                  <span className="absolute -top-1 -right-1 text-[8px] font-mono font-bold bg-[#150B05] text-[#E5B869] border border-[#A37F3B] rounded-full w-3.5 h-3.5 flex items-center justify-center shadow-xs">
+                                    1
+                                  </span>
+                                )}
+                              </button>
+                            </div>
+
+                            {/* Secondary Row: Volume, Lyrics Toggle, and Download */}
+                            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[#4A2D17]">
+                              {/* Volume Controls */}
+                              <div className="flex items-center gap-2 min-w-[140px] max-w-[200px] flex-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setIsMuted(!isMuted)}
+                                  className="text-[#A37F3B] hover:text-white transition-colors cursor-pointer"
+                                  title={isMuted ? 'Unmute' : 'Mute'}
+                                >
+                                  {isMuted || volume === 0 ? (
+                                    <VolumeX className="h-4 w-4 text-rose-400" />
+                                  ) : (
+                                    <Volume2 className="h-4 w-4" />
+                                  )}
+                                </button>
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={1}
+                                  step={0.05}
+                                  value={isMuted ? 0 : volume}
+                                  onChange={handleVolumeChange}
+                                  className="w-full h-1.5 rounded-lg cursor-pointer"
+                                  style={{
+                                    accentColor: '#A37F3B',
+                                    backgroundColor: '#1D1108'
+                                  }}
+                                />
+                                <span className="text-[10px] font-mono w-8 text-right font-medium text-[#F7F5F0]">
+                                  {isMuted ? '0%' : `${Math.round(volume * 100)}%`}
+                                </span>
+                              </div>
+
+                              {/* Lyrics & Download Action Buttons */}
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowLyrics(!showLyrics)}
+                                  className="text-[11px] font-semibold tracking-wider uppercase flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all cursor-pointer font-mono"
+                                  style={{
+                                    background: showLyrics ? '#A37F3B' : '#1D1108',
+                                    borderColor: '#A37F3B',
+                                    color: showLyrics ? '#FFFFFF' : '#F7F5F0'
+                                  }}
+                                >
+                                  <FileText className="h-3.5 w-3.5" style={{ color: showLyrics ? '#FFFFFF' : '#A37F3B' }} />
+                                  <span>{showLyrics ? 'Hide Lyrics' : 'View Lyrics'}</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => triggerSongDownload(song)}
+                                  disabled={isDownloading[song.id]}
+                                  className="text-[11px] font-semibold tracking-wider uppercase flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all cursor-pointer bg-[#A37F3B] hover:bg-[#8F6D2F] border-[#A37F3B] text-white font-mono shadow-xs"
+                                >
+                                  {userSongDownloads.some(s => s.id === song.id) ? (
+                                    <>
+                                      <Check className="h-3.5 w-3.5 text-white" />
+                                      <span>Saved</span>
+                                    </>
+                                  ) : isDownloading[song.id] ? (
+                                    <>
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin text-white" />
+                                      <span>Saving</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Download className="h-3.5 w-3.5 text-white" />
+                                      <span>Download</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* IN-CARD SYNCHRONIZED LYRICS BOARD */}
+                            {showLyrics && currentSong && currentSong.lyrics && (
+                              <div className="pt-3 border-t border-[#4A2D17] space-y-3">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <FileText className="h-3.5 w-3.5 text-[#A37F3B]" />
+                                    <span className="font-mono text-xs font-bold uppercase text-[#E5B869]">
+                                      Synchronized Lyrics
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center gap-2">
+                                    {userScrolledManually && (
+                                      <button
+                                        type="button"
+                                        onClick={reCenterLyrics}
+                                        className="px-2 py-1 rounded-md text-[10px] font-mono bg-[#A37F3B] hover:bg-[#8F6D2F] text-white flex items-center gap-1 transition-all shadow-xs cursor-pointer animate-pulse"
+                                        title="Snap back to current line"
+                                      >
+                                        <Navigation className="h-3 w-3" />
+                                        <span>Re-center</span>
+                                      </button>
+                                    )}
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const next = !autoScroll;
+                                        setAutoScroll(next);
+                                        if (next) setUserScrolledManually(false);
+                                      }}
+                                      className={`px-2 py-1 rounded-md text-[10px] font-mono uppercase font-bold border transition-all cursor-pointer flex items-center gap-1 ${
+                                        autoScroll 
+                                          ? 'bg-[#3A2312] border-[#A37F3B] text-[#A37F3B]' 
+                                          : 'bg-[#1D1108] border-[#4A2D17] text-[#8A7463]'
+                                      }`}
+                                    >
+                                      <Sparkles className="h-3 w-3" />
+                                      <span>{autoScroll ? 'Auto-Scroll: ON' : 'Auto-Scroll: OFF'}</span>
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div 
+                                  ref={lyricsContainerRef}
+                                  onScroll={handleLyricsUserInteraction}
+                                  onWheel={handleLyricsUserInteraction}
+                                  onTouchMove={handleLyricsUserInteraction}
+                                  onPointerDown={handleLyricsUserInteraction}
+                                  className="space-y-2 text-center max-h-[300px] overflow-y-auto pr-1 py-3 select-none bg-[#180E07] rounded-xl border border-[#4A2D17]/80 p-3"
+                                >
+                                  {parsedLyrics.length > 0 ? (
+                                    parsedLyrics.map((line, idx) => {
+                                      const isActive = idx === activeLyricIndex;
+                                      const isPast = idx < activeLyricIndex;
+
+                                      if (line.isHeader) {
+                                        return (
+                                          <div 
+                                            key={line.id}
+                                            ref={(el) => (lyricLineRefs.current[idx] = el)}
+                                            className="py-1"
+                                          >
+                                            <span className="inline-block px-3 py-0.5 bg-[#1D1108] text-[#A37F3B] border border-[#4A2D17] rounded-full text-[10px] font-mono font-bold uppercase tracking-widest shadow-xs">
+                                              {line.text}
+                                            </span>
+                                          </div>
+                                        );
+                                      }
+
+                                      return (
+                                        <div
+                                          key={line.id}
+                                          ref={(el) => (lyricLineRefs.current[idx] = el)}
+                                          onClick={() => handleJumpToLyric(line.startTime)}
+                                          className={`group relative px-3 py-2 rounded-xl cursor-pointer transition-all duration-200 flex items-center justify-between gap-2 text-center ${
+                                            isActive
+                                              ? 'bg-[#3A2312] border border-[#A37F3B] shadow-md text-white scale-[1.01] ring-1 ring-[#A37F3B]/40'
+                                              : isPast
+                                              ? 'text-[#F7F5F0]/70 hover:text-white hover:bg-[#1D1108]/60 border border-transparent'
+                                              : 'text-[#F7F5F0]/40 hover:text-white hover:bg-[#1D1108]/60 border border-transparent'
+                                          }`}
+                                          title={`Jump to ${formatLyricTime(line.startTime)}`}
+                                        >
+                                          <span 
+                                            className={`text-[9px] font-mono transition-opacity shrink-0 w-8 text-left ${
+                                              isActive 
+                                                ? 'text-[#A37F3B] font-bold opacity-100' 
+                                                : 'text-[#8A7463] opacity-0 group-hover:opacity-100'
+                                            }`}
+                                          >
+                                            {formatLyricTime(line.startTime)}
+                                          </span>
+
+                                          <p 
+                                            className={`flex-1 text-xs sm:text-sm leading-relaxed tracking-wide ${
+                                              isActive
+                                                ? 'font-bold text-[#FFF8E7]'
+                                                : 'font-normal'
+                                            }`}
+                                          >
+                                            {line.text}
+                                          </p>
+
+                                          <div className="shrink-0 w-8 text-right flex justify-end">
+                                            {isActive && (
+                                              <span className="flex h-2 w-2 relative">
+                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#A37F3B] opacity-75" />
+                                                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#A37F3B]" />
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })
+                                  ) : (
+                                    <div className="py-6 text-center text-xs text-[#F7F5F0]/60 italic">
+                                      {currentSong.lyrics}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
                             )}
-                          </button>
-                        </div>
+
+                          </div>
+                        )}
+
                       </div>
                     );
                   })}
@@ -624,10 +1202,10 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
 
           </div>
 
-          {/* Active Player Card & Lyrics (Right side: 5 cols) */}
+          {/* Active Player Card & Live Synced Lyrics (Right side: 5 cols) */}
           <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-24">
 
-            {/* Master Player Deck with Proportional Theme */}
+            {/* Master Player Deck */}
             <div 
               className="border rounded-3xl p-6 shadow-2xl space-y-6 text-[#F7F5F0] bg-[#25160B] border-[#4A2D17]"
             >
@@ -659,6 +1237,29 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                       </span>
                     </div>
 
+                    {/* Mode Status Pill (Repeat & Shuffle) */}
+                    {(repeatMode !== 'off' || isShuffling) && (
+                      <div className="absolute top-4 right-4 flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-mono shadow-md bg-[#1D1108]/90 border-[#A37F3B]/60 text-[#E5B869]">
+                        {repeatMode === 'one' ? (
+                          <span className="flex items-center gap-1">
+                            <Repeat1 className="h-3 w-3 text-[#A37F3B]" />
+                            <span>Repeat 1</span>
+                          </span>
+                        ) : repeatMode === 'all' ? (
+                          <span className="flex items-center gap-1">
+                            <Repeat className="h-3 w-3 text-[#A37F3B]" />
+                            <span>Repeat All</span>
+                          </span>
+                        ) : null}
+                        {isShuffling && (
+                          <span className="flex items-center gap-1 pl-1 border-l border-[#A37F3B]/40">
+                            <Shuffle className="h-3 w-3 text-[#A37F3B]" />
+                            <span>Shuffle</span>
+                          </span>
+                        )}
+                      </div>
+                    )}
+
                     {/* Title & Artist Overlay */}
                     <div className="absolute bottom-4 left-4 right-4 bg-[#25160B]/85 p-3 rounded-xl backdrop-blur-sm border border-[#A37F3B]/40">
                       <h3 className="text-lg font-bold font-display text-[#F7F5F0] leading-tight font-cinzel">
@@ -670,7 +1271,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                     </div>
                   </div>
 
-                  {/* Scrubber / Progress Bar */}
+                  {/* Scrubber / Progress Bar (Rewind / Fast-forward compatible) */}
                   <div className="space-y-2">
                     <div className="relative">
                       <input
@@ -688,13 +1289,13 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                       />
                     </div>
                     <div className="flex justify-between text-[11px] font-mono font-medium">
-                      <span className="text-[#A37F3B]">{formatTime(currentTime)}</span>
+                      <span className="text-[#A37F3B] font-bold">{formatTime(currentTime)}</span>
                       <span className="text-[#F7F5F0]/70">{formatTime(duration || 0)}</span>
                     </div>
                   </div>
 
-                  {/* Central Playback Controls */}
-                  <div className="flex items-center justify-between">
+                  {/* Central Playback Controls with 10s Rewind / Fast Forward */}
+                  <div className="flex items-center justify-between gap-1">
                     <button
                       onClick={() => setIsShuffling(!isShuffling)}
                       className="p-2.5 rounded-xl transition-all cursor-pointer border"
@@ -708,18 +1309,28 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                       <Shuffle className="h-4 w-4" />
                     </button>
 
+                    {/* Rewind 10 Seconds Button */}
+                    <button
+                      onClick={() => handleSkipTime(-10)}
+                      className="p-2.5 rounded-xl bg-[#1D1108] border border-[#4A2D17] hover:border-[#A37F3B] text-[#F7F5F0] hover:text-[#A37F3B] transition-all cursor-pointer active:scale-95 flex items-center justify-center gap-1"
+                      title="Rewind 10 seconds"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                      <span className="text-[9px] font-mono font-bold">10s</span>
+                    </button>
+
                     <button
                       onClick={handlePrev}
-                      className="p-3 rounded-full hover:bg-[#3A2312] text-[#F7F5F0] transition-all cursor-pointer active:scale-95"
+                      className="p-2.5 rounded-full hover:bg-[#3A2312] text-[#F7F5F0] transition-all cursor-pointer active:scale-95"
                       title="Previous Song"
                     >
                       <SkipBack className="h-5 w-5" />
                     </button>
 
-                    {/* Master Play Button without border */}
+                    {/* Master Play Button */}
                     <button
                       onClick={togglePlay}
-                      className="p-5 rounded-full text-white shadow-xl transition-all cursor-pointer active:scale-95 flex items-center justify-center hover:scale-105 bg-[#A37F3B] hover:bg-[#8F6D2F] shadow-[#A37F3B]/30"
+                      className="p-4 sm:p-5 rounded-full text-white shadow-xl transition-all cursor-pointer active:scale-95 flex items-center justify-center hover:scale-105 bg-[#A37F3B] hover:bg-[#8F6D2F] shadow-[#A37F3B]/30"
                       title={isPlaying ? 'Pause Song' : 'Play Song'}
                     >
                       {isPlaying ? (
@@ -731,23 +1342,50 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
 
                     <button
                       onClick={handleNext}
-                      className="p-3 rounded-full hover:bg-[#3A2312] text-[#F7F5F0] transition-all cursor-pointer active:scale-95"
+                      className="p-2.5 rounded-full hover:bg-[#3A2312] text-[#F7F5F0] transition-all cursor-pointer active:scale-95"
                       title="Next Song"
                     >
                       <SkipForward className="h-5 w-5" />
                     </button>
 
+                    {/* Fast Forward 10 Seconds Button */}
                     <button
-                      onClick={() => setIsLooping(!isLooping)}
-                      className="p-2.5 rounded-xl transition-all cursor-pointer border"
-                      style={{
-                        background: isLooping ? '#A37F3B' : '#1D1108',
-                        borderColor: isLooping ? '#A37F3B' : '#4A2D17',
-                        color: isLooping ? '#FFFFFF' : '#F7F5F0'
-                      }}
-                      title={isLooping ? 'Loop is On' : 'Loop is Off'}
+                      onClick={() => handleSkipTime(10)}
+                      className="p-2.5 rounded-xl bg-[#1D1108] border border-[#4A2D17] hover:border-[#A37F3B] text-[#F7F5F0] hover:text-[#A37F3B] transition-all cursor-pointer active:scale-95 flex items-center justify-center gap-1"
+                      title="Fast Forward 10 seconds"
                     >
-                      <RefreshCw className="h-4 w-4" />
+                      <span className="text-[9px] font-mono font-bold">10s</span>
+                      <RotateCw className="h-4 w-4" />
+                    </button>
+
+                    {/* Repeat Mode Button (Off -> All -> One) */}
+                    <button
+                      onClick={toggleRepeatMode}
+                      className="p-2.5 rounded-xl transition-all cursor-pointer border relative flex items-center justify-center active:scale-95"
+                      style={{
+                        background: repeatMode !== 'off' ? '#A37F3B' : '#1D1108',
+                        borderColor: repeatMode !== 'off' ? '#A37F3B' : '#4A2D17',
+                        color: repeatMode !== 'off' ? '#FFFFFF' : '#F7F5F0'
+                      }}
+                      title={
+                        repeatMode === 'off'
+                          ? 'Repeat: Off (Click to repeat playlist)'
+                          : repeatMode === 'all'
+                          ? 'Repeat: All Tracks (Click to repeat current track)'
+                          : 'Repeat: Current Track (Click to turn off repeat)'
+                      }
+                      aria-label={`Repeat mode: ${repeatMode}`}
+                    >
+                      {repeatMode === 'one' ? (
+                        <Repeat1 className="h-4 w-4" />
+                      ) : (
+                        <Repeat className="h-4 w-4" />
+                      )}
+                      {repeatMode === 'one' && (
+                        <span className="absolute -top-1 -right-1 text-[8px] font-mono font-bold bg-[#150B05] text-[#E5B869] border border-[#A37F3B] rounded-full w-3.5 h-3.5 flex items-center justify-center shadow-xs">
+                          1
+                        </span>
+                      )}
                     </button>
                   </div>
 
@@ -838,39 +1476,152 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
 
             </div>
 
-            {/* Synced Lyrics Board */}
+            {/* Synchronized Auto-Scrolling Lyrics Board */}
             <AnimatePresence>
               {showLyrics && currentSong && currentSong.lyrics && (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 10 }}
-                  className="border rounded-3xl p-5 shadow-xl max-h-[380px] overflow-y-auto font-sans leading-relaxed text-[#F7F5F0] bg-[#25160B] border-[#4A2D17]"
+                  className="border rounded-3xl p-5 shadow-2xl font-sans text-[#F7F5F0] bg-[#25160B] border-[#4A2D17] relative overflow-hidden"
                 >
+                  {/* Lyrics Board Header */}
                   <div 
-                    className="flex items-center justify-between pb-3 mb-4 border-b border-[#4A2D17]"
+                    className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-3 border-b border-[#4A2D17]"
                   >
                     <div className="flex items-center gap-2">
                       <FileText className="h-4 w-4 text-[#A37F3B]" />
                       <h4 className="font-display font-bold text-xs tracking-wider uppercase text-[#A37F3B] font-mono">
-                        Song Lyrics
+                        Live Synced Lyrics
                       </h4>
+                      <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-[#3A2312] text-[#E4DCD0] border border-[#4A2D17]">
+                        Click any line to seek
+                      </span>
                     </div>
-                    <span className="text-[10px] font-mono font-medium text-[#F7F5F0]">
-                      {currentSong.title}
-                    </span>
+
+                    <div className="flex items-center gap-2">
+                      {/* Re-center button if user manually scrolled */}
+                      {userScrolledManually && (
+                        <button
+                          type="button"
+                          onClick={reCenterLyrics}
+                          className="px-2 py-1 rounded-md text-[10px] font-mono bg-[#A37F3B] hover:bg-[#8F6D2F] text-white flex items-center gap-1 transition-all shadow-sm cursor-pointer animate-pulse"
+                          title="Snap back to current line"
+                        >
+                          <Navigation className="h-3 w-3" />
+                          <span>Re-center</span>
+                        </button>
+                      )}
+
+                      {/* Auto-Scroll Toggle */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = !autoScroll;
+                          setAutoScroll(next);
+                          if (next) setUserScrolledManually(false);
+                        }}
+                        className={`px-2 py-1 rounded-md text-[10px] font-mono uppercase font-bold border transition-all cursor-pointer flex items-center gap-1 ${
+                          autoScroll 
+                            ? 'bg-[#3A2312] border-[#A37F3B] text-[#A37F3B]' 
+                            : 'bg-[#1D1108] border-[#4A2D17] text-[#8A7463]'
+                        }`}
+                        title={autoScroll ? 'Automatic scrolling enabled' : 'Automatic scrolling paused'}
+                      >
+                        <Sparkles className="h-3 w-3" />
+                        <span>{autoScroll ? 'Auto-Scroll: ON' : 'Auto-Scroll: OFF'}</span>
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="space-y-3.5 text-center text-xs whitespace-pre-wrap select-none font-sans italic leading-relaxed">
-                    {currentSong.lyrics.split('\n').map((line, idx) => {
-                      const match = line.match(/^\[(\d+):(\d+)\](.*)/);
-                      const lyricText = match ? match[3].trim() : line;
-                      return (
-                        <p key={idx} className="hover:text-[#A37F3B] text-[#F7F5F0]/90 transition-colors py-0.5">
-                          {lyricText}
-                        </p>
-                      );
-                    })}
+                  {/* Synchronized Lyrics Lines Container with High-Performance Auto-Scroll */}
+                  <div 
+                    ref={lyricsContainerRef}
+                    onScroll={handleLyricsUserInteraction}
+                    onWheel={handleLyricsUserInteraction}
+                    onTouchMove={handleLyricsUserInteraction}
+                    onPointerDown={handleLyricsUserInteraction}
+                    className="space-y-2.5 text-center max-h-[360px] overflow-y-auto pr-1 py-4 select-none"
+                  >
+                    {parsedLyrics.length > 0 ? (
+                      parsedLyrics.map((line, idx) => {
+                        const isActive = idx === activeLyricIndex;
+                        const isPast = idx < activeLyricIndex;
+
+                        if (line.isHeader) {
+                          return (
+                            <div 
+                              key={line.id}
+                              ref={(el) => (lyricLineRefs.current[idx] = el)}
+                              className="py-1"
+                            >
+                              <span className="inline-block px-3 py-1 bg-[#1D1108] text-[#A37F3B] border border-[#4A2D17] rounded-full text-[10px] font-mono font-bold uppercase tracking-widest shadow-sm">
+                                {line.text}
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={line.id}
+                            ref={(el) => (lyricLineRefs.current[idx] = el)}
+                            onClick={() => handleJumpToLyric(line.startTime)}
+                            className={`group relative px-4 py-2.5 rounded-2xl cursor-pointer transition-all duration-300 flex items-center justify-between gap-3 text-center ${
+                              isActive
+                                ? 'bg-[#3A2312] border-2 border-[#A37F3B] shadow-xl text-white scale-[1.02] ring-2 ring-[#A37F3B]/30'
+                                : isPast
+                                ? 'text-[#F7F5F0]/65 hover:text-white hover:bg-[#1D1108]/70 border border-transparent'
+                                : 'text-[#F7F5F0]/40 hover:text-white hover:bg-[#1D1108]/70 border border-transparent'
+                            }`}
+                            title={`Jump to ${formatLyricTime(line.startTime)}`}
+                          >
+                            {/* Timestamp tag left on active / hover */}
+                            <span 
+                              className={`text-[10px] font-mono transition-opacity shrink-0 w-10 text-left ${
+                                isActive 
+                                  ? 'text-[#A37F3B] font-bold opacity-100' 
+                                  : 'text-[#8A7463] opacity-0 group-hover:opacity-100'
+                              }`}
+                            >
+                              {formatLyricTime(line.startTime)}
+                            </span>
+
+                            {/* Lyric Content Text */}
+                            <p 
+                              className={`flex-1 text-sm sm:text-base leading-relaxed tracking-wide transition-all ${
+                                isActive
+                                  ? 'font-bold text-white drop-shadow-md text-[#FFF8E7]'
+                                  : 'font-normal'
+                              }`}
+                            >
+                              {line.text}
+                            </p>
+
+                            {/* Active pulse icon right */}
+                            <div className="shrink-0 w-10 text-right flex justify-end">
+                              {isActive && (
+                                <span className="flex h-2.5 w-2.5 relative">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#A37F3B] opacity-75" />
+                                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#A37F3B]" />
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="py-8 text-center text-xs text-[#F7F5F0]/60 italic">
+                        {currentSong.lyrics}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Bottom helper prompt */}
+                  <div className="pt-2 mt-2 border-t border-[#4A2D17] text-center">
+                    <span className="text-[10px] font-mono text-[#A37F3B]/80">
+                      Synchronized to playback • Rewind or Fast Forward anytime to match spoken lyrics
+                    </span>
                   </div>
                 </motion.div>
               )}
@@ -880,7 +1631,144 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
 
         </div>
 
+        {/* Global Floating Quick Player Bar (Always accessible when scrolling) */}
+        {currentSong && (
+          <div className="fixed bottom-3 sm:bottom-5 left-3 sm:left-6 right-3 sm:right-6 z-50 max-w-4xl mx-auto">
+            <div className="bg-[#25160B]/95 backdrop-blur-md text-[#F7F5F0] border border-[#A37F3B]/80 rounded-2xl shadow-2xl p-2.5 sm:p-3.5 flex items-center justify-between gap-3 ring-1 ring-black/40">
+              
+              {/* Left: Thumbnail & Title */}
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <div className="relative w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-[#A37F3B]/60 bg-[#150B05]">
+                  <img
+                    src={currentSong.coverUrl || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&auto=format&fit=crop'}
+                    alt={currentSong.title}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                  {isPlaying && (
+                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                      <div className="flex items-end gap-0.5 h-3">
+                        <span className="w-0.5 animate-[bounce_0.8s_infinite_100ms] h-full rounded-full bg-[#A37F3B]" />
+                        <span className="w-0.5 animate-[bounce_0.8s_infinite_300ms] h-2/3 rounded-full bg-white" />
+                        <span className="w-0.5 animate-[bounce_0.8s_infinite_200ms] h-1/2 rounded-full bg-[#A37F3B]" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-xs sm:text-sm font-bold truncate text-white leading-tight">
+                    {currentSong.title}
+                  </h4>
+                  <div className="flex items-center gap-1 text-[11px] text-[#A37F3B] truncate">
+                    <span className="truncate">{currentSong.artist}</span>
+                    <span>•</span>
+                    <span className="font-mono text-[#F7F5F0]/70">{formatTime(currentTime)} / {formatTime(duration || 0)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Center: Controls */}
+              <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleSkipTime(-10)}
+                  className="p-1.5 sm:p-2 rounded-lg bg-[#1D1108] border border-[#4A2D17] hover:border-[#A37F3B] text-[#F7F5F0] hover:text-[#A37F3B] transition-all cursor-pointer flex items-center gap-0.5"
+                  title="Rewind 10s"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span className="text-[8px] font-mono font-bold hidden sm:inline">10s</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handlePrev}
+                  className="p-1.5 sm:p-2 rounded-full hover:bg-[#3A2312] text-[#F7F5F0] transition-all cursor-pointer"
+                  title="Previous Song"
+                >
+                  <SkipBack className="h-4 w-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={togglePlay}
+                  className="p-2 sm:p-2.5 rounded-full text-white bg-[#A37F3B] hover:bg-[#8F6D2F] shadow-md transition-all cursor-pointer hover:scale-105 active:scale-95"
+                  title={isPlaying ? 'Pause' : 'Play'}
+                >
+                  {isPlaying ? (
+                    <Pause className="h-4 w-4 sm:h-5 sm:w-5 fill-current" />
+                  ) : (
+                    <Play className="h-4 w-4 sm:h-5 sm:w-5 fill-current ml-0.5" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleNext}
+                  className="p-1.5 sm:p-2 rounded-full hover:bg-[#3A2312] text-[#F7F5F0] transition-all cursor-pointer"
+                  title="Next Song"
+                >
+                  <SkipForward className="h-4 w-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSkipTime(10)}
+                  className="p-1.5 sm:p-2 rounded-lg bg-[#1D1108] border border-[#4A2D17] hover:border-[#A37F3B] text-[#F7F5F0] hover:text-[#A37F3B] transition-all cursor-pointer flex items-center gap-0.5"
+                  title="Fast-Forward 10s"
+                >
+                  <span className="text-[8px] font-mono font-bold hidden sm:inline">10s</span>
+                  <RotateCw className="h-3.5 w-3.5" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={toggleRepeatMode}
+                  className="p-1.5 sm:p-2 rounded-lg border transition-all cursor-pointer relative"
+                  style={{
+                    background: repeatMode !== 'off' ? '#A37F3B' : '#1D1108',
+                    borderColor: repeatMode !== 'off' ? '#A37F3B' : '#4A2D17',
+                    color: repeatMode !== 'off' ? '#FFFFFF' : '#F7F5F0'
+                  }}
+                  title={`Repeat: ${repeatMode}`}
+                >
+                  {repeatMode === 'one' ? <Repeat1 className="h-3.5 w-3.5" /> : <Repeat className="h-3.5 w-3.5" />}
+                </button>
+              </div>
+
+              {/* Right: Lyrics & Mute toggle */}
+              <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowLyrics(!showLyrics)}
+                  className="px-2 py-1.5 rounded-lg border text-[11px] font-mono font-bold transition-all cursor-pointer flex items-center gap-1"
+                  style={{
+                    background: showLyrics ? '#A37F3B' : '#1D1108',
+                    borderColor: '#A37F3B',
+                    color: showLyrics ? '#FFFFFF' : '#F7F5F0'
+                  }}
+                  title={showLyrics ? 'Hide Lyrics' : 'Show Lyrics'}
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  <span className="hidden md:inline">{showLyrics ? 'Lyrics On' : 'Lyrics'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsMuted(!isMuted)}
+                  className="p-1.5 rounded-lg hover:bg-[#3A2312] text-[#A37F3B] hover:text-white transition-colors cursor-pointer"
+                  title={isMuted ? 'Unmute' : 'Mute'}
+                >
+                  {isMuted || volume === 0 ? <VolumeX className="h-4 w-4 text-rose-400" /> : <Volume2 className="h-4 w-4" />}
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
 }
+
