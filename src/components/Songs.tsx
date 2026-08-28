@@ -2,7 +2,8 @@ import { useState, useRef, useEffect, useMemo, ChangeEvent, MouseEvent } from 'r
 import { 
   Play, Pause, Music, Search, Volume2, VolumeX, SkipBack, SkipForward, 
   Disc, RefreshCw, Shuffle, Repeat, Repeat1, FileText, Download, Check, Loader2, 
-  ExternalLink, ShieldCheck, RotateCcw, RotateCw, Sparkles, Navigation
+  ExternalLink, ShieldCheck, RotateCcw, RotateCw, Sparkles, Navigation,
+  ListMusic, ListPlus, Trash2, ArrowUp, ArrowDown, X, Plus, Clock, Layers, Mic, Wand2
 } from 'lucide-react';
 import { Song } from '../types';
 import { crossworshipSongsCatalog } from '../data';
@@ -10,6 +11,7 @@ import { parseSyncedLyrics, getActiveLyricIndex, formatLyricTime, LyricLine } fr
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../supabase';
 import { worshipSynth } from '../utils/audioSynth';
+import AiTranscriberModal from './AiTranscriberModal';
 
 export type RepeatMode = 'off' | 'all' | 'one';
 
@@ -35,6 +37,20 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
   const [isUsingSynth, setIsUsingSynth] = useState(false);
   const [songs, setSongs] = useState<Song[]>(() => crossworshipSongsCatalog);
 
+  // Queue System States
+  const [userQueue, setUserQueue] = useState<Song[]>([]);
+  const [activeRightTab, setActiveRightTab] = useState<'lyrics' | 'queue'>('lyrics');
+  const [inCardActiveTab, setInCardActiveTab] = useState<Record<string, 'lyrics' | 'queue'>>({});
+  const [showFloatingQueue, setShowFloatingQueue] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<any>(null);
+  const userQueueRef = useRef<Song[]>([]);
+  userQueueRef.current = userQueue;
+
+  // AI Pre-Listening & Transcription States
+  const [isAiTranscriberOpen, setIsAiTranscriberOpen] = useState(false);
+  const [transcriberTargetSong, setTranscriberTargetSong] = useState<Song | null>(null);
+
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
     if (propIsAdmin !== undefined) return propIsAdmin;
     try {
@@ -54,6 +70,8 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
   const scrollRafRef = useRef<number | null>(null);
   const lyricsContainerRef = useRef<HTMLDivElement | null>(null);
   const lyricLineRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const inCardLyricsContainerRef = useRef<HTMLDivElement | null>(null);
+  const inCardLyricLineRefs = useRef<(HTMLDivElement | null)[]>([]);
   const userScrollTimeoutRef = useRef<any>(null);
   const isProgrammaticScrollRef = useRef<boolean>(false);
   const programmaticTimeoutRef = useRef<any>(null);
@@ -206,7 +224,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
       worshipSynth.stop();
       if (synthTimerRef.current) clearInterval(synthTimerRef.current);
     };
-  }, [currentSong, isShuffling, repeatMode, isUsingSynth, isPlaying, playlist]);
+  }, [currentSong, isShuffling, repeatMode, isUsingSynth, isPlaying, playlist, userQueue]);
 
   // Synth Fallback Logic (High frequency ticker)
   const startSynthPlayback = (song: Song) => {
@@ -308,9 +326,117 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
     worshipSynth.setVolume(currentVol);
   }, [volume, isMuted]);
 
-  // Track Ended Handler respecting Repeat Modes (off | all | one) for consecutive playback
+  // Toast Helper for user notifications
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastMessage(null);
+    }, 2800);
+  };
+
+  // Add song to end of queue
+  const addToQueue = (song: Song, e?: MouseEvent) => {
+    if (e) e.stopPropagation();
+    setUserQueue(prev => [...prev, song]);
+    showToast(`Added "${song.title}" to Up Next queue`);
+  };
+
+  // Play next (insert at front of queue)
+  const playNextInQueue = (song: Song, e?: MouseEvent) => {
+    if (e) e.stopPropagation();
+    setUserQueue(prev => [song, ...prev]);
+    showToast(`"${song.title}" will play next`);
+  };
+
+  // Open AI Transcriber Modal for a song
+  const openAiTranscriber = (targetSong?: Song, e?: MouseEvent) => {
+    if (e) e.stopPropagation();
+    setTranscriberTargetSong(targetSong || currentSong || (songs.length > 0 ? songs[0] : null));
+    setIsAiTranscriberOpen(true);
+  };
+
+  // Apply AI Transcribed Lyrics to song and sync live
+  const handleApplyAiLyrics = (songId: string, syncedLyrics: string) => {
+    setSongs(prev => prev.map(s => s.id === songId ? { ...s, lyrics: syncedLyrics } : s));
+    if (currentSong && currentSong.id === songId) {
+      setCurrentSong(prev => prev ? { ...prev, lyrics: syncedLyrics } : null);
+    }
+
+    try {
+      const saved = localStorage.getItem('gec_custom_song_lyrics');
+      const dict = saved ? JSON.parse(saved) : {};
+      dict[songId] = syncedLyrics;
+      localStorage.setItem('gec_custom_song_lyrics', JSON.stringify(dict));
+    } catch (e) {
+      console.error('Failed to cache lyrics locally', e);
+    }
+
+    if (supabase) {
+      supabase
+        .from('Songs')
+        .update({ description: syncedLyrics })
+        .eq('id', songId)
+        .then(({ error }) => {
+          if (error) console.warn('Supabase lyric sync note:', error);
+        });
+    }
+
+    const matched = songs.find(s => s.id === songId);
+    showToast(`✨ AI Synced Lyrics applied to "${matched?.title || 'Song'}"!`);
+  };
+
+  // Remove from custom queue
+  const removeFromQueue = (index: number, e?: MouseEvent) => {
+    if (e) e.stopPropagation();
+    setUserQueue(prev => prev.filter((_, i) => i !== index));
+    showToast("Removed track from queue");
+  };
+
+  // Move item in queue up/down
+  const moveQueueItem = (fromIndex: number, toIndex: number, e?: MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (toIndex < 0 || toIndex >= userQueue.length) return;
+    setUserQueue(prev => {
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      return next;
+    });
+  };
+
+  // Clear entire user queue
+  const clearQueue = (e?: MouseEvent) => {
+    if (e) e.stopPropagation();
+    setUserQueue([]);
+    showToast("Queue cleared");
+  };
+
+  // Play directly from user queue
+  const playFromQueue = (index: number, e?: MouseEvent) => {
+    if (e) e.stopPropagation();
+    const targetSong = userQueue[index];
+    if (!targetSong) return;
+    setUserQueue(prev => prev.slice(index + 1));
+    setCurrentSong(targetSong);
+    setCurrentTime(0);
+    setUserScrolledManually(false);
+    playAudioTrack(targetSong);
+  };
+
+  // Natural upcoming tracks from playlist (after current song)
+  const upcomingPlaylistSongs = useMemo(() => {
+    if (!currentSong || playlist.length <= 1) return [];
+    const currentIndex = playlist.findIndex(s => s.id === currentSong.id);
+    if (currentIndex === -1) return playlist;
+    const after = playlist.slice(currentIndex + 1);
+    const before = playlist.slice(0, currentIndex);
+    return [...after, ...before];
+  }, [playlist, currentSong]);
+
+  // Track Ended Handler respecting Repeat Modes (off | all | one) and custom queue
   const handleTrackEnded = () => {
-    if (!currentSong || playlist.length === 0) return;
+    if (!currentSong) return;
 
     // Repeat One: Replay the active song from beginning
     if (repeatMode === 'one') {
@@ -322,6 +448,14 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
       playAudioTrack(currentSong);
       return;
     }
+
+    // If custom queued songs exist, seamlessly advance into queue
+    if (userQueueRef.current.length > 0) {
+      handleNext();
+      return;
+    }
+
+    if (playlist.length === 0) return;
 
     const currentIndex = playlist.findIndex(s => s.id === currentSong.id);
     const isLastTrack = currentIndex === playlist.length - 1;
@@ -341,8 +475,19 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
     handleNext();
   };
 
-  // Next Track Logic (Consecutive playback)
+  // Next Track Logic (Consecutive playback + Queue prioritization)
   const handleNext = () => {
+    // If user has custom queued tracks, play the top one immediately
+    if (userQueueRef.current.length > 0) {
+      const nextSong = userQueueRef.current[0];
+      setUserQueue(prev => prev.slice(1));
+      setCurrentSong(nextSong);
+      setCurrentTime(0);
+      setUserScrolledManually(false);
+      playAudioTrack(nextSong);
+      return;
+    }
+
     if (playlist.length === 0) return;
 
     let nextIndex = 0;
@@ -462,59 +607,51 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
   // Fast, responsive programmatic scrolling with custom cubic-out easing (160ms)
   const scrollToLyricIndex = (index: number, immediate: boolean = false) => {
     if (index < 0) return;
-    const container = lyricsContainerRef.current;
-    const activeEl = lyricLineRefs.current[index];
-    if (!container || !activeEl) return;
 
-    const containerHeight = container.clientHeight;
-    const elementTop = activeEl.offsetTop;
-    const elementHeight = activeEl.clientHeight;
-    // Optical focus line: 38% from top provides perfect viewing angle for reading ahead
-    const targetScrollTop = Math.max(0, elementTop - (containerHeight * 0.38) + (elementHeight / 2));
+    // Helper to scroll a specific container and element reference
+    const scrollContainer = (container: HTMLDivElement | null, activeEl: HTMLDivElement | null) => {
+      if (!container || !activeEl) return;
+      const containerHeight = container.clientHeight;
+      const elementTop = activeEl.offsetTop;
+      const elementHeight = activeEl.clientHeight;
+      // Optical focus line: 38% from top provides perfect viewing angle for reading ahead
+      const targetScrollTop = Math.max(0, elementTop - (containerHeight * 0.38) + (elementHeight / 2));
 
-    if (scrollRafRef.current) {
-      cancelAnimationFrame(scrollRafRef.current);
-      scrollRafRef.current = null;
-    }
-
-    if (immediate) {
-      isProgrammaticScrollRef.current = true;
-      container.scrollTop = targetScrollTop;
-      if (programmaticTimeoutRef.current) clearTimeout(programmaticTimeoutRef.current);
-      programmaticTimeoutRef.current = setTimeout(() => {
-        isProgrammaticScrollRef.current = false;
-      }, 50);
-      return;
-    }
-
-    const startScrollTop = container.scrollTop;
-    const distance = targetScrollTop - startScrollTop;
-    if (Math.abs(distance) < 2) return;
-
-    isProgrammaticScrollRef.current = true;
-    const startTime = performance.now();
-    const duration = 160; // Snappy 160ms animation
-
-    const step = (now: number) => {
-      const elapsed = now - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      // Fast cubic ease-out
-      const easeOut = 1 - Math.pow(1 - progress, 3);
-      container.scrollTop = startScrollTop + distance * easeOut;
-
-      if (progress < 1) {
-        scrollRafRef.current = requestAnimationFrame(step);
-      } else {
+      if (immediate) {
         container.scrollTop = targetScrollTop;
-        scrollRafRef.current = null;
-        if (programmaticTimeoutRef.current) clearTimeout(programmaticTimeoutRef.current);
-        programmaticTimeoutRef.current = setTimeout(() => {
-          isProgrammaticScrollRef.current = false;
-        }, 50);
+        return;
       }
+
+      const startScrollTop = container.scrollTop;
+      const distance = targetScrollTop - startScrollTop;
+      if (Math.abs(distance) < 2) return;
+
+      const startTime = performance.now();
+      const duration = 160;
+
+      const step = (now: number) => {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        container.scrollTop = startScrollTop + distance * easeOut;
+
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else {
+          container.scrollTop = targetScrollTop;
+        }
+      };
+      requestAnimationFrame(step);
     };
 
-    scrollRafRef.current = requestAnimationFrame(step);
+    isProgrammaticScrollRef.current = true;
+    scrollContainer(lyricsContainerRef.current, lyricLineRefs.current[index]);
+    scrollContainer(inCardLyricsContainerRef.current, inCardLyricLineRefs.current[index]);
+
+    if (programmaticTimeoutRef.current) clearTimeout(programmaticTimeoutRef.current);
+    programmaticTimeoutRef.current = setTimeout(() => {
+      isProgrammaticScrollRef.current = false;
+    }, 200);
   };
 
   // Immediate and responsive Automatic Scrolling when activeLyricIndex changes or on seek/rewind/fast-forward
@@ -625,20 +762,30 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
             </p>
           </div>
 
-          {/* Status / Admin Portal Quick Link */}
-          {isAdmin && (
-            <div className="flex items-center gap-3">
+          {/* Status / Admin Portal Quick Link & AI Transcriber Trigger */}
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => openAiTranscriber()}
+              className="px-4 py-2.5 rounded-xl border text-white text-xs font-semibold flex items-center gap-2 transition-all shadow-md bg-gradient-to-r from-[#A37F3B] to-[#8F6D2F] hover:from-[#B8924A] hover:to-[#A37F3B] border-[#E5B869]/50 cursor-pointer active:scale-95"
+              title="Pre-listen to songs and transcribe with AI"
+            >
+              <Sparkles className="h-4 w-4 text-[#FFF8E7] animate-pulse" />
+              <span>AI Pre-Listen & Transcribe</span>
+            </button>
+
+            {isAdmin && (
               <a
                 href="/crosswordmedia"
-                className="px-4 py-2.5 rounded-xl border text-white text-xs font-semibold flex items-center gap-2 transition-all shadow-md bg-[#A37F3B] hover:bg-[#8F6D2F] border-[#A37F3B]"
+                className="px-4 py-2.5 rounded-xl border text-white text-xs font-semibold flex items-center gap-2 transition-all shadow-md bg-[#25160B] hover:bg-[#3A2312] border-[#4A2D17]"
                 title="Manage and upload songs in Admin Portal"
               >
-                <ShieldCheck className="h-4 w-4 text-white" />
-                <span>Admin Songs Manager</span>
-                <ExternalLink className="h-3 w-3 text-white" />
+                <ShieldCheck className="h-4 w-4 text-[#A37F3B]" />
+                <span>Admin Manager</span>
+                <ExternalLink className="h-3 w-3 text-[#A37F3B]" />
               </a>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Main Grid: Playlist & Player */}
@@ -800,12 +947,42 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                             </div>
                           </div>
 
-                          {/* Quick Right controls: Duration and Download */}
-                          <div className="flex items-center gap-2 shrink-0 ml-2" onClick={(e) => e.stopPropagation()}>
+                          {/* Quick Right controls: Duration, AI Transcribe, Queue, and Download */}
+                          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-2" onClick={(e) => e.stopPropagation()}>
                             <span className="text-xs font-mono text-[#8A7463] font-medium hidden sm:inline-block w-12 text-right">
                               {song.duration || '4:30'}
                             </span>
 
+                            {/* AI Pre-Listen & Transcribe Button */}
+                            <button
+                              type="button"
+                              onClick={(e) => openAiTranscriber(song, e)}
+                              className="p-2 rounded-xl transition-all cursor-pointer border border-transparent hover:border-[#A37F3B]/60 hover:bg-[#FAF7F2] text-[#8A7463] hover:text-[#A37F3B] flex items-center gap-1 group/ai"
+                              title="Pre-listen & transcribe lyrics with AI"
+                            >
+                              <Sparkles className="h-4 w-4 text-[#A37F3B] group-hover/ai:animate-spin" />
+                            </button>
+
+                            {/* Add to Queue Button */}
+                            <button
+                              type="button"
+                              onClick={(e) => addToQueue(song, e)}
+                              className={`p-2 rounded-xl transition-all cursor-pointer border flex items-center gap-1 ${
+                                userQueue.some(q => q.id === song.id)
+                                  ? 'bg-[#A37F3B]/15 border-[#A37F3B] text-[#A37F3B]'
+                                  : 'hover:bg-[#FAF7F2] border-transparent hover:border-[#E1D6C7] text-[#8A7463] hover:text-[#A37F3B]'
+                              }`}
+                              title={userQueue.some(q => q.id === song.id) ? `Queued (${userQueue.filter(q => q.id === song.id).length}x) - Click to add another` : "Add to Up Next Queue"}
+                            >
+                              <ListPlus className="h-4 w-4" />
+                              {userQueue.some(q => q.id === song.id) && (
+                                <span className="text-[10px] font-mono font-bold px-1 rounded bg-[#A37F3B] text-white">
+                                  {userQueue.filter(q => q.id === song.id).length}
+                                </span>
+                              )}
+                            </button>
+
+                            {/* Download Button */}
                             <button
                               type="button"
                               onClick={(e) => triggerSongDownload(song, e)}
@@ -1024,20 +1201,46 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                                 </span>
                               </div>
 
-                              {/* Lyrics & Download Action Buttons */}
-                              <div className="flex items-center gap-2">
+                              {/* Tabs: Lyrics, Up Next Queue, and Download */}
+                              <div className="flex flex-wrap items-center gap-2">
                                 <button
                                   type="button"
-                                  onClick={() => setShowLyrics(!showLyrics)}
+                                  onClick={() => {
+                                    setInCardActiveTab(prev => ({
+                                      ...prev,
+                                      [song.id]: prev[song.id] === 'queue' ? 'lyrics' : 'queue'
+                                    }));
+                                  }}
                                   className="text-[11px] font-semibold tracking-wider uppercase flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all cursor-pointer font-mono"
                                   style={{
-                                    background: showLyrics ? '#A37F3B' : '#1D1108',
+                                    background: inCardActiveTab[song.id] === 'queue' ? '#A37F3B' : '#1D1108',
                                     borderColor: '#A37F3B',
-                                    color: showLyrics ? '#FFFFFF' : '#F7F5F0'
+                                    color: inCardActiveTab[song.id] === 'queue' ? '#FFFFFF' : '#F7F5F0'
+                                  }}
+                                  title="View Upcoming Queue"
+                                >
+                                  <ListMusic className="h-3.5 w-3.5" style={{ color: inCardActiveTab[song.id] === 'queue' ? '#FFFFFF' : '#A37F3B' }} />
+                                  <span>Up Next ({userQueue.length > 0 ? userQueue.length : upcomingPlaylistSongs.length})</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setInCardActiveTab(prev => ({
+                                      ...prev,
+                                      [song.id]: 'lyrics'
+                                    }));
+                                    setShowLyrics(!showLyrics);
+                                  }}
+                                  className="text-[11px] font-semibold tracking-wider uppercase flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all cursor-pointer font-mono"
+                                  style={{
+                                    background: (showLyrics && inCardActiveTab[song.id] !== 'queue') ? '#A37F3B' : '#1D1108',
+                                    borderColor: '#A37F3B',
+                                    color: (showLyrics && inCardActiveTab[song.id] !== 'queue') ? '#FFFFFF' : '#F7F5F0'
                                   }}
                                 >
-                                  <FileText className="h-3.5 w-3.5" style={{ color: showLyrics ? '#FFFFFF' : '#A37F3B' }} />
-                                  <span>{showLyrics ? 'Hide Lyrics' : 'View Lyrics'}</span>
+                                  <FileText className="h-3.5 w-3.5" style={{ color: (showLyrics && inCardActiveTab[song.id] !== 'queue') ? '#FFFFFF' : '#A37F3B' }} />
+                                  <span>{showLyrics && inCardActiveTab[song.id] !== 'queue' ? 'Lyrics' : 'View Lyrics'}</span>
                                 </button>
 
                                 <button
@@ -1066,8 +1269,142 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                               </div>
                             </div>
 
-                            {/* IN-CARD SYNCHRONIZED LYRICS BOARD */}
-                            {showLyrics && currentSong && currentSong.lyrics && (
+                            {/* IN-CARD UP NEXT QUEUE PANEL */}
+                            {inCardActiveTab[song.id] === 'queue' ? (
+                              <div className="pt-3 border-t border-[#4A2D17] space-y-3">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <ListMusic className="h-3.5 w-3.5 text-[#A37F3B]" />
+                                    <span className="font-mono text-xs font-bold uppercase text-[#E5B869]">
+                                      Up Next Worship Queue
+                                    </span>
+                                  </div>
+
+                                  {userQueue.length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={clearQueue}
+                                      className="px-2 py-1 rounded-md text-[10px] font-mono text-rose-300 hover:text-rose-100 bg-rose-950/40 border border-rose-800/60 hover:bg-rose-900/60 transition-all cursor-pointer flex items-center gap-1"
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                      <span>Clear Queue</span>
+                                    </button>
+                                  )}
+                                </div>
+
+                                <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1 py-1 bg-[#180E07] rounded-xl border border-[#4A2D17]/80 p-3">
+                                  {/* Custom User Queued Songs */}
+                                  {userQueue.length > 0 && (
+                                    <div className="space-y-1.5 mb-3">
+                                      <div className="text-[10px] font-mono uppercase tracking-wider text-[#A37F3B] font-bold px-1">
+                                        Your Queued Tracks ({userQueue.length})
+                                      </div>
+                                      {userQueue.map((queuedSong, qIdx) => (
+                                        <div
+                                          key={`in-card-queue-${queuedSong.id}-${qIdx}`}
+                                          className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[#25160B] border border-[#A37F3B]/50 text-xs"
+                                        >
+                                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                                            <span className="text-[10px] font-mono text-[#A37F3B] w-4 text-center font-bold">
+                                              {qIdx + 1}
+                                            </span>
+                                            <div className="min-w-0 flex-1">
+                                              <p className="font-bold text-white truncate">{queuedSong.title}</p>
+                                              <p className="text-[10px] text-[#A37F3B] truncate">{queuedSong.artist}</p>
+                                            </div>
+                                          </div>
+
+                                          <div className="flex items-center gap-1 shrink-0">
+                                            <button
+                                              type="button"
+                                              onClick={(e) => moveQueueItem(qIdx, qIdx - 1, e)}
+                                              disabled={qIdx === 0}
+                                              className="p-1 rounded hover:bg-[#3A2312] text-[#F7F5F0] disabled:opacity-30 cursor-pointer"
+                                              title="Move Up"
+                                            >
+                                              <ArrowUp className="h-3 w-3" />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={(e) => moveQueueItem(qIdx, qIdx + 1, e)}
+                                              disabled={qIdx === userQueue.length - 1}
+                                              className="p-1 rounded hover:bg-[#3A2312] text-[#F7F5F0] disabled:opacity-30 cursor-pointer"
+                                              title="Move Down"
+                                            >
+                                              <ArrowDown className="h-3 w-3" />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={(e) => playFromQueue(qIdx, e)}
+                                              className="p-1 rounded bg-[#A37F3B] text-white hover:bg-[#8F6D2F] cursor-pointer ml-1"
+                                              title="Play Now"
+                                            >
+                                              <Play className="h-3 w-3 fill-current" />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={(e) => removeFromQueue(qIdx, e)}
+                                              className="p-1 rounded hover:bg-rose-950/50 text-rose-300 cursor-pointer ml-0.5"
+                                              title="Remove from queue"
+                                            >
+                                              <Trash2 className="h-3 w-3" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  {/* Subsequent Playlist Tracks */}
+                                  <div className="space-y-1.5">
+                                    <div className="text-[10px] font-mono uppercase tracking-wider text-[#8A7463] font-semibold px-1">
+                                      {userQueue.length > 0 ? 'Following After Queue (Playlist)' : 'Next in Playlist Order'}
+                                    </div>
+                                    {upcomingPlaylistSongs.slice(0, 5).map((nextTrack, nIdx) => (
+                                      <div
+                                        key={`in-card-upcoming-${nextTrack.id}-${nIdx}`}
+                                        className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[#1D1108]/60 hover:bg-[#1D1108] border border-[#4A2D17]/50 text-xs transition-colors"
+                                      >
+                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                          <span className="text-[10px] font-mono text-[#8A7463] w-4 text-center">
+                                            {nIdx + 1}
+                                          </span>
+                                          <div className="min-w-0 flex-1">
+                                            <p className="font-medium text-[#F7F5F0] truncate">{nextTrack.title}</p>
+                                            <p className="text-[10px] text-[#8A7463] truncate">{nextTrack.artist}</p>
+                                          </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                          <span className="text-[10px] font-mono text-[#8A7463] hidden sm:inline">
+                                            {nextTrack.duration || '4:30'}
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => addToQueue(nextTrack, e)}
+                                            className="px-2 py-0.5 rounded bg-[#25160B] border border-[#A37F3B]/50 hover:bg-[#A37F3B] hover:text-white text-[#A37F3B] text-[10px] font-mono font-bold transition-all cursor-pointer flex items-center gap-0.5"
+                                            title="Add to queue"
+                                          >
+                                            <Plus className="h-2.5 w-2.5" />
+                                            <span>Queue</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleSelectSong(nextTrack)}
+                                            className="p-1 rounded bg-[#3A2312] hover:bg-[#A37F3B] text-white transition-all cursor-pointer"
+                                            title="Play Immediately"
+                                          >
+                                            <Play className="h-3 w-3 fill-current" />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              /* IN-CARD SYNCHRONIZED LYRICS BOARD */
+                              (showLyrics && currentSong && currentSong.lyrics) ? (
                               <div className="pt-3 border-t border-[#4A2D17] space-y-3">
                                 <div className="flex items-center justify-between gap-2">
                                   <div className="flex items-center gap-1.5">
@@ -1110,7 +1447,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                                 </div>
 
                                 <div 
-                                  ref={lyricsContainerRef}
+                                  ref={inCardLyricsContainerRef}
                                   onScroll={handleLyricsUserInteraction}
                                   onWheel={handleLyricsUserInteraction}
                                   onTouchMove={handleLyricsUserInteraction}
@@ -1126,7 +1463,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                                         return (
                                           <div 
                                             key={line.id}
-                                            ref={(el) => (lyricLineRefs.current[idx] = el)}
+                                            ref={(el) => (inCardLyricLineRefs.current[idx] = el)}
                                             className="py-1"
                                           >
                                             <span className="inline-block px-3 py-0.5 bg-[#1D1108] text-[#A37F3B] border border-[#4A2D17] rounded-full text-[10px] font-mono font-bold uppercase tracking-widest shadow-xs">
@@ -1139,7 +1476,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                                       return (
                                         <div
                                           key={line.id}
-                                          ref={(el) => (lyricLineRefs.current[idx] = el)}
+                                          ref={(el) => (inCardLyricLineRefs.current[idx] = el)}
                                           onClick={() => handleJumpToLyric(line.startTime)}
                                           className={`group relative px-3 py-2 rounded-xl cursor-pointer transition-all duration-200 flex items-center justify-between gap-2 text-center ${
                                             isActive
@@ -1188,7 +1525,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                                   )}
                                 </div>
                               </div>
-                            )}
+                            ) : null)}
 
                           </div>
                         )}
@@ -1420,27 +1757,61 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                     </span>
                   </div>
 
-                  {/* Lyrics & Download Toggle */}
+                  {/* Lyrics, Up Next Queue, AI Transcribe & Download Toggle Bar */}
                   <div 
-                    className="flex justify-between items-center pt-3 border-t border-[#4A2D17] gap-3"
+                    className="flex flex-wrap justify-between items-center pt-3 border-t border-[#4A2D17] gap-2"
                   >
-                    <button
-                      onClick={() => setShowLyrics(!showLyrics)}
-                      className="text-[11px] font-semibold tracking-wider uppercase flex items-center gap-2 px-3.5 py-2 rounded-xl border transition-all cursor-pointer hover:brightness-110 font-mono"
-                      style={{
-                        background: showLyrics ? '#A37F3B' : '#1D1108',
-                        borderColor: '#A37F3B',
-                        color: showLyrics ? '#FFFFFF' : '#F7F5F0'
-                      }}
-                    >
-                      <FileText className="h-3.5 w-3.5" style={{ color: showLyrics ? '#FFFFFF' : '#A37F3B' }} />
-                      {showLyrics ? 'Hide Lyrics' : 'View Lyrics'}
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveRightTab('queue');
+                          setShowLyrics(false);
+                        }}
+                        className="text-[11px] font-semibold tracking-wider uppercase flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all cursor-pointer font-mono"
+                        style={{
+                          background: activeRightTab === 'queue' ? '#A37F3B' : '#1D1108',
+                          borderColor: '#A37F3B',
+                          color: activeRightTab === 'queue' ? '#FFFFFF' : '#F7F5F0'
+                        }}
+                        title="View & manage up next queue"
+                      >
+                        <ListMusic className="h-3.5 w-3.5" style={{ color: activeRightTab === 'queue' ? '#FFFFFF' : '#A37F3B' }} />
+                        <span>Up Next ({userQueue.length > 0 ? userQueue.length : upcomingPlaylistSongs.length})</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveRightTab('lyrics');
+                          setShowLyrics(!showLyrics);
+                        }}
+                        className="text-[11px] font-semibold tracking-wider uppercase flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all cursor-pointer font-mono"
+                        style={{
+                          background: (activeRightTab === 'lyrics' && showLyrics) ? '#A37F3B' : '#1D1108',
+                          borderColor: '#A37F3B',
+                          color: (activeRightTab === 'lyrics' && showLyrics) ? '#FFFFFF' : '#F7F5F0'
+                        }}
+                      >
+                        <FileText className="h-3.5 w-3.5" style={{ color: (activeRightTab === 'lyrics' && showLyrics) ? '#FFFFFF' : '#A37F3B' }} />
+                        <span>{showLyrics && activeRightTab === 'lyrics' ? 'Hide Lyrics' : 'Lyrics'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => openAiTranscriber(currentSong)}
+                        className="text-[11px] font-semibold tracking-wider uppercase flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#A37F3B]/60 bg-[#1D1108] hover:bg-[#3A2312] text-[#E5B869] transition-all cursor-pointer font-mono"
+                        title="Pre-listen and re-transcribe with AI"
+                      >
+                        <Sparkles className="h-3.5 w-3.5 text-[#A37F3B]" />
+                        <span>AI Transcribe</span>
+                      </button>
+                    </div>
 
                     <button
                       onClick={() => triggerSongDownload(currentSong)}
                       disabled={isDownloading[currentSong.id]}
-                      className="text-[11px] font-semibold tracking-wider uppercase flex items-center gap-2 px-4 py-2 rounded-xl border transition-all cursor-pointer hover:bg-[#8F6D2F] shadow-md bg-[#A37F3B] border-[#A37F3B] text-white font-mono"
+                      className="text-[11px] font-semibold tracking-wider uppercase flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all cursor-pointer hover:bg-[#8F6D2F] shadow-md bg-[#A37F3B] border-[#A37F3B] text-white font-mono"
                     >
                       {userSongDownloads.some(s => s.id === currentSong.id) ? (
                         <>
@@ -1476,154 +1847,360 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
 
             </div>
 
-            {/* Synchronized Auto-Scrolling Lyrics Board */}
-            <AnimatePresence>
-              {showLyrics && currentSong && currentSong.lyrics && (
+            {/* Right Side Panel: Up Next Queue OR Synchronized Auto-Scrolling Lyrics */}
+            <AnimatePresence mode="wait">
+              {activeRightTab === 'queue' ? (
                 <motion.div
+                  key="queue-panel"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 10 }}
-                  className="border rounded-3xl p-5 shadow-2xl font-sans text-[#F7F5F0] bg-[#25160B] border-[#4A2D17] relative overflow-hidden"
+                  className="border rounded-3xl p-5 shadow-2xl font-sans text-[#F7F5F0] bg-[#25160B] border-[#4A2D17] relative overflow-hidden space-y-4"
                 >
-                  {/* Lyrics Board Header */}
-                  <div 
-                    className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-3 border-b border-[#4A2D17]"
-                  >
+                  {/* Queue Header */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[#4A2D17]">
                     <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-[#A37F3B]" />
-                      <h4 className="font-display font-bold text-xs tracking-wider uppercase text-[#A37F3B] font-mono">
-                        Live Synced Lyrics
+                      <ListMusic className="h-4 w-4 text-[#A37F3B]" />
+                      <h4 className="font-display font-bold text-xs tracking-wider uppercase text-[#E5B869] font-mono">
+                        Up Next Worship Queue
                       </h4>
-                      <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-[#3A2312] text-[#E4DCD0] border border-[#4A2D17]">
-                        Click any line to seek
+                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-[#3A2312] text-[#A37F3B] border border-[#4A2D17]">
+                        {userQueue.length > 0 ? `${userQueue.length} queued` : 'Playlist order'}
                       </span>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {/* Re-center button if user manually scrolled */}
-                      {userScrolledManually && (
+                      {userQueue.length > 0 && (
                         <button
                           type="button"
-                          onClick={reCenterLyrics}
-                          className="px-2 py-1 rounded-md text-[10px] font-mono bg-[#A37F3B] hover:bg-[#8F6D2F] text-white flex items-center gap-1 transition-all shadow-sm cursor-pointer animate-pulse"
-                          title="Snap back to current line"
+                          onClick={clearQueue}
+                          className="px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold text-rose-300 hover:text-white bg-rose-950/40 border border-rose-800/60 hover:bg-rose-900/60 transition-all cursor-pointer flex items-center gap-1 shadow-xs"
                         >
-                          <Navigation className="h-3 w-3" />
-                          <span>Re-center</span>
+                          <Trash2 className="h-3 w-3" />
+                          <span>Clear Queue</span>
                         </button>
                       )}
-
-                      {/* Auto-Scroll Toggle */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const next = !autoScroll;
-                          setAutoScroll(next);
-                          if (next) setUserScrolledManually(false);
-                        }}
-                        className={`px-2 py-1 rounded-md text-[10px] font-mono uppercase font-bold border transition-all cursor-pointer flex items-center gap-1 ${
-                          autoScroll 
-                            ? 'bg-[#3A2312] border-[#A37F3B] text-[#A37F3B]' 
-                            : 'bg-[#1D1108] border-[#4A2D17] text-[#8A7463]'
-                        }`}
-                        title={autoScroll ? 'Automatic scrolling enabled' : 'Automatic scrolling paused'}
-                      >
-                        <Sparkles className="h-3 w-3" />
-                        <span>{autoScroll ? 'Auto-Scroll: ON' : 'Auto-Scroll: OFF'}</span>
-                      </button>
                     </div>
                   </div>
 
-                  {/* Synchronized Lyrics Lines Container with High-Performance Auto-Scroll */}
-                  <div 
-                    ref={lyricsContainerRef}
-                    onScroll={handleLyricsUserInteraction}
-                    onWheel={handleLyricsUserInteraction}
-                    onTouchMove={handleLyricsUserInteraction}
-                    onPointerDown={handleLyricsUserInteraction}
-                    className="space-y-2.5 text-center max-h-[360px] overflow-y-auto pr-1 py-4 select-none"
-                  >
-                    {parsedLyrics.length > 0 ? (
-                      parsedLyrics.map((line, idx) => {
-                        const isActive = idx === activeLyricIndex;
-                        const isPast = idx < activeLyricIndex;
+                  {/* Queue Body List */}
+                  <div className="space-y-4 max-h-[460px] overflow-y-auto pr-1">
+                    {/* User Queued Songs */}
+                    {userQueue.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-xs text-[#A37F3B] font-mono font-bold uppercase tracking-wider px-1">
+                          <span>Your Custom Queue ({userQueue.length})</span>
+                          <span className="text-[10px] font-normal text-[#8A7463]">Plays First</span>
+                        </div>
 
-                        if (line.isHeader) {
-                          return (
-                            <div 
-                              key={line.id}
-                              ref={(el) => (lyricLineRefs.current[idx] = el)}
-                              className="py-1"
+                        <div className="space-y-2">
+                          {userQueue.map((queuedTrack, qIdx) => (
+                            <div
+                              key={`deck-queue-${queuedTrack.id}-${qIdx}`}
+                              className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-[#1D1108] border border-[#A37F3B]/50 hover:border-[#A37F3B] transition-all group"
                             >
-                              <span className="inline-block px-3 py-1 bg-[#1D1108] text-[#A37F3B] border border-[#4A2D17] rounded-full text-[10px] font-mono font-bold uppercase tracking-widest shadow-sm">
-                                {line.text}
-                              </span>
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <div
-                            key={line.id}
-                            ref={(el) => (lyricLineRefs.current[idx] = el)}
-                            onClick={() => handleJumpToLyric(line.startTime)}
-                            className={`group relative px-4 py-2.5 rounded-2xl cursor-pointer transition-all duration-300 flex items-center justify-between gap-3 text-center ${
-                              isActive
-                                ? 'bg-[#3A2312] border-2 border-[#A37F3B] shadow-xl text-white scale-[1.02] ring-2 ring-[#A37F3B]/30'
-                                : isPast
-                                ? 'text-[#F7F5F0]/65 hover:text-white hover:bg-[#1D1108]/70 border border-transparent'
-                                : 'text-[#F7F5F0]/40 hover:text-white hover:bg-[#1D1108]/70 border border-transparent'
-                            }`}
-                            title={`Jump to ${formatLyricTime(line.startTime)}`}
-                          >
-                            {/* Timestamp tag left on active / hover */}
-                            <span 
-                              className={`text-[10px] font-mono transition-opacity shrink-0 w-10 text-left ${
-                                isActive 
-                                  ? 'text-[#A37F3B] font-bold opacity-100' 
-                                  : 'text-[#8A7463] opacity-0 group-hover:opacity-100'
-                              }`}
-                            >
-                              {formatLyricTime(line.startTime)}
-                            </span>
-
-                            {/* Lyric Content Text */}
-                            <p 
-                              className={`flex-1 text-sm sm:text-base leading-relaxed tracking-wide transition-all ${
-                                isActive
-                                  ? 'font-bold text-white drop-shadow-md text-[#FFF8E7]'
-                                  : 'font-normal'
-                              }`}
-                            >
-                              {line.text}
-                            </p>
-
-                            {/* Active pulse icon right */}
-                            <div className="shrink-0 w-10 text-right flex justify-end">
-                              {isActive && (
-                                <span className="flex h-2.5 w-2.5 relative">
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#A37F3B] opacity-75" />
-                                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#A37F3B]" />
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <span className="text-xs font-mono font-bold text-[#A37F3B] w-5 text-center shrink-0">
+                                  {String(qIdx + 1).padStart(2, '0')}
                                 </span>
-                              )}
+                                
+                                <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 border border-[#4A2D17] bg-[#150B05]">
+                                  <img
+                                    src={queuedTrack.coverUrl || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&auto=format&fit=crop'}
+                                    alt={queuedTrack.title}
+                                    className="w-full h-full object-cover"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                </div>
+
+                                <div className="min-w-0 flex-1">
+                                  <h5 className="text-xs sm:text-sm font-bold text-white truncate group-hover:text-[#E5B869] transition-colors">
+                                    {queuedTrack.title}
+                                  </h5>
+                                  <p className="text-[11px] text-[#A37F3B] truncate">{queuedTrack.artist}</p>
+                                </div>
+                              </div>
+
+                              {/* Controls */}
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span className="text-[11px] font-mono text-[#8A7463] mr-1 hidden sm:inline">
+                                  {queuedTrack.duration || '4:30'}
+                                </span>
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => moveQueueItem(qIdx, qIdx - 1, e)}
+                                  disabled={qIdx === 0}
+                                  className="p-1.5 rounded-lg bg-[#25160B] hover:bg-[#3A2312] text-[#F7F5F0] disabled:opacity-20 cursor-pointer transition-colors"
+                                  title="Move Up"
+                                >
+                                  <ArrowUp className="h-3.5 w-3.5" />
+                                </button>
+                                
+                                <button
+                                  type="button"
+                                  onClick={(e) => moveQueueItem(qIdx, qIdx + 1, e)}
+                                  disabled={qIdx === userQueue.length - 1}
+                                  className="p-1.5 rounded-lg bg-[#25160B] hover:bg-[#3A2312] text-[#F7F5F0] disabled:opacity-20 cursor-pointer transition-colors"
+                                  title="Move Down"
+                                >
+                                  <ArrowDown className="h-3.5 w-3.5" />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => playFromQueue(qIdx, e)}
+                                  className="p-1.5 rounded-lg bg-[#A37F3B] hover:bg-[#8F6D2F] text-white shadow-xs cursor-pointer transition-all active:scale-95"
+                                  title="Play Now"
+                                >
+                                  <Play className="h-3.5 w-3.5 fill-current" />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => removeFromQueue(qIdx, e)}
+                                  className="p-1.5 rounded-lg hover:bg-rose-950/60 text-rose-300 hover:text-rose-100 cursor-pointer transition-colors"
+                                  title="Remove from queue"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div className="py-8 text-center text-xs text-[#F7F5F0]/60 italic">
-                        {currentSong.lyrics}
+                          ))}
+                        </div>
                       </div>
                     )}
+
+                    {/* Upcoming Subsequent Playlist Songs */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs text-[#8A7463] font-mono font-semibold uppercase tracking-wider px-1">
+                        <span>{userQueue.length > 0 ? 'Following After Queue (Playlist)' : 'Next in Playlist Order'}</span>
+                        <span className="text-[10px] text-[#8A7463]">Consecutive Play</span>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        {upcomingPlaylistSongs.slice(0, 8).map((upcomingTrack, uIdx) => (
+                          <div
+                            key={`deck-upcoming-${upcomingTrack.id}-${uIdx}`}
+                            className="flex items-center justify-between gap-2.5 p-2.5 rounded-xl bg-[#180E07] hover:bg-[#1D1108] border border-[#4A2D17]/60 hover:border-[#A37F3B]/50 transition-all text-xs group"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              <span className="text-[11px] font-mono text-[#8A7463] w-5 text-center shrink-0">
+                                {uIdx + 1}
+                              </span>
+                              
+                              <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border border-[#4A2D17]/80 bg-[#150B05]">
+                                <img
+                                  src={upcomingTrack.coverUrl || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&auto=format&fit=crop'}
+                                  alt={upcomingTrack.title}
+                                  className="w-full h-full object-cover"
+                                  referrerPolicy="no-referrer"
+                                />
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+                                <h6 className="font-semibold text-[#F7F5F0] truncate group-hover:text-[#E5B869] transition-colors">
+                                  {upcomingTrack.title}
+                                </h6>
+                                <p className="text-[10px] text-[#8A7463] truncate">{upcomingTrack.artist}</p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-[10px] font-mono text-[#8A7463] mr-1 hidden sm:inline">
+                                {upcomingTrack.duration || '4:30'}
+                              </span>
+
+                              <button
+                                type="button"
+                                onClick={(e) => addToQueue(upcomingTrack, e)}
+                                className="px-2.5 py-1 rounded-lg bg-[#25160B] border border-[#A37F3B]/50 hover:bg-[#A37F3B] hover:text-white text-[#A37F3B] text-[10px] font-mono font-bold transition-all cursor-pointer flex items-center gap-1"
+                                title="Add to Up Next Queue"
+                              >
+                                <Plus className="h-3 w-3" />
+                                <span>Queue</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleSelectSong(upcomingTrack)}
+                                className="p-1.5 rounded-lg bg-[#3A2312] hover:bg-[#A37F3B] text-white transition-all cursor-pointer"
+                                title="Play Immediately"
+                              >
+                                <Play className="h-3 w-3 fill-current" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Bottom helper prompt */}
-                  <div className="pt-2 mt-2 border-t border-[#4A2D17] text-center">
-                    <span className="text-[10px] font-mono text-[#A37F3B]/80">
-                      Synchronized to playback • Rewind or Fast Forward anytime to match spoken lyrics
-                    </span>
+                  {/* Queue Footnote */}
+                  <div className="pt-2 border-t border-[#4A2D17] text-center">
+                    <p className="text-[10px] font-mono text-[#8A7463]">
+                      Click <span className="text-[#A37F3B] font-bold">+ Queue</span> on any song to add it to the upcoming playback sequence.
+                    </p>
                   </div>
                 </motion.div>
+              ) : (
+                showLyrics && currentSong && currentSong.lyrics && (
+                  <motion.div
+                    key="lyrics-panel"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="border rounded-3xl p-5 shadow-2xl font-sans text-[#F7F5F0] bg-[#25160B] border-[#4A2D17] relative overflow-hidden"
+                  >
+                    {/* Lyrics Board Header */}
+                    <div 
+                      className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-3 border-b border-[#4A2D17]"
+                    >
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-[#A37F3B]" />
+                        <h4 className="font-display font-bold text-xs tracking-wider uppercase text-[#A37F3B] font-mono">
+                          Live Synced Lyrics
+                        </h4>
+                        <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-[#3A2312] text-[#E4DCD0] border border-[#4A2D17]">
+                          Click any line to seek
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {/* Re-center button if user manually scrolled */}
+                        {userScrolledManually && (
+                          <button
+                            type="button"
+                            onClick={reCenterLyrics}
+                            className="px-2 py-1 rounded-md text-[10px] font-mono bg-[#A37F3B] hover:bg-[#8F6D2F] text-white flex items-center gap-1 transition-all shadow-sm cursor-pointer animate-pulse"
+                            title="Snap back to current line"
+                          >
+                            <Navigation className="h-3 w-3" />
+                            <span>Re-center</span>
+                          </button>
+                        )}
+
+                        {/* Auto-Scroll Toggle */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = !autoScroll;
+                            setAutoScroll(next);
+                            if (next) setUserScrolledManually(false);
+                          }}
+                          className={`px-2 py-1 rounded-md text-[10px] font-mono uppercase font-bold border transition-all cursor-pointer flex items-center gap-1 ${
+                            autoScroll 
+                              ? 'bg-[#3A2312] border-[#A37F3B] text-[#A37F3B]' 
+                              : 'bg-[#1D1108] border-[#4A2D17] text-[#8A7463]'
+                          }`}
+                          title={autoScroll ? 'Automatic scrolling enabled' : 'Automatic scrolling paused'}
+                        >
+                          <Sparkles className="h-3 w-3" />
+                          <span>{autoScroll ? 'Auto-Scroll: ON' : 'Auto-Scroll: OFF'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Synchronized Lyrics Lines Container with High-Performance Auto-Scroll */}
+                    <div 
+                      ref={lyricsContainerRef}
+                      onScroll={handleLyricsUserInteraction}
+                      onWheel={handleLyricsUserInteraction}
+                      onTouchMove={handleLyricsUserInteraction}
+                      onPointerDown={handleLyricsUserInteraction}
+                      className="space-y-2.5 text-center max-h-[360px] overflow-y-auto pr-1 py-4 select-none"
+                    >
+                      {parsedLyrics.length > 0 ? (
+                        parsedLyrics.map((line, idx) => {
+                          const isActive = idx === activeLyricIndex;
+                          const isPast = idx < activeLyricIndex;
+
+                          if (line.isHeader) {
+                            return (
+                              <div 
+                                key={line.id}
+                                ref={(el) => (lyricLineRefs.current[idx] = el)}
+                                className="py-1"
+                              >
+                                <span className="inline-block px-3 py-1 bg-[#1D1108] text-[#A37F3B] border border-[#4A2D17] rounded-full text-[10px] font-mono font-bold uppercase tracking-widest shadow-sm">
+                                  {line.text}
+                                </span>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div
+                              key={line.id}
+                              ref={(el) => (lyricLineRefs.current[idx] = el)}
+                              onClick={() => handleJumpToLyric(line.startTime)}
+                              className={`group relative px-4 py-2.5 rounded-2xl cursor-pointer transition-all duration-300 flex items-center justify-between gap-3 text-center ${
+                                isActive
+                                  ? 'bg-[#3A2312] border-2 border-[#A37F3B] shadow-xl text-white scale-[1.02] ring-2 ring-[#A37F3B]/30'
+                                  : isPast
+                                  ? 'text-[#F7F5F0]/65 hover:text-white hover:bg-[#1D1108]/70 border border-transparent'
+                                  : 'text-[#F7F5F0]/40 hover:text-white hover:bg-[#1D1108]/70 border border-transparent'
+                              }`}
+                              title={`Jump to ${formatLyricTime(line.startTime)}`}
+                            >
+                              {/* Timestamp tag left on active / hover */}
+                              <span 
+                                className={`text-[10px] font-mono transition-opacity shrink-0 w-10 text-left ${
+                                  isActive 
+                                    ? 'text-[#A37F3B] font-bold opacity-100' 
+                                    : 'text-[#8A7463] opacity-0 group-hover:opacity-100'
+                                }`}
+                              >
+                                {formatLyricTime(line.startTime)}
+                              </span>
+
+                              {/* Lyric Content Text */}
+                              <p 
+                                className={`flex-1 text-sm sm:text-base leading-relaxed tracking-wide transition-all ${
+                                  isActive
+                                    ? 'font-bold text-white drop-shadow-md text-[#FFF8E7]'
+                                    : 'font-normal'
+                                }`}
+                              >
+                                {line.text}
+                              </p>
+
+                              {/* Active pulse icon right */}
+                              <div className="shrink-0 w-10 text-right flex justify-end">
+                                {isActive && (
+                                  <span className="flex h-2.5 w-2.5 relative">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#A37F3B] opacity-75" />
+                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#A37F3B]" />
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="py-8 text-center text-xs text-[#F7F5F0]/60 italic">
+                          {currentSong.lyrics}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Bottom helper prompt with AI Transcriber Link */}
+                    <div className="pt-2.5 mt-2 border-t border-[#4A2D17] flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[10px] font-mono text-[#A37F3B]/80">
+                        Synchronized to playback • Rewind or Fast Forward anytime
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() => openAiTranscriber(currentSong)}
+                        className="text-[10px] font-mono text-[#E5B869] hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <Sparkles className="h-3 w-3 text-[#A37F3B]" />
+                        <span>AI Transcriber</span>
+                      </button>
+                    </div>
+                  </motion.div>
+                )
               )}
             </AnimatePresence>
 
@@ -1634,6 +2211,166 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
         {/* Global Floating Quick Player Bar (Always accessible when scrolling) */}
         {currentSong && (
           <div className="fixed bottom-3 sm:bottom-5 left-3 sm:left-6 right-3 sm:right-6 z-50 max-w-4xl mx-auto">
+            
+            {/* Floating Up Next Queue Drawer Modal */}
+            <AnimatePresence>
+              {showFloatingQueue && (
+                <motion.div
+                  initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 16, scale: 0.98 }}
+                  className="mb-2 bg-[#25160B]/95 backdrop-blur-md text-[#F7F5F0] border border-[#A37F3B]/80 rounded-2xl shadow-2xl p-4 ring-1 ring-black/40 space-y-3"
+                >
+                  <div className="flex items-center justify-between border-b border-[#4A2D17] pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <ListMusic className="h-4 w-4 text-[#A37F3B]" />
+                      <h4 className="font-bold text-xs sm:text-sm font-mono text-[#E5B869] uppercase">
+                        Up Next Worship Queue
+                      </h4>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#1D1108] text-[#A37F3B] border border-[#4A2D17]">
+                        {userQueue.length} custom / {upcomingPlaylistSongs.length} playlist
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {userQueue.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={clearQueue}
+                          className="px-2 py-1 rounded text-[10px] font-mono text-rose-300 hover:text-white bg-rose-950/40 border border-rose-800/60 transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          <span>Clear</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setShowFloatingQueue(false)}
+                        className="p-1 rounded-lg hover:bg-[#3A2312] text-[#8A7463] hover:text-white transition-colors cursor-pointer"
+                        title="Close Queue Drawer"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="max-h-64 overflow-y-auto space-y-3 pr-1">
+                    {/* User Queued Tracks */}
+                    {userQueue.length > 0 && (
+                      <div className="space-y-1.5">
+                        <span className="text-[10px] font-mono uppercase text-[#A37F3B] font-bold px-1">
+                          Custom Queue ({userQueue.length})
+                        </span>
+                        {userQueue.map((item, qIdx) => (
+                          <div
+                            key={`floating-queue-${item.id}-${qIdx}`}
+                            className="flex items-center justify-between gap-2 p-2 rounded-xl bg-[#1D1108] border border-[#A37F3B]/40 text-xs"
+                          >
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <span className="text-[10px] font-mono text-[#A37F3B] w-4 text-center font-bold">
+                                {qIdx + 1}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-bold text-white truncate">{item.title}</p>
+                                <p className="text-[10px] text-[#A37F3B] truncate">{item.artist}</p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={(e) => moveQueueItem(qIdx, qIdx - 1, e)}
+                                disabled={qIdx === 0}
+                                className="p-1 rounded hover:bg-[#3A2312] text-[#F7F5F0] disabled:opacity-30 cursor-pointer"
+                                title="Move Up"
+                              >
+                                <ArrowUp className="h-3 w-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => moveQueueItem(qIdx, qIdx + 1, e)}
+                                disabled={qIdx === userQueue.length - 1}
+                                className="p-1 rounded hover:bg-[#3A2312] text-[#F7F5F0] disabled:opacity-30 cursor-pointer"
+                                title="Move Down"
+                              >
+                                <ArrowDown className="h-3 w-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  playFromQueue(qIdx, e);
+                                  setShowFloatingQueue(false);
+                                }}
+                                className="p-1 rounded bg-[#A37F3B] text-white hover:bg-[#8F6D2F] cursor-pointer ml-0.5"
+                                title="Play Now"
+                              >
+                                <Play className="h-3 w-3 fill-current" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => removeFromQueue(qIdx, e)}
+                                className="p-1 rounded hover:bg-rose-950/50 text-rose-300 cursor-pointer"
+                                title="Remove"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Next in playlist */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] font-mono uppercase text-[#8A7463] font-semibold px-1">
+                        {userQueue.length > 0 ? 'Following Playlist Songs' : 'Up Next from Playlist'}
+                      </span>
+                      {upcomingPlaylistSongs.slice(0, 5).map((track, pIdx) => (
+                        <div
+                          key={`floating-upcoming-${track.id}-${pIdx}`}
+                          className="flex items-center justify-between gap-2 p-2 rounded-xl bg-[#180E07] border border-[#4A2D17]/50 text-xs"
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <span className="text-[10px] font-mono text-[#8A7463] w-4 text-center">
+                              {pIdx + 1}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-[#F7F5F0] truncate">{track.title}</p>
+                              <p className="text-[10px] text-[#8A7463] truncate">{track.artist}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => addToQueue(track, e)}
+                              className="px-2 py-0.5 rounded bg-[#25160B] border border-[#A37F3B]/50 hover:bg-[#A37F3B] hover:text-white text-[#A37F3B] text-[10px] font-mono font-bold transition-all cursor-pointer flex items-center gap-0.5"
+                              title="Add to queue"
+                            >
+                              <Plus className="h-2.5 w-2.5" />
+                              <span>Queue</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleSelectSong(track);
+                                setShowFloatingQueue(false);
+                              }}
+                              className="p-1 rounded bg-[#3A2312] hover:bg-[#A37F3B] text-white transition-all cursor-pointer"
+                              title="Play Now"
+                            >
+                              <Play className="h-3 w-3 fill-current" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Bottom Bar Content */}
             <div className="bg-[#25160B]/95 backdrop-blur-md text-[#F7F5F0] border border-[#A37F3B]/80 rounded-2xl shadow-2xl p-2.5 sm:p-3.5 flex items-center justify-between gap-3 ring-1 ring-black/40">
               
               {/* Left: Thumbnail & Title */}
@@ -1736,11 +2473,29 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                 </button>
               </div>
 
-              {/* Right: Lyrics & Mute toggle */}
+              {/* Right: Queue Drawer, Lyrics & Mute toggle */}
               <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setShowLyrics(!showLyrics)}
+                  onClick={() => setShowFloatingQueue(!showFloatingQueue)}
+                  className="px-2 py-1.5 rounded-lg border text-[11px] font-mono font-bold transition-all cursor-pointer flex items-center gap-1"
+                  style={{
+                    background: showFloatingQueue ? '#A37F3B' : '#1D1108',
+                    borderColor: '#A37F3B',
+                    color: showFloatingQueue ? '#FFFFFF' : '#F7F5F0'
+                  }}
+                  title="Toggle Queue Drawer"
+                >
+                  <ListMusic className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Queue ({userQueue.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveRightTab('lyrics');
+                    setShowLyrics(!showLyrics);
+                  }}
                   className="px-2 py-1.5 rounded-lg border text-[11px] font-mono font-bold transition-all cursor-pointer flex items-center gap-1"
                   style={{
                     background: showLyrics ? '#A37F3B' : '#1D1108',
@@ -1766,6 +2521,39 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
             </div>
           </div>
         )}
+
+        {/* Global Action Toast Notification Banner */}
+        <AnimatePresence>
+          {toastMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: -20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              className="fixed top-6 right-6 z-50 bg-[#25160B] text-white border-2 border-[#A37F3B] shadow-2xl px-4 py-2.5 rounded-2xl flex items-center gap-2.5 font-mono text-xs max-w-sm"
+            >
+              <div className="p-1 rounded-full bg-[#A37F3B] text-white">
+                <Check className="h-3.5 w-3.5" />
+              </div>
+              <span className="font-semibold text-[#F7F5F0]">{toastMessage}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* AI Audio Pre-Listener & Lyric Transcriber Studio Modal */}
+        <AnimatePresence>
+          {isAiTranscriberOpen && (
+            <AiTranscriberModal
+              isOpen={isAiTranscriberOpen}
+              onClose={() => setIsAiTranscriberOpen(false)}
+              selectedSong={transcriberTargetSong}
+              allSongs={songs}
+              onApplyLyrics={handleApplyAiLyrics}
+              onPreviewSeek={(seconds) => {
+                handleJumpToLyric(seconds);
+              }}
+            />
+          )}
+        </AnimatePresence>
 
       </div>
     </div>
