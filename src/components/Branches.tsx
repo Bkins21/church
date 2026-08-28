@@ -78,8 +78,6 @@ export default function Branches({ initialSubTab = 'branches', onSubTabChange }:
     return () => window.removeEventListener('gec_branches_updated', handleUpdate);
   }, []);
 
-  const [selectedBranch, setSelectedBranch] = useState<Branch>(ministryBranches[0]);
-
   // Filter local churches by City, Pastor, or Center name
   const filteredBranches = ministryBranches.filter(branch => {
     const q = searchQuery.toLowerCase().trim();
@@ -93,16 +91,10 @@ export default function Branches({ initialSubTab = 'branches', onSubTabChange }:
     );
   });
 
-  const handleBranchClick = (branch: Branch) => {
-    setSelectedBranch(branch);
-  };
-
   const handleDirections = (branch: Branch) => {
     const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(branch.mapEmbedSearch)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   };
-
-  const currentPastorPhoto = branchImageOverrides[selectedBranch.id] || selectedBranch.imageUrl || selectedBranch.pastorPhoto;
 
   const isBranches = activeSubTab === 'branches';
 
@@ -214,171 +206,129 @@ export default function Branches({ initialSubTab = 'branches', onSubTabChange }:
                 </div>
               </div>
 
-              {/* Main Grid: Directory on Left, Details on Right */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                
-                {/* Directory List (Left Column) */}
-                <div className="lg:col-span-7 space-y-4 max-h-[680px] overflow-y-auto pr-2" id="branch-directory-list">
-                  {filteredBranches.length > 0 ? (
-                    filteredBranches.map((branch, idx) => {
-                      const isSelected = selectedBranch.id === branch.id;
-                      return (
-                        <motion.div
-                          key={branch.id}
-                          initial={{ opacity: 0, y: 15 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.35, delay: idx * 0.05 }}
-                          whileHover={{ y: -3, scale: 1.005 }}
-                          whileTap={{ scale: 0.99 }}
-                          onClick={() => handleBranchClick(branch)}
-                          className={`p-5 rounded-2xl border transition-all cursor-pointer flex gap-4 items-start relative overflow-hidden
-                            ${isSelected
-                              ? 'bg-white border-[#A36B3B] shadow-md ring-1 ring-[#A36B3B]/20'
-                              : 'bg-white border-[#E4DCD0] hover:border-[#A36B3B]/60 shadow-sm'
-                            }`}
-                          id={`branch-card-${branch.id}`}
-                        >
-                          <div className="p-3 bg-[#F7F5F0] text-[#A36B3B] rounded-xl shrink-0 mt-0.5 border border-[#E4DCD0]">
-                            <MapPin className="h-5 w-5" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex justify-between items-start gap-2">
-                              <span className="px-2.5 py-0.5 bg-[#F7F5F0] text-[#A36B3B] text-[10px] font-mono font-bold uppercase tracking-wider rounded border border-[#E4DCD0]">
+              {/* Main Grid: All-in-one Branch Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8" id="branches-cards-grid">
+                {filteredBranches.length > 0 ? (
+                  filteredBranches.map((branch, idx) => {
+                    const pastorPhoto = branchImageOverrides[branch.id] || branch.imageUrl || branch.pastorPhoto;
+                    return (
+                      <motion.div
+                        key={branch.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.35, delay: idx * 0.08 }}
+                        className="bg-white border border-[#E4DCD0] rounded-3xl p-6 sm:p-7 shadow-lg shadow-stone-900/5 flex flex-col justify-between hover:border-[#A36B3B]/60 transition-all group relative overflow-hidden"
+                        id={`branch-card-${branch.id}`}
+                      >
+                        {/* Top decorative gradient accent */}
+                        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#A36B3B] via-[#C49B58] to-[#A36B3B]" />
+
+                        <div className="space-y-5">
+                          {/* Header / City Badge & Branch Title */}
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="px-3 py-1 bg-[#F7F5F0] text-[#A36B3B] text-xs font-mono font-bold uppercase tracking-wider rounded-lg border border-[#E4DCD0]">
                                 {branch.city}
                               </span>
-                              <span className="text-[11px] font-mono text-[#8A7463]">{branch.residentPastor}</span>
+                              <span className="text-[11px] font-mono text-[#8A7463] flex items-center gap-1">
+                                <Building2 className="h-3.5 w-3.5 text-[#A36B3B]" />
+                                GEC Campus
+                              </span>
                             </div>
 
-                            <h3 className="font-display font-bold text-base sm:text-lg text-[#3A2312] hover:text-[#A36B3B] transition-colors mt-2 mb-1.5 leading-snug">
+                            <h3 className="font-cinzel text-xl sm:text-2xl font-bold text-[#3A2312] group-hover:text-[#A36B3B] transition-colors leading-tight">
                               {branch.name}
                             </h3>
-                            <p className="text-xs text-[#6B5441] line-clamp-1 mb-4 flex items-center gap-1">
-                              <Compass className="h-3.5 w-3.5 text-[#8A7463] shrink-0" />
-                              {branch.address}
+
+                            <p className="text-xs sm:text-sm text-[#6B5441] flex items-start gap-2 leading-relaxed">
+                              <MapPin className="h-4 w-4 text-[#A36B3B] shrink-0 mt-0.5" />
+                              <span>{branch.address}</span>
                             </p>
-
-                            {branch.serviceTimes?.sunday && branch.serviceTimes.sunday.length > 0 && (
-                              <div className="flex gap-3 text-[11px] font-mono text-[#A36B3B] font-semibold">
-                                <span>Sun: {branch.serviceTimes.sunday.join(', ')}</span>
-                              </div>
-                            )}
                           </div>
 
-                          {/* Left accent bar on selection */}
-                          {isSelected && (
-                            <motion.div 
-                              layoutId="selectedBranchBar"
-                              className="absolute top-0 bottom-0 left-0 w-1.5 bg-[#A36B3B]" 
+                          {/* Resident Pastor Details */}
+                          <div className="p-4 bg-[#F7F5F0] border border-[#E4DCD0] rounded-2xl flex items-center gap-4">
+                            <img
+                              src={pastorPhoto}
+                              alt={branch.residentPastor}
+                              referrerPolicy="no-referrer"
+                              className="w-16 h-16 sm:w-18 sm:h-18 rounded-2xl object-cover border-2 border-white shadow-sm shrink-0"
                             />
-                          )}
-                        </motion.div>
-                      );
-                    })
-                  ) : (
-                    <div className="text-center py-12 bg-white border border-[#E4DCD0] rounded-2xl">
-                      <p className="text-sm text-[#6B5441]">No local church branch found matching your search.</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Selected Details Card & Leader (Right Column) */}
-                <div className="lg:col-span-5" id="selected-branch-details">
-                  <AnimatePresence mode="wait">
-                    <motion.div
-                      key={selectedBranch.id}
-                      initial={{ opacity: 0, x: 15 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -15 }}
-                      transition={{ duration: 0.3 }}
-                      className="bg-white border border-[#E4DCD0] rounded-3xl p-6 sm:p-8 relative overflow-hidden shadow-xl shadow-stone-900/5 flex flex-col justify-between h-full min-h-[580px]"
-                    >
-                    <div>
-                      {/* Branch Head */}
-                      <div className="border-b border-[#EFEAE1] pb-5 mb-6">
-                        <span className="text-[10px] font-mono uppercase tracking-widest text-[#A36B3B] font-bold">Selected Church Center</span>
-                        <h3 className="font-display font-bold text-xl sm:text-2xl text-[#3A2312] mt-1 leading-tight">{selectedBranch.name}</h3>
-                        <p className="text-xs text-[#6B5441] mt-2 font-sans flex items-center gap-1.5">
-                          <MapPin className="h-4 w-4 text-[#A36B3B] shrink-0" />
-                          {selectedBranch.address}
-                        </p>
-                      </div>
-
-                      {/* Service times card */}
-                      {selectedBranch.serviceTimes && (selectedBranch.serviceTimes.sunday?.length || selectedBranch.serviceTimes.midweek?.length) ? (
-                        <div className="bg-[#F7F5F0] rounded-2xl border border-[#E4DCD0] p-4 mb-6">
-                          <h4 className="font-display font-bold text-xs uppercase tracking-wider text-[#3A2312] mb-3 flex items-center gap-1.5">
-                            <Clock className="h-3.5 w-3.5 text-[#A36B3B]" /> Service Schedules
-                          </h4>
-                          
-                          <div className="space-y-3 font-sans text-xs">
-                            {selectedBranch.serviceTimes.sunday && selectedBranch.serviceTimes.sunday.length > 0 && (
-                              <div className="flex justify-between items-center py-2 border-b border-[#E4DCD0]">
-                                <span className="text-[#6B5441]">Sunday Service:</span>
-                                <div className="flex gap-1.5">
-                                  {selectedBranch.serviceTimes.sunday.map((time, idx) => (
-                                    <span key={idx} className="px-2 py-0.5 bg-white text-[#3A2312] font-mono rounded text-[10px] font-semibold border border-[#E4DCD0]">
-                                      {time}
-                                    </span>
-                                  ))}
-                                </div>
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <span className="text-[9px] font-mono uppercase tracking-widest text-[#A36B3B] font-bold block">
+                                Resident Pastor
+                              </span>
+                              <h4 className="font-display font-bold text-sm sm:text-base text-[#3A2312] truncate">
+                                {branch.residentPastor}
+                              </h4>
+                              
+                              <div className="space-y-0.5 pt-0.5 text-xs text-[#6B5441]">
+                                {branch.contactEmail && (
+                                  <a 
+                                    href={`mailto:${branch.contactEmail}`} 
+                                    className="flex items-center gap-1.5 hover:text-[#A36B3B] transition-colors truncate"
+                                  >
+                                    <Mail className="h-3.5 w-3.5 text-[#A36B3B] shrink-0" />
+                                    <span className="truncate">{branch.contactEmail}</span>
+                                  </a>
+                                )}
+                                {branch.contactPhone && (
+                                  <a 
+                                    href={`tel:${branch.contactPhone.replace(/\s+/g, '')}`} 
+                                    className="flex items-center gap-1.5 hover:text-[#A36B3B] transition-colors truncate"
+                                  >
+                                    <Phone className="h-3.5 w-3.5 text-[#A36B3B] shrink-0" />
+                                    <span>{branch.contactPhone}</span>
+                                  </a>
+                                )}
                               </div>
-                            )}
-                            {selectedBranch.serviceTimes.midweek && selectedBranch.serviceTimes.midweek.length > 0 && (
-                              <div className="flex justify-between items-center py-2">
-                                <span className="text-[#6B5441]">Midweek Service:</span>
-                                <div className="flex gap-1.5">
-                                  {selectedBranch.serviceTimes.midweek.map((time, idx) => (
-                                    <span key={idx} className="px-2 py-0.5 bg-white text-[#3A2312] font-mono rounded text-[10px] font-semibold border border-[#E4DCD0]">
-                                      {time}
-                                    </span>
-                                  ))}
-                                </div>
+                            </div>
+                          </div>
+
+                          {/* Service Schedules if present */}
+                          {branch.serviceTimes && (branch.serviceTimes.sunday?.length || branch.serviceTimes.midweek?.length) ? (
+                            <div className="p-3.5 bg-[#FAF8F5] rounded-xl border border-[#E4DCD0]/80 space-y-2">
+                              <div className="flex items-center gap-1.5 text-[11px] font-mono uppercase font-bold text-[#3A2312]">
+                                <Clock className="h-3.5 w-3.5 text-[#A36B3B]" />
+                                <span>Service Schedules</span>
                               </div>
-                            )}
-                          </div>
+                              <div className="flex flex-wrap gap-2 text-xs">
+                                {branch.serviceTimes.sunday?.map((time, tIdx) => (
+                                  <span key={tIdx} className="px-2.5 py-1 bg-white text-[#3A2312] font-mono text-[11px] font-semibold rounded-md border border-[#E4DCD0]">
+                                    Sun: {time}
+                                  </span>
+                                ))}
+                                {branch.serviceTimes.midweek?.map((time, tIdx) => (
+                                  <span key={tIdx} className="px-2.5 py-1 bg-white text-[#3A2312] font-mono text-[11px] font-semibold rounded-md border border-[#E4DCD0]">
+                                    Midweek: {time}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
-                      ) : null}
 
-                      {/* Resident Pastor info */}
-                      <div className="flex gap-4 items-center p-4 bg-[#F7F5F0] border border-[#E4DCD0] rounded-2xl mb-8">
-                        <img
-                          src={currentPastorPhoto}
-                          alt={selectedBranch.residentPastor}
-                          referrerPolicy="no-referrer"
-                          className="w-16 h-16 rounded-xl object-cover border border-[#E4DCD0] shrink-0"
-                        />
-                        <div className="min-w-0">
-                          <span className="text-[9px] font-mono uppercase tracking-widest text-[#8A7463] font-bold">Resident Pastor</span>
-                          <h4 className="font-display font-bold text-sm text-[#3A2312] truncate mt-0.5">{selectedBranch.residentPastor}</h4>
-                          
-                          <div className="flex flex-col gap-1 mt-1 text-[11px] text-[#6B5441]">
-                            <a href={`mailto:${selectedBranch.contactEmail}`} className="flex items-center gap-1 hover:text-[#A36B3B] truncate">
-                              <Mail className="h-3 w-3 text-[#8A7463]" />
-                              {selectedBranch.contactEmail}
-                            </a>
-                            <span className="flex items-center gap-1">
-                              <Phone className="h-3 w-3 text-[#8A7463]" />
-                              {selectedBranch.contactPhone}
-                            </span>
-                          </div>
+                        {/* Action: Google Maps Button */}
+                        <div className="pt-5 mt-5 border-t border-[#EFEAE1]">
+                          <button
+                            type="button"
+                            onClick={() => handleDirections(branch)}
+                            className="w-full py-3 bg-[#A36B3B] hover:bg-[#8D5A30] text-white rounded-xl font-display font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md shadow-[#A36B3B]/15 cursor-pointer"
+                          >
+                            <Compass className="h-4 w-4" />
+                            <span>Find on Google Maps</span>
+                          </button>
                         </div>
-                      </div>
-                    </div>
-
-                    {/* Action Button */}
-                    <div className="space-y-3 pt-4 border-t border-[#EFEAE1]">
-                      <button
-                        onClick={() => handleDirections(selectedBranch)}
-                        className="w-full py-3.5 bg-[#A36B3B] hover:bg-[#8D5A30] text-white rounded-xl font-display font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md shadow-[#A36B3B]/20 cursor-pointer"
-                        id="btn-branch-directions"
-                      >
-                        <Compass className="h-4 w-4" />
-                        Find on Google Maps
-                      </button>
-                    </div>
-                  </motion.div>
-                  </AnimatePresence>
-                </div>
+                      </motion.div>
+                    );
+                  })
+                ) : (
+                  <div className="col-span-full text-center py-16 bg-white border border-[#E4DCD0] rounded-3xl space-y-2">
+                    <Building2 className="h-8 w-8 text-[#A36B3B] mx-auto mb-2 opacity-50" />
+                    <p className="text-base font-bold text-[#3A2312]">No church branches found</p>
+                    <p className="text-xs text-[#6B5441]">Try searching for a different city or center name.</p>
+                  </div>
+                )}
               </div>
             </motion.div>
           ) : (
