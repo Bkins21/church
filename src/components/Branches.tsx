@@ -230,10 +230,7 @@ export default function Branches({ initialSubTab = 'branches', onSubTabChange }:
                               <span className="px-3 py-1 bg-[#F7F5F0] text-[#A36B3B] text-xs font-mono font-bold uppercase tracking-wider rounded-lg border border-[#E4DCD0]">
                                 {branch.city}
                               </span>
-                              <span className="text-[11px] font-mono text-[#8A7463] flex items-center gap-1">
-                                <Building2 className="h-3.5 w-3.5 text-[#A36B3B]" />
-                                GEC Campus
-                              </span>
+                             
                             </div>
 
                             <h3 className="font-cinzel text-xl sm:text-2xl font-bold text-[#3A2312] group-hover:text-[#A36B3B] transition-colors leading-tight">
