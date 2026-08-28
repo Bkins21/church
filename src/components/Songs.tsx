@@ -13,7 +13,7 @@ import { supabase } from '../supabase';
 import { worshipSynth } from '../utils/audioSynth';
 import AiTranscriberModal from './AiTranscriberModal';
 
-export type RepeatMode = 'off' | 'all' | 'one';
+export type RepeatMode = 'off' | 'one';
 
 interface SongsProps {
   userSongDownloads?: Song[];
@@ -29,7 +29,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(0.85);
   const [isMuted, setIsMuted] = useState(false);
-  const [repeatMode, setRepeatMode] = useState<RepeatMode>('all');
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>('off');
   const [isShuffling, setIsShuffling] = useState(false);
   const [showLyrics, setShowLyrics] = useState(true);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -37,7 +37,8 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
   const [isUsingSynth, setIsUsingSynth] = useState(false);
   const [songs, setSongs] = useState<Song[]>(() => crossworshipSongsCatalog);
 
-  // Queue System States
+  // Queue state is retained only for backwards-compatible local state during this release.
+  // Playback now always follows the catalogue and its selected playback mode.
   const [userQueue, setUserQueue] = useState<Song[]>([]);
   const [activeRightTab, setActiveRightTab] = useState<'lyrics' | 'queue'>('lyrics');
   const [inCardActiveTab, setInCardActiveTab] = useState<Record<string, 'lyrics' | 'queue'>>({});
@@ -224,7 +225,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
       worshipSynth.stop();
       if (synthTimerRef.current) clearInterval(synthTimerRef.current);
     };
-  }, [currentSong, isShuffling, repeatMode, isUsingSynth, isPlaying, playlist, userQueue]);
+  }, [currentSong, isShuffling, repeatMode, isUsingSynth, isPlaying, playlist]);
 
   // Synth Fallback Logic (High frequency ticker)
   const startSynthPlayback = (song: Song) => {
@@ -434,7 +435,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
     return [...after, ...before];
   }, [playlist, currentSong]);
 
-  // Track Ended Handler respecting Repeat Modes (off | all | one) and custom queue
+  // Track Ended Handler: repeat-one replays; otherwise continue through the catalogue.
   const handleTrackEnded = () => {
     if (!currentSong) return;
 
@@ -449,18 +450,12 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
       return;
     }
 
-    // If custom queued songs exist, seamlessly advance into queue
-    if (userQueueRef.current.length > 0) {
-      handleNext();
-      return;
-    }
-
     if (playlist.length === 0) return;
 
     const currentIndex = playlist.findIndex(s => s.id === currentSong.id);
     const isLastTrack = currentIndex === playlist.length - 1;
 
-    // Repeat Off: Stop at the end of the playlist
+    // Repeat off finishes naturally at the end of the catalogue.
     if (repeatMode === 'off' && isLastTrack && !isShuffling) {
       setIsPlaying(false);
       setCurrentTime(0);
@@ -471,28 +466,20 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
       return;
     }
 
-    // Default / Repeat All: Advance consecutively to next track
+    // Normal mode advances in catalogue order; shuffle selects a different song.
     handleNext();
   };
 
-  // Next Track Logic (Consecutive playback + Queue prioritization)
+  // Next Track Logic (catalogue order or a different shuffled song)
   const handleNext = () => {
-    // If user has custom queued tracks, play the top one immediately
-    if (userQueueRef.current.length > 0) {
-      const nextSong = userQueueRef.current[0];
-      setUserQueue(prev => prev.slice(1));
-      setCurrentSong(nextSong);
-      setCurrentTime(0);
-      setUserScrolledManually(false);
-      playAudioTrack(nextSong);
-      return;
-    }
-
     if (playlist.length === 0) return;
 
     let nextIndex = 0;
     if (isShuffling) {
-      nextIndex = Math.floor(Math.random() * playlist.length);
+      const currentIndex = currentSong ? playlist.findIndex(s => s.id === currentSong.id) : -1;
+      nextIndex = playlist.length === 1
+        ? 0
+        : (currentIndex + 1 + Math.floor(Math.random() * (playlist.length - 1))) % playlist.length;
     } else if (currentSong) {
       const currentIndex = playlist.findIndex(s => s.id === currentSong.id);
       nextIndex = (currentIndex + 1) % playlist.length;
@@ -518,7 +505,10 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
 
     let prevIndex = 0;
     if (isShuffling) {
-      prevIndex = Math.floor(Math.random() * playlist.length);
+      const currentIndex = playlist.findIndex(s => s.id === currentSong.id);
+      prevIndex = playlist.length === 1
+        ? 0
+        : (currentIndex + 1 + Math.floor(Math.random() * (playlist.length - 1))) % playlist.length;
     } else {
       const currentIndex = playlist.findIndex(s => s.id === currentSong.id);
       prevIndex = currentIndex <= 0 ? playlist.length - 1 : currentIndex - 1;
@@ -531,13 +521,9 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
     playAudioTrack(prevSong);
   };
 
-  // Toggle Repeat Mode between Off -> All -> One -> Off
+  // Toggle Repeat Mode between Off and the current song.
   const toggleRepeatMode = () => {
-    setRepeatMode(prev => {
-      if (prev === 'off') return 'all';
-      if (prev === 'all') return 'one';
-      return 'off';
-    });
+    setRepeatMode(prev => prev === 'off' ? 'one' : 'off');
   };
 
   // Seek bar handler
@@ -947,7 +933,7 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                             </div>
                           </div>
 
-                          {/* Quick Right controls: Duration, AI Transcribe, Queue, and Download */}
+                          {/* Quick Right controls: Duration, AI Transcribe, and Download */}
                           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-2" onClick={(e) => e.stopPropagation()}>
                             <span className="text-xs font-mono text-[#8A7463] font-medium hidden sm:inline-block w-12 text-right">
                               {song.duration || '4:30'}
@@ -963,39 +949,20 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                               <Sparkles className="h-4 w-4 text-[#A37F3B] group-hover/ai:animate-spin" />
                             </button>
 
-                            {/* Add to Queue Button */}
-                            <button
-                              type="button"
-                              onClick={(e) => addToQueue(song, e)}
-                              className={`p-2 rounded-xl transition-all cursor-pointer border flex items-center gap-1 ${
-                                userQueue.some(q => q.id === song.id)
-                                  ? 'bg-[#A37F3B]/15 border-[#A37F3B] text-[#A37F3B]'
-                                  : 'hover:bg-[#FAF7F2] border-transparent hover:border-[#E1D6C7] text-[#8A7463] hover:text-[#A37F3B]'
-                              }`}
-                              title={userQueue.some(q => q.id === song.id) ? `Queued (${userQueue.filter(q => q.id === song.id).length}x) - Click to add another` : "Add to Up Next Queue"}
-                            >
-                              <ListPlus className="h-4 w-4" />
-                              {userQueue.some(q => q.id === song.id) && (
-                                <span className="text-[10px] font-mono font-bold px-1 rounded bg-[#A37F3B] text-white">
-                                  {userQueue.filter(q => q.id === song.id).length}
-                                </span>
-                              )}
-                            </button>
-
                             {/* Download Button */}
                             <button
                               type="button"
                               onClick={(e) => triggerSongDownload(song, e)}
                               disabled={isDownloading[song.id]}
                               className="p-2 rounded-xl transition-all cursor-pointer hover:bg-[#FAF7F2] border border-transparent hover:border-[#E1D6C7] text-[#8A7463] hover:text-[#A37F3B]"
-                              title="Download anthem"
+                              title="Download lyrics"
                             >
                               {userSongDownloads.some(s => s.id === song.id) ? (
                                 <Check className="h-4 w-4 text-emerald-600" />
                               ) : isDownloading[song.id] ? (
                                 <Loader2 className="h-4 w-4 animate-spin text-[#A37F3B]" />
                               ) : (
-                                <Download className="h-4 w-4" />
+                                <FileText className="h-4 w-4" />
                               )}
                             </button>
                           </div>
@@ -1201,48 +1168,8 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                                 </span>
                               </div>
 
-                              {/* Tabs: Lyrics, Up Next Queue, and Download */}
+                              {/* Download lyrics */}
                               <div className="flex flex-wrap items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setInCardActiveTab(prev => ({
-                                      ...prev,
-                                      [song.id]: prev[song.id] === 'queue' ? 'lyrics' : 'queue'
-                                    }));
-                                  }}
-                                  className="text-[11px] font-semibold tracking-wider uppercase flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all cursor-pointer font-mono"
-                                  style={{
-                                    background: inCardActiveTab[song.id] === 'queue' ? '#A37F3B' : '#1D1108',
-                                    borderColor: '#A37F3B',
-                                    color: inCardActiveTab[song.id] === 'queue' ? '#FFFFFF' : '#F7F5F0'
-                                  }}
-                                  title="View Upcoming Queue"
-                                >
-                                  <ListMusic className="h-3.5 w-3.5" style={{ color: inCardActiveTab[song.id] === 'queue' ? '#FFFFFF' : '#A37F3B' }} />
-                                  <span>Up Next ({userQueue.length > 0 ? userQueue.length : upcomingPlaylistSongs.length})</span>
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setInCardActiveTab(prev => ({
-                                      ...prev,
-                                      [song.id]: 'lyrics'
-                                    }));
-                                    setShowLyrics(!showLyrics);
-                                  }}
-                                  className="text-[11px] font-semibold tracking-wider uppercase flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all cursor-pointer font-mono"
-                                  style={{
-                                    background: (showLyrics && inCardActiveTab[song.id] !== 'queue') ? '#A37F3B' : '#1D1108',
-                                    borderColor: '#A37F3B',
-                                    color: (showLyrics && inCardActiveTab[song.id] !== 'queue') ? '#FFFFFF' : '#F7F5F0'
-                                  }}
-                                >
-                                  <FileText className="h-3.5 w-3.5" style={{ color: (showLyrics && inCardActiveTab[song.id] !== 'queue') ? '#FFFFFF' : '#A37F3B' }} />
-                                  <span>{showLyrics && inCardActiveTab[song.id] !== 'queue' ? 'Lyrics' : 'View Lyrics'}</span>
-                                </button>
-
                                 <button
                                   type="button"
                                   onClick={() => triggerSongDownload(song)}
@@ -1261,8 +1188,8 @@ export default function Songs({ userSongDownloads = [], onSongDownloadSuccess, i
                                     </>
                                   ) : (
                                     <>
-                                      <Download className="h-3.5 w-3.5 text-white" />
-                                      <span>Download</span>
+                                      <FileText className="h-3.5 w-3.5 text-white" />
+                                      <span>Download Lyrics</span>
                                     </>
                                   )}
                                 </button>
