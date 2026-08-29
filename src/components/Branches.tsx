@@ -131,7 +131,7 @@ export default function Branches({ initialSubTab = 'branches', onSubTabChange }:
           >
             {isBranches 
               ? 'Find our physical church centers, service schedules, and resident pastors across cities.' 
-              : 'Connect with a weekly fellowship home cell close to your residence or campus.'}
+              : 'Connect with a cell close to your residence '}
           </p>
 
           {/* Sub-Tab Navigation Switcher */}
@@ -169,7 +169,7 @@ export default function Branches({ initialSubTab = 'branches', onSubTabChange }:
                 id="tab-btn-cells"
               >
                 <Home className="h-4 w-4" />
-                <span>Home Cells</span>
+                <span>Our Cells</span>
                 <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
                   !isBranches ? 'bg-white/20 text-white' : 'bg-[#D8CEBF] text-[#6B5441]'
                 }`}>
