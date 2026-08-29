@@ -1,4 +1,4 @@
-import { MapPin, Phone, Mail, ArrowUp } from 'lucide-react';
+import { MapPin, Phone, Mail, ArrowUp, Instagram } from 'lucide-react';
 
 interface FooterProps {
   activeTab?: string;
@@ -85,6 +85,18 @@ export default function Footer({ activeTab = 'home' }: FooterProps) {
               <li className="flex items-center gap-2.5">
                 <Mail className="h-4 w-4 shrink-0" style={{ color: accentColor }} />
                 <span className="truncate">godsedificechurch@gmail.com</span>
+              </li>
+              <li className="flex items-center gap-2.5">
+                <Instagram className="h-4 w-4 shrink-0" style={{ color: accentColor }} />
+                <a
+                  href="https://www.instagram.com/godsedificechurch?igsi=MTY4Z2M4b3Jsc2h0bQ=="
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`transition-colors ${linkHoverClass} underline-offset-4 hover:underline`}
+                  id="footer-instagram-link"
+                >
+                  God's Edifice Church
+                </a>
               </li>
             </ul>
           </div>
