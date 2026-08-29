@@ -152,7 +152,7 @@ export default function Cells({ embedded = false }: CellsProps) {
         {!embedded && (
           <div className="text-center max-w-3xl mx-auto mb-16">
             <h2 className="font-cinzel text-3xl sm:text-4xl font-bold tracking-tight text-[#3A2312] mb-4">
-              GEC Home Cells Directory
+              Our Cells
             </h2>
 
             <div className="w-16 h-1 mx-auto rounded-full bg-[#A36B3B] mb-3 shadow-sm" />

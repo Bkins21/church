@@ -119,7 +119,7 @@ export default function Branches({ initialSubTab = 'branches', onSubTabChange }:
           <h1 
             className="font-cinzel text-3xl sm:text-5xl font-bold tracking-tight text-[#3A2312]"
           >
-            {isBranches ? 'Our Church Branches' : 'GEC Home Cells'}
+            {isBranches ? 'Our Church Branches' : 'Our Cells'}
           </h1>
           
           <div 
