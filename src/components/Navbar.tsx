@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Menu, X, BookOpen, MapPin, Calendar, Music, Disc, Users, Home } from 'lucide-react';
+import { Menu, X, BookOpen, MapPin, Calendar, Music, Disc, Users, Home, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface NavbarProps {
@@ -44,6 +44,23 @@ const navThemes: Record<string, {
   },
   about: {
    bg: 'rgba(247, 245, 240, 0.90)',
+    bgScrolled: '#f7f5f0fa',
+    border: '#EFEAE1',
+    borderScrolled: '#E4DCD0',
+    logoColor: '#141416',
+    titleColor: '#141416',
+    inactiveText: '#54575E',
+    hoverText: '#141416',
+    hoverBg: 'rgba(239, 234, 225, 0.65)',
+    activeText: '#A36B3B',
+    activeBg: 'rgba(239, 234, 225, 0.95)',
+    indicator: '#A36B3B',
+    badgeBg: '#A36B3B',
+    badgeText: '#FFFFFF',
+    mobileMenuBg: '#F7F5F0',
+  },
+  ministries: {
+    bg: 'rgba(247, 245, 240, 0.90)',
     bgScrolled: '#f7f5f0fa',
     border: '#EFEAE1',
     borderScrolled: '#E4DCD0',
@@ -188,6 +205,7 @@ export default function Navbar({ activeTab, setActiveTab, registeredCount }: Nav
   const menuItems: MenuItem[] = [
     { id: 'home', label: 'Home', icon: BookOpen },
     { id: 'about', label: 'Who We Are', icon: Users },
+    { id: 'ministries', label: 'Ministries', icon: Sparkles },
     { id: 'meetings', label: 'Meetings', icon: Calendar, badge: registeredCount > 0 ? registeredCount : undefined },
     { id: 'teachings', label: 'Teachings', icon: Music },
     { id: 'songs', label: 'Songs', icon: Disc },

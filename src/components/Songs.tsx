@@ -562,18 +562,15 @@ export default function Songs({
   return (
     <div
       id="songs-portal"
-      className="min-h-screen bg-[#180E07] text-[#F7F5F0] pb-32"
+      className="min-h-screen bg-[#180E07] text-[#F7F5F0] pb-32 w-full max-w-full overflow-x-hidden"
     >
       {/* HEADER */}
-      <section className="bg-gradient-to-b from-[#2D1A0D] to-[#180E07] border-b border-[#4A2D17]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
+      <section className="bg-gradient-to-b from-[#2D1A0D] to-[#180E07] border-b border-[#4A2D17] w-full max-w-full overflow-x-hidden">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-14 w-full">
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
             <div>
-             
-
               <h1 className="text-3xl sm:text-4xl md:text-5xl font-cinzel font-bold text-white">
                 Crossworship Psalms
-              
               </h1>
 
               <p className="mt-3 text-sm sm:text-base text-[#E4DCD0]/80 max-w-2xl">
@@ -585,7 +582,7 @@ export default function Songs({
             {isAdmin && (
               <a
                 href="/crosswordmedia"
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#A37F3B] hover:bg-[#8F6D2F] text-white text-xs font-bold transition-colors"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#A37F3B] hover:bg-[#8F6D2F] text-white text-xs font-bold transition-colors shrink-0"
               >
                 <ShieldCheck className="w-4 h-4" />
                 Admin Manager
@@ -595,7 +592,7 @@ export default function Songs({
           </div>
 
           {/* SEARCH */}
-          <div className="mt-8 relative">
+          <div className="mt-8 relative w-full">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#A37F3B]" />
 
             <input
@@ -605,7 +602,7 @@ export default function Songs({
                 setSearchQuery(e.target.value)
               }
               placeholder="Search songs, artists or albums..."
-              className="w-full pl-11 pr-11 py-3.5 rounded-2xl bg-[#25160B] border border-[#4A2D17] focus:border-[#A37F3B] outline-none text-sm text-white placeholder-[#8A7463]"
+              className="w-full max-w-full pl-11 pr-11 py-3.5 rounded-2xl bg-[#25160B] border border-[#4A2D17] focus:border-[#A37F3B] outline-none text-sm text-white placeholder-[#8A7463]"
             />
 
             {searchQuery && (
@@ -622,10 +619,10 @@ export default function Songs({
       </section>
 
       {/* MAIN */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
-        <div className="grid lg:grid-cols-12 gap-8">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 w-full max-w-full overflow-x-hidden">
+        <div className="grid lg:grid-cols-12 gap-8 w-full max-w-full">
           {/* SONG LIST */}
-          <section className="lg:col-span-7">
+          <section className="lg:col-span-7 min-w-0 w-full max-w-full">
             <div className="flex items-center justify-between pb-3 mb-4 border-b border-[#4A2D17]">
               <div className="flex items-center gap-2">
                 <Music className="w-4 h-4 text-[#A37F3B]" />
@@ -640,7 +637,7 @@ export default function Songs({
               </span>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3 w-full">
               {filteredSongs.length > 0 ? (
                 filteredSongs.map((song, index) => {
                   const isCurrent =
@@ -660,7 +657,7 @@ export default function Songs({
                         opacity: 1,
                         y: 0,
                       }}
-                      className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${
+                      className={`flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-2xl border transition-all w-full max-w-full overflow-hidden ${
                         isCurrent
                           ? 'bg-[#2D1B0E] border-[#A37F3B]'
                           : 'bg-[#25160B] border-[#4A2D17] hover:border-[#A37F3B]/60'
@@ -670,7 +667,7 @@ export default function Songs({
                       <button
                         type="button"
                         onClick={() => playSong(song)}
-                        className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition-all ${
+                        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 transition-all ${
                           isCurrent
                             ? 'bg-[#A37F3B] text-white'
                             : 'bg-[#3A2312] text-[#E5B869] hover:bg-[#A37F3B] hover:text-white'
@@ -685,7 +682,7 @@ export default function Songs({
                       </button>
 
                       {/* ARTWORK */}
-                      <div className="w-12 h-12 rounded-xl overflow-hidden bg-[#150B05] border border-[#4A2D17] shrink-0">
+                      <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl overflow-hidden bg-[#150B05] border border-[#4A2D17] shrink-0">
                         <img
                           src={
                             song.coverUrl ||
@@ -698,9 +695,9 @@ export default function Songs({
                       </div>
 
                       {/* DETAILS */}
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0 flex-1 overflow-hidden">
                         <h3
-                          className={`font-semibold text-sm truncate ${
+                          className={`font-semibold text-xs sm:text-sm truncate ${
                             isCurrent
                               ? 'text-[#E5B869]'
                               : 'text-white'
@@ -709,7 +706,7 @@ export default function Songs({
                           {song.title}
                         </h3>
 
-                        <p className="text-xs text-[#8A7463] truncate mt-0.5">
+                        <p className="text-[11px] sm:text-xs text-[#8A7463] truncate mt-0.5">
                           {song.artist}
                           {song.album
                             ? ` • ${song.album}`
@@ -718,7 +715,7 @@ export default function Songs({
                       </div>
 
                       {/* ACTIONS */}
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
                         {hasLyrics && (
                           <>
                             <button
@@ -726,10 +723,10 @@ export default function Songs({
                               onClick={(e) =>
                                 openLyrics(song, e)
                               }
-                              className="p-2 rounded-xl bg-[#1D1108] border border-[#4A2D17] hover:border-[#A37F3B] text-[#E5B869] transition-colors"
+                              className="p-1.5 sm:p-2 rounded-xl bg-[#1D1108] border border-[#4A2D17] hover:border-[#A37F3B] text-[#E5B869] transition-colors"
                               title="View lyrics"
                             >
-                              <FileText className="w-4 h-4" />
+                              <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                             </button>
 
                             <button
@@ -753,13 +750,13 @@ export default function Songs({
                           disabled={
                             isDownloading[song.id]
                           }
-                          className="p-2 rounded-xl bg-[#A37F3B] hover:bg-[#8F6D2F] text-white transition-colors disabled:opacity-50"
+                          className="p-1.5 sm:p-2 rounded-xl bg-[#A37F3B] hover:bg-[#8F6D2F] text-white transition-colors disabled:opacity-50"
                           title="Download song"
                         >
                           {isDownloading[song.id] ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
                           ) : (
-                            <Download className="w-4 h-4" />
+                            <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                           )}
                         </button>
                       </div>
@@ -783,12 +780,12 @@ export default function Songs({
           </section>
 
           {/* PLAYER */}
-          <aside className="lg:col-span-5">
-            <div className="lg:sticky lg:top-24 bg-[#25160B] border border-[#4A2D17] rounded-3xl p-5 sm:p-7">
+          <aside className="lg:col-span-5 min-w-0 w-full max-w-full">
+            <div className="lg:sticky lg:top-24 bg-[#25160B] border border-[#4A2D17] rounded-3xl p-4 sm:p-7 w-full max-w-full overflow-hidden">
               {currentSong ? (
                 <>
                   {/* ARTWORK */}
-                  <div className="aspect-square max-w-sm mx-auto rounded-2xl overflow-hidden border border-[#4A2D17] bg-[#150B05]">
+                  <div className="aspect-square max-w-[260px] sm:max-w-sm mx-auto rounded-2xl overflow-hidden border border-[#4A2D17] bg-[#150B05]">
                     <img
                       src={
                         currentSong.coverUrl ||
@@ -801,24 +798,24 @@ export default function Songs({
                   </div>
 
                   {/* INFO */}
-                  <div className="text-center mt-6">
-                    <h2 className="text-xl sm:text-2xl font-cinzel font-bold text-white">
+                  <div className="text-center mt-5 sm:mt-6 px-2 min-w-0">
+                    <h2 className="text-lg sm:text-2xl font-cinzel font-bold text-white truncate">
                       {currentSong.title}
                     </h2>
 
-                    <p className="text-sm text-[#E5B869] mt-1">
+                    <p className="text-xs sm:text-sm text-[#E5B869] mt-1 truncate">
                       {currentSong.artist}
                     </p>
 
                     {currentSong.album && (
-                      <p className="text-xs text-[#8A7463] mt-1">
+                      <p className="text-[11px] sm:text-xs text-[#8A7463] mt-1 truncate">
                         {currentSong.album}
                       </p>
                     )}
                   </div>
 
                   {/* PROGRESS */}
-                  <div className="mt-6">
+                  <div className="mt-5 sm:mt-6 w-full">
                     <input
                       type="range"
                       min={0}
@@ -829,7 +826,7 @@ export default function Songs({
                         duration || 0
                       )}
                       onChange={handleSeek}
-                      className="w-full accent-[#A37F3B] cursor-pointer"
+                      className="w-full max-w-full accent-[#A37F3B] cursor-pointer"
                     />
 
                     <div className="flex justify-between text-[11px] font-mono text-[#8A7463] mt-1">
@@ -844,7 +841,7 @@ export default function Songs({
                   </div>
 
                   {/* CONTROLS */}
-                  <div className="flex items-center justify-center gap-5 mt-5">
+                  <div className="flex items-center justify-center gap-4 sm:gap-5 mt-4 sm:mt-5">
                     <button
                       type="button"
                       onClick={playPrevious}
@@ -857,7 +854,7 @@ export default function Songs({
                     <button
                       type="button"
                       onClick={togglePlay}
-                      className="w-14 h-14 rounded-full bg-[#A37F3B] hover:bg-[#8F6D2F] text-white flex items-center justify-center shadow-lg transition-all hover:scale-105"
+                      className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#A37F3B] hover:bg-[#8F6D2F] text-white flex items-center justify-center shadow-lg transition-all hover:scale-105"
                       aria-label={
                         isPlaying
                           ? 'Pause'
@@ -865,9 +862,9 @@ export default function Songs({
                       }
                     >
                       {isPlaying ? (
-                        <Pause className="w-6 h-6 fill-current" />
+                        <Pause className="w-5 h-5 sm:w-6 sm:h-6 fill-current" />
                       ) : (
-                        <Play className="w-6 h-6 fill-current ml-1" />
+                        <Play className="w-5 h-5 sm:w-6 sm:h-6 fill-current ml-0.5" />
                       )}
                     </button>
 
@@ -882,13 +879,13 @@ export default function Songs({
                   </div>
 
                   {/* VOLUME */}
-                  <div className="flex items-center gap-3 mt-6">
+                  <div className="flex items-center gap-3 mt-5 sm:mt-6 w-full">
                     <button
                       type="button"
                       onClick={() =>
                         setIsMuted((prev) => !prev)
                       }
-                      className="text-[#A37F3B] hover:text-white"
+                      className="text-[#A37F3B] hover:text-white shrink-0"
                       title={
                         isMuted
                           ? 'Unmute'
@@ -909,13 +906,13 @@ export default function Songs({
                       step={0.01}
                       value={isMuted ? 0 : volume}
                       onChange={handleVolumeChange}
-                      className="flex-1 accent-[#A37F3B]"
+                      className="flex-1 max-w-full accent-[#A37F3B]"
                       aria-label="Volume"
                     />
                   </div>
 
                   {/* ACTIONS */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-5 sm:mt-6 w-full">
                     {currentSong.lyrics?.trim() && (
                       <button
                         type="button"
@@ -969,12 +966,12 @@ export default function Songs({
                   </div>
                 </>
               ) : (
-                <div className="text-center py-16">
-                  <div className="w-20 h-20 rounded-full bg-[#3A2312] mx-auto flex items-center justify-center mb-5">
-                    <Music className="w-8 h-8 text-[#A37F3B]" />
+                <div className="text-center py-12 sm:py-16">
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#3A2312] mx-auto flex items-center justify-center mb-4 sm:mb-5">
+                    <Music className="w-7 h-7 sm:w-8 sm:h-8 text-[#A37F3B]" />
                   </div>
 
-                  <h2 className="font-cinzel font-bold text-white text-lg">
+                  <h2 className="font-cinzel font-bold text-white text-base sm:text-lg">
                     Select a Song
                   </h2>
 
@@ -1000,7 +997,7 @@ export default function Songs({
 
       {/* TOAST */}
       {toastMessage && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-[#25160B] border border-[#A37F3B] text-white px-4 py-3 rounded-xl shadow-2xl text-xs font-medium">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-[#25160B] border border-[#A37F3B] text-white px-4 py-3 rounded-xl shadow-2xl text-xs font-medium max-w-[90vw] text-center pointer-events-none">
           {toastMessage}
         </div>
       )}

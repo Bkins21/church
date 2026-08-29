@@ -8,6 +8,7 @@ import Branches from './components/Branches';
 import Footer from './components/Footer';
 import Songs from './components/Songs';
 import AboutUs from './components/AboutUs';
+import Ministries from './components/Ministries';
 import { teachingsCatalog } from './data';
 import Newsletter from './components/Newsletter';
 
@@ -382,7 +383,10 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F5F0] text-[#141416] flex flex-col justify-between" id="app-root-container">
+    <div 
+      className={`min-h-screen ${activeTab === 'songs' ? 'bg-[#180E07]' : 'bg-[#F7F5F0]'} text-[#141416] flex flex-col justify-between w-full max-w-full overflow-x-hidden transition-colors duration-300`} 
+      id="app-root-container"
+    >
       
       {/* Dynamic Header / Navigation */}
       <Navbar
@@ -392,7 +396,7 @@ export default function App() {
       />
 
       {/* Main Content Sections */}
-      <main className="flex-grow">
+      <main className="flex-grow w-full max-w-full overflow-x-hidden">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -400,7 +404,7 @@ export default function App() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
             transition={{ duration: 0.3 }}
-            className="w-full"
+            className="w-full max-w-full overflow-x-hidden"
           >
             {activeTab === 'home' && (
               <Hero 
@@ -411,6 +415,12 @@ export default function App() {
 
             {activeTab === 'about' && (
               <AboutUs 
+                onNavigate={setActiveTab} 
+              />
+            )}
+
+            {activeTab === 'ministries' && (
+              <Ministries 
                 onNavigate={setActiveTab} 
               />
             )}

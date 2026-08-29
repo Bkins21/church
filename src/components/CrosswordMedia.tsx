@@ -92,7 +92,7 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
   const [songArtist, setSongArtist] = useState('');
   const [songAlbum, setSongAlbum] = useState('');
   const [songCoverUrl, setSongCoverUrl] = useState('');
-  const [songLyrics, setSongLyrics] = useState('');
+  const [songLyricsFile, setSongLyricsFile] = useState<File | null>(null);
   const [songAudioUrl, setSongAudioUrl] = useState('');
   const [songFile, setSongFile] = useState<File | null>(null);
   const [uploadingSong, setUploadingSong] = useState(false);
@@ -263,38 +263,41 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
   };
 
   // Fetch Songs strictly from Supabase public."Songs" table
-  const fetchCloudSongs = async () => {
-    if (!supabase) return;
-    try {
-      const { data: songsData, error: songsError } = await supabase
-        .from('Songs')
-        .select('*')
-        .order('created_at', { ascending: false });
+const fetchCloudSongs = async () => {
+  if (!supabase) return;
 
-      if (songsError) {
-        console.error('Supabase fetch failure from Songs table in Admin:', songsError);
-        return;
-      }
+  try {
+    const { data: songsData, error: songsError } = await supabase
+      .from('Songs')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-      if (songsData) {
-        const mappedSongs: Song[] = songsData.map((s: any) => ({
-          id: s.id,
-          title: s.title || '',
-          artist: s.artist || 'Crossworship',
-          album: s.album || 'Edifice Anthem Single',
-          duration: s.duration || '4:30',
-          audioUrl: s.audio_url || '',
-          coverUrl: s.artwork || '',
-          lyrics: s.description || '',
-          downloads: s.downloads || 0,
-          uploadedByUser: true
-        }));
-        setSongsList(mappedSongs);
-      }
-    } catch (err) {
-      console.error('Failed to fetch songs from Supabase in Admin:', err);
+    if (songsError) {
+      console.error('Supabase fetch failure from Songs table in Admin:', songsError);
+      return;
     }
-  };
+
+    if (songsData) {
+      const mappedSongs: Song[] = songsData.map((s: any) => ({
+        id: s.id,
+        title: s.title || '',
+        artist: s.artist || 'Crossworship',
+        album: s.album || 'Edifice Anthem Single',
+        duration: s.duration || '4:30',
+        audioUrl: s.audio_url || '',
+        coverUrl: s.artwork || '',
+        lyrics: s.description || '',
+        lyricsPdfUrl: s.lyrics_pdf_url || '',
+        downloads: s.downloads || 0,
+        uploadedByUser: true
+      }));
+
+      setSongsList(mappedSongs);
+    }
+  } catch (err) {
+    console.error('Failed to fetch songs from Supabase in Admin:', err);
+  }
+};
 
   // Fetch publications from Supabase
   const fetchCloudPublications = async () => {
@@ -1315,8 +1318,10 @@ const handleAddSong = async (e: React.FormEvent) => {
   setSongUploadProgress(15);
 
   let finalAudioUrl = songAudioUrl.trim();
+  let lyricsPdfUrl = '';
   let detectedDuration = '4:30';
   let uploadedFilePath: string | null = null;
+  let uploadedLyricsPdfPath: string | null = null;
 
   try {
     // 1. Detect audio duration
@@ -1351,7 +1356,7 @@ const handleAddSong = async (e: React.FormEvent) => {
         console.warn('Could not read audio duration:', durationError);
       }
 
-      // 2. Upload to SONGS bucket
+      // 2. Upload audio to SONGS bucket
       setSongUploadProgress(35);
 
       const fileExt = songFile.name.split('.').pop()?.toLowerCase() || 'mp3';
@@ -1359,6 +1364,7 @@ const handleAddSong = async (e: React.FormEvent) => {
         .replace(/\.[^/.]+$/, '')
         .replace(/[^a-zA-Z0-9-_]/g, '-')
         .toLowerCase();
+
       const fileName = `song-${Date.now()}-${safeFileName}.${fileExt}`;
       uploadedFilePath = `songs/${fileName}`;
 
@@ -1374,24 +1380,64 @@ const handleAddSong = async (e: React.FormEvent) => {
         throw new Error(`Song audio upload failed: ${uploadError.message}`);
       }
 
-      // 3. Get public URL
+      // 3. Get audio public URL
       const {
         data: { publicUrl }
-      } = supabase.storage.from('Songs').getPublicUrl(uploadedFilePath);
+      } = supabase.storage
+        .from('Songs')
+        .getPublicUrl(uploadedFilePath);
 
       if (!publicUrl) {
         throw new Error('Could not generate a public URL for the uploaded song.');
       }
 
       finalAudioUrl = publicUrl;
-      setSongUploadProgress(65);
     }
+
+    // 4. Upload lyrics PDF if provided
+    if (songLyricsFile) {
+      setSongUploadProgress(50);
+
+      const lyricsSafeName = songLyricsFile.name
+        .replace(/\.[^/.]+$/, '')
+        .replace(/[^a-zA-Z0-9-_]/g, '-')
+        .toLowerCase();
+
+      const lyricsFileName = `lyrics-${Date.now()}-${lyricsSafeName}.pdf`;
+      uploadedLyricsPdfPath = `lyrics/${lyricsFileName}`;
+
+      const { error: lyricsUploadError } = await supabase.storage
+        .from('Songs')
+        .upload(uploadedLyricsPdfPath, songLyricsFile, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: 'application/pdf'
+        });
+
+      if (lyricsUploadError) {
+        throw new Error(`Lyrics PDF upload failed: ${lyricsUploadError.message}`);
+      }
+
+      const {
+        data: { publicUrl: lyricsPublicUrl }
+      } = supabase.storage
+        .from('Songs')
+        .getPublicUrl(uploadedLyricsPdfPath);
+
+      if (!lyricsPublicUrl) {
+        throw new Error('Could not generate a public URL for the lyrics PDF.');
+      }
+
+      lyricsPdfUrl = lyricsPublicUrl;
+    }
+
+    setSongUploadProgress(65);
 
     if (!finalAudioUrl) {
       throw new Error('No valid audio URL was obtained.');
     }
 
-    // 4. INSERT INTO SONGS TABLE
+    // 5. INSERT INTO SONGS TABLE
     setSongUploadProgress(80);
 
     const { data: insertedSong, error: dbErr } = await supabase
@@ -1402,13 +1448,12 @@ const handleAddSong = async (e: React.FormEvent) => {
           artist: songArtist.trim() || 'Crossworship',
           album: songAlbum.trim() || 'Edifice Anthem Single',
           duration: detectedDuration,
-          description:
-            songLyrics.trim() ||
-            `[00:00] ${songTitle.trim()}\n[00:15] Worship the Lord in the beauty of holiness.`,
+          description: '',
           artwork:
             songCoverUrl.trim() ||
             'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=400&auto=format&fit=crop',
           audio_url: finalAudioUrl,
+          lyrics_pdf_url: lyricsPdfUrl || null,
           downloads: 0
         }
       ])
@@ -1416,27 +1461,43 @@ const handleAddSong = async (e: React.FormEvent) => {
       .single();
 
     if (dbErr) {
-      // Clean up uploaded audio if DB insertion fails
+      // Clean up uploaded files if DB insertion fails
+      const filesToRemove: string[] = [];
+
       if (uploadedFilePath) {
+        filesToRemove.push(uploadedFilePath);
+      }
+
+      if (uploadedLyricsPdfPath) {
+        filesToRemove.push(uploadedLyricsPdfPath);
+      }
+
+      if (filesToRemove.length > 0) {
         try {
-          await supabase.storage.from('Songs').remove([uploadedFilePath]);
+          await supabase.storage
+            .from('Songs')
+            .remove(filesToRemove);
         } catch (cleanupErr) {
-          console.warn('Could not clean up uploaded song file:', cleanupErr);
+          console.warn('Could not clean up uploaded song files:', cleanupErr);
         }
       }
 
-      const isRls = dbErr.code === '42501' || dbErr.message?.toLowerCase().includes('row-level security');
+      const isRls =
+        dbErr.code === '42501' ||
+        dbErr.message?.toLowerCase().includes('row-level security');
+
       if (isRls) {
         setSongError('RLS_POLICY_ERROR');
       } else {
         setSongError(`Song database insert failed: ${dbErr.message}`);
       }
+
       setUploadingSong(false);
       setSongUploadProgress(0);
       return;
     }
 
-    // 5. Clean up stale localStorage
+    // 6. Clean up stale localStorage
     try {
       localStorage.removeItem('gec_user_uploaded_songs');
       localStorage.removeItem('gec_songs_catalog');
@@ -1444,17 +1505,17 @@ const handleAddSong = async (e: React.FormEvent) => {
       // Ignore
     }
 
-    // 6. Refresh catalog from Supabase
+    // 7. Refresh catalog from Supabase
     await fetchCloudSongs();
 
     window.dispatchEvent(new Event('gec_songs_updated'));
 
-    // 7. Reset form
+    // 8. Reset form
     setSongTitle('');
     setSongArtist('');
     setSongAlbum('');
     setSongCoverUrl('');
-    setSongLyrics('');
+    setSongLyricsFile(null);
     setSongAudioUrl('');
     setSongFile(null);
 
@@ -1464,26 +1525,51 @@ const handleAddSong = async (e: React.FormEvent) => {
 
     setUploadingSong(false);
     setSongUploadProgress(100);
-    setSongSuccess(`Song "${insertedSong?.title || songTitle}" uploaded and saved successfully!`);
+    setSongSuccess(
+      `Song "${insertedSong?.title || songTitle}" uploaded and saved successfully!`
+    );
 
     setTimeout(() => {
       setSongUploadProgress(0);
     }, 1000);
 
   } catch (err: any) {
+    // Clean up uploaded files if anything fails
+    const filesToRemove: string[] = [];
+
+    if (uploadedFilePath) {
+      filesToRemove.push(uploadedFilePath);
+    }
+
+    if (uploadedLyricsPdfPath) {
+      filesToRemove.push(uploadedLyricsPdfPath);
+    }
+
+    if (filesToRemove.length > 0) {
+      try {
+        await supabase.storage
+          .from('Songs')
+          .remove(filesToRemove);
+      } catch (cleanupErr) {
+        console.warn('Could not clean up uploaded files after failure:', cleanupErr);
+      }
+    }
+
     setSongError(err?.message || 'Song upload failed.');
     setUploadingSong(false);
     setSongUploadProgress(0);
   }
 };
 
-
 // =========================================================
 // DELETE ONE SONG (Removes from Songs Storage + Songs Table)
 // =========================================================
+// =========================================================
+// DELETE ONE SONG (Removes Audio + Lyrics PDF + Songs Table Record)
+// =========================================================
 
 const handleDeleteSong = async (id: string) => {
-  if (!confirm('Are you sure you want to delete this song? This will remove the audio file from storage and the record from the Songs database.')) {
+  if (!confirm('Are you sure you want to delete this song? This will remove the audio file, lyrics PDF, and database record.')) {
     return;
   }
 
@@ -1495,10 +1581,10 @@ const handleDeleteSong = async (id: string) => {
   setDeletingSongId(id);
 
   try {
-    // 1. Get the song first to extract audio storage path
+    // 1. Get the song first to extract audio and lyrics storage paths
     const { data: song, error: fetchError } = await supabase
       .from('Songs')
-      .select('id, title, audio_url')
+      .select('id, title, audio_url, lyrics_pdf_url')
       .eq('id', id)
       .maybeSingle();
 
@@ -1506,29 +1592,56 @@ const handleDeleteSong = async (id: string) => {
       console.warn('Warning fetching song record before delete:', fetchError);
     }
 
-    // 2. Remove storage file from Songs bucket
-    const audioUrl = song?.audio_url || songsList.find(s => s.id === id)?.audioUrl;
-    if (audioUrl) {
-      let storagePath = '';
-      const marker = '/storage/v1/object/public/Songs/';
-      if (audioUrl.includes(marker)) {
-        storagePath = audioUrl.split(marker)[1];
-      } else if (audioUrl.includes('/Songs/')) {
-        storagePath = audioUrl.split('/Songs/')[1];
-      }
-      if (storagePath) {
-        storagePath = storagePath.split('?')[0];
-        const { error: storageError } = await supabase.storage
-          .from('Songs')
-          .remove([storagePath]);
+    // 2. Build list of storage files to remove
+    const filesToRemove: string[] = [];
+    const marker = '/storage/v1/object/public/Songs/';
 
-        if (storageError) {
-          console.warn('Could not remove file from Songs bucket:', storageError);
-        }
+    // Audio file
+    const audioUrl = song?.audio_url || songsList.find(s => s.id === id)?.audioUrl;
+
+    if (audioUrl) {
+      let audioPath = '';
+
+      if (audioUrl.includes(marker)) {
+        audioPath = audioUrl.split(marker)[1];
+      } else if (audioUrl.includes('/Songs/')) {
+        audioPath = audioUrl.split('/Songs/')[1];
+      }
+
+      if (audioPath) {
+        filesToRemove.push(audioPath.split('?')[0]);
       }
     }
 
-    // 3. Delete database row from Songs table
+    // Lyrics PDF
+    const lyricsPdfUrl = song?.lyrics_pdf_url;
+
+    if (lyricsPdfUrl) {
+      let lyricsPdfPath = '';
+
+      if (lyricsPdfUrl.includes(marker)) {
+        lyricsPdfPath = lyricsPdfUrl.split(marker)[1];
+      } else if (lyricsPdfUrl.includes('/Songs/')) {
+        lyricsPdfPath = lyricsPdfUrl.split('/Songs/')[1];
+      }
+
+      if (lyricsPdfPath) {
+        filesToRemove.push(lyricsPdfPath.split('?')[0]);
+      }
+    }
+
+    // 3. Remove audio + lyrics PDF from Songs storage
+    if (filesToRemove.length > 0) {
+      const { error: storageError } = await supabase.storage
+        .from('Songs')
+        .remove(filesToRemove);
+
+      if (storageError) {
+        console.warn('Could not remove some song files from Songs bucket:', storageError);
+      }
+    }
+
+    // 4. Delete database row from Songs table
     const { error: deleteError } = await supabase
       .from('Songs')
       .delete()
@@ -1540,7 +1653,7 @@ const handleDeleteSong = async (id: string) => {
       return;
     }
 
-    // 4. Remove stale localStorage
+    // 5. Remove stale localStorage
     try {
       localStorage.removeItem('gec_user_uploaded_songs');
       localStorage.removeItem('gec_songs_catalog');
@@ -1548,12 +1661,12 @@ const handleDeleteSong = async (id: string) => {
       // Ignore
     }
 
-    // 5. Refresh from Supabase
+    // 6. Refresh from Supabase
     await fetchCloudSongs();
 
     window.dispatchEvent(new Event('gec_songs_updated'));
 
-    alert('Song deleted successfully.');
+    alert('Song, audio file, and lyrics PDF deleted successfully.');
 
   } catch (err: any) {
     console.error('Error deleting song:', err);
@@ -1562,7 +1675,6 @@ const handleDeleteSong = async (id: string) => {
     setDeletingSongId(null);
   }
 };
-
 
 // =========================================================
 // DELETE ALL SONGS (Removes all files from Songs Bucket + Songs Table)
@@ -2883,18 +2995,24 @@ USING (bucket_id = 'branch-images' AND public.is_admin());
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
-                          Lyrics (Optional)
-                        </label>
-                        <textarea
-                          rows={3}
-                          placeholder="[00:00] We lift our voice to praise..."
-                          value={songLyrics}
-                          onChange={(e) => setSongLyrics(e.target.value)}
-                          className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
-                        />
-                      </div>
+                    <div>
+  <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+    Lyrics PDF (Optional)
+  </label>
+
+  <input
+    type="file"
+    accept="application/pdf,.pdf"
+    onChange={(e) => setSongLyricsFile(e.target.files?.[0] || null)}
+    className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white file:mr-3 file:rounded-lg file:border-0 file:bg-cci-gold-500 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-rich-black hover:file:bg-cci-gold-400 focus:outline-none transition-all"
+  />
+
+  {songLyricsFile && (
+    <p className="mt-1.5 text-[10px] text-slate-400">
+      Selected: {songLyricsFile.name}
+    </p>
+  )}
+</div>
 
                       {uploadingSong && (
                         <div className="space-y-2">
