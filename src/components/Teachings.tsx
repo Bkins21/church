@@ -1,9 +1,104 @@
 import { useState, useRef, useEffect, ChangeEvent, FormEvent } from 'react';
-import { Search, Play, Pause, Download, Volume2, Music, Clock, User, Disc, Check, Flame, ChevronRight, VolumeX, ShieldAlert, ShieldCheck, Lock, Unlock, Plus, FileAudio, X, Key, CheckCircle, Trash2, Loader2, Repeat, Repeat1, RotateCcw, RotateCw } from 'lucide-react';
+import { Search, Play, Pause, Download, Volume2, Music, Clock, User, Disc, Check, Flame, ChevronRight, VolumeX, ShieldAlert, ShieldCheck, Lock, Unlock, Plus, FileAudio, X, Key, CheckCircle, Trash2, Loader2, Repeat, Repeat1, RotateCcw, RotateCw, Calendar } from 'lucide-react';
 import { Teaching } from '../types';
 import { teachingsCatalog } from '../data';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../supabase';
+
+// Helper function to format detected duration: M:S for <1 hr, H:M:S for >=1 hr
+export function formatDetectedDuration(totalSeconds: number): string {
+  if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) {
+    return '0:00';
+  }
+  const secs = Math.round(totalSeconds);
+  const hours = Math.floor(secs / 3600);
+  const minutes = Math.floor((secs % 3600) / 60);
+  const remainingSeconds = secs % 60;
+
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+  }
+  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+}
+
+// Helper to extract duration from audio file metadata
+export function getAudioDurationFromFile(file: File): Promise<number> {
+  return new Promise((resolve) => {
+    try {
+      const audio = new Audio();
+      const objectUrl = URL.createObjectURL(file);
+      audio.src = objectUrl;
+
+      const cleanUp = () => {
+        try {
+          URL.revokeObjectURL(objectUrl);
+        } catch {}
+        audio.removeEventListener('loadedmetadata', onLoaded);
+        audio.removeEventListener('error', onError);
+      };
+
+      const onLoaded = () => {
+        const dur = audio.duration;
+        cleanUp();
+        if (Number.isFinite(dur) && dur > 0) {
+          resolve(dur);
+        } else {
+          resolve(0);
+        }
+      };
+
+      const onError = () => {
+        cleanUp();
+        resolve(0);
+      };
+
+      audio.addEventListener('loadedmetadata', onLoaded);
+      audio.addEventListener('error', onError);
+
+      setTimeout(() => {
+        cleanUp();
+        resolve(0);
+      }, 4000);
+    } catch {
+      resolve(0);
+    }
+  });
+}
+
+// Helper for conditional date display based on teaching category
+export function formatTeachingDate(dateStr?: string, category?: string): string {
+  if (!dateStr) return '';
+  const cat = (category || '').toLowerCase();
+  const isYearOnly = cat.includes('edifice') || cat.includes('reaching our world') || cat.includes('campmeeting');
+
+  if (isYearOnly) {
+    const yearMatch = dateStr.match(/\b(19\d\d|20\d\d)\b/);
+    if (yearMatch) return yearMatch[1];
+    const parsed = new Date(dateStr);
+    if (!isNaN(parsed.getTime())) return parsed.getFullYear().toString();
+    return dateStr;
+  }
+
+  // Sunday Sermon or standard date -> DD/MM/YYYY
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr.trim())) {
+    return dateStr.trim();
+  }
+  const isoMatch = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) {
+    const year = isoMatch[1];
+    const month = isoMatch[2].padStart(2, '0');
+    const day = isoMatch[3].padStart(2, '0');
+    return `${day}/${month}/${year}`;
+  }
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    const day = d.getDate().toString().padStart(2, '0');
+    const month = (d.getMonth() + 1).toString().padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+  return dateStr;
+}
 
 interface TeachingsProps {
   onDownloadSuccess: (teaching: Teaching) => void;
@@ -51,10 +146,10 @@ export default function Teachings({
         const mapped: Teaching[] = data.map((t: any) => ({
           id: t.id,
           title: t.title || '',
-          series: t.category || t.series || 'Sermon',
+          series: t.category === 'R.O.W.C' ? 'Reaching Our World Campmeeting' : (t.category || t.series || 'Sunday Sermon'),
           preacher: t.speaker || t.preacher || 'Pastor Abiodun Adebayo',
           date: t.date || '',
-          duration: t.duration || '45 mins',
+          duration: t.duration || '45:00',
           description: t.description || 'No description provided.',
           audioUrl: t.audio_url || t.audioUrl || '',
           coverUrl: t.cover_url || t.coverUrl || 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=400&auto=format&fit=crop',
@@ -110,10 +205,12 @@ export default function Teachings({
 
   // Upload Form states
   const [title, setTitle] = useState('');
-  const [series, setSeries] = useState('');
+  const [series, setSeries] = useState('Edifice Conference');
   const [preacher, setPreacher] = useState('Pastor Abiodun Adebayo');
   const [description, setDescription] = useState('');
-  const [durationForm, setDurationForm] = useState('45m');
+  const [teachingYear, setTeachingYear] = useState('2026');
+  const [teachingDate, setTeachingDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [detectedDuration, setDetectedDuration] = useState<string>('');
   const [audioUrl, setAudioUrl] = useState('');
   const [uploadedStoragePath, setUploadedStoragePath] = useState('');
   const [selectedPresetCover, setSelectedPresetCover] = useState('https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=400&auto=format&fit=crop');
@@ -139,6 +236,19 @@ export default function Teachings({
 
     const sizeInMB = (file.size / (1024 * 1024)).toFixed(1);
     setFileSize(`${sizeInMB} MB`);
+
+    // Auto-detect duration from audio metadata
+    try {
+      const durSecs = await getAudioDurationFromFile(file);
+      if (durSecs > 0) {
+        const formatted = formatDetectedDuration(durSecs);
+        setDetectedDuration(formatted);
+      } else {
+        setDetectedDuration('45:00');
+      }
+    } catch {
+      setDetectedDuration('45:00');
+    }
 
     try {
       if (!supabase) {
@@ -243,6 +353,17 @@ export default function Teachings({
 
     const finalAudioUrl = audioUrl.trim();
 
+    // Conditional date format based on teaching category
+    const isYearOnly = series === 'Edifice Conference' || series === 'Reaching Our World Campmeeting';
+    let finalDate = '';
+    if (isYearOnly) {
+      finalDate = teachingYear.trim() || '2026';
+    } else {
+      finalDate = formatTeachingDate(teachingDate, 'Sunday Sermon');
+    }
+
+    const finalDuration = detectedDuration || '45:00';
+
     try {
       // Insert teaching into Supabase teachings table
       const { data: insertedTeaching, error: insertError } =
@@ -252,8 +373,8 @@ export default function Teachings({
             title: title.trim(),
             speaker: preacher.trim(),
             category: series.trim(),
-            duration: durationForm.trim(),
-            date: new Date().toISOString().split('T')[0],
+            duration: finalDuration,
+            date: finalDate,
             audio_url: finalAudioUrl,
             cover_url: selectedPresetCover,
             description:
@@ -282,7 +403,7 @@ export default function Teachings({
       const newTeaching: Teaching = {
         id: insertedTeaching.id,
         title: insertedTeaching.title,
-        series: insertedTeaching.category || '',
+        series: insertedTeaching.category === 'R.O.W.C' ? 'Reaching Our World Campmeeting' : (insertedTeaching.category || ''),
         preacher: insertedTeaching.speaker || '',
         date: insertedTeaching.date || '',
         duration: insertedTeaching.duration || '',
@@ -303,9 +424,11 @@ export default function Teachings({
 
       // Reset form and close
       setTitle('');
-      setSeries('');
+      setSeries('Edifice Conference');
       setDescription('');
-      setDurationForm('45m');
+      setDetectedDuration('');
+      setTeachingYear('2026');
+      setTeachingDate(new Date().toISOString().split('T')[0]);
       setAudioUrl('');
       setUploadedStoragePath('');
       setUploadedFileName('');
@@ -649,9 +772,9 @@ export default function Teachings({
   };
 
   return (
-    <div className="w-full bg-[#12100E] text-[#F9F6F0] transition-colors duration-300" id="teachings-view">
+    <div className="w-full max-w-full overflow-x-hidden bg-[#12100E] text-[#F9F6F0] transition-colors duration-300" id="teachings-view">
       {/* Themed Page Header: Imperial Espresso & Radiant Topaz Gold */}
-      <div className="w-full bg-gradient-to-b from-[#161412] via-[#1A1714] to-[#12100E] text-[#F9F6F0] py-16 sm:py-20 border-b border-[#332C24] relative overflow-hidden">
+      <div className="w-full max-w-full overflow-x-hidden bg-gradient-to-b from-[#161412] via-[#1A1714] to-[#12100E] text-[#F9F6F0] py-16 sm:py-20 border-b border-[#332C24] relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-[#E8A238]/10 rounded-full blur-3xl" />
         </div>
@@ -668,7 +791,7 @@ export default function Teachings({
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 w-full max-w-full overflow-x-hidden">
         {/* Admin Quick Action Bar */}
         {isAdmin && (
           <div className="max-w-3xl mx-auto mb-10 flex items-center justify-center gap-3" id="teachings-admin-bar">
@@ -711,10 +834,10 @@ export default function Teachings({
         )}
 
         {/* Series Filter Tabs & Search Bar */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-10">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-10 w-full max-w-full">
           
           {/* Search */}
-          <div className="lg:col-span-4">
+          <div className="lg:col-span-4 min-w-0">
             <div className="relative w-full">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#fca311]" />
               <input
@@ -729,53 +852,64 @@ export default function Teachings({
           </div>
 
           {/* Series Filter */}
-          <div className="lg:col-span-8 overflow-x-auto flex gap-2 pb-2 scrollbar-none items-center">
+          <div className="lg:col-span-8 min-w-0 overflow-x-auto flex gap-2 pb-2 scrollbar-none items-center">
             <span className="text-xs uppercase font-mono text-[#737373] shrink-0 mr-2">Series:</span>
-            {seriesCategories.map((series) => (
-              <button
-                key={series}
-                onClick={() => setSelectedSeries(series)}
-                className={`px-3.5 py-2 rounded-lg font-display text-xs font-semibold whitespace-nowrap transition-all cursor-pointer
-                  ${selectedSeries === series
-                    ? 'bg-[#fca311] text-[#000000] font-bold shadow-md shadow-[#fca311]/25'
-                    : 'bg-[#111111] border border-[#222222] hover:border-[#fca311]/60 text-[#E5E5E5]/80 hover:text-[#fca311]'
-                  }`}
-                id={`filter-series-${series.replace(/\s+/g, '-').toLowerCase()}`}
-              >
-                {series === 'all' ? 'All Messages' : series}
-              </button>
-            ))}
+            {seriesCategories.map((seriesCat) => {
+              const displayLabel = seriesCat === 'all' ? 'All Messages' : (seriesCat === 'R.O.W.C' ? 'Reaching Our World Campmeeting' : seriesCat);
+              return (
+                <button
+                  key={seriesCat}
+                  onClick={() => setSelectedSeries(seriesCat)}
+                  className={`px-3.5 py-2 rounded-lg font-display text-xs font-semibold whitespace-nowrap transition-all cursor-pointer
+                    ${selectedSeries === seriesCat
+                      ? 'bg-[#fca311] text-[#000000] font-bold shadow-md shadow-[#fca311]/25'
+                      : 'bg-[#111111] border border-[#222222] hover:border-[#fca311]/60 text-[#E5E5E5]/80 hover:text-[#fca311]'
+                    }`}
+                  id={`filter-series-${seriesCat.replace(/\s+/g, '-').toLowerCase()}`}
+                >
+                  {displayLabel}
+                </button>
+              );
+            })}
           </div>
         </div>
 
         {/* Main Grid: Catalog / Player Column */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-20">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-20 w-full max-w-full">
           
           {/* Catalog List (Left) */}
-          <div className="lg:col-span-7 space-y-4" id="teachings-catalog-list">
+          <div className="lg:col-span-7 min-w-0 space-y-4 w-full max-w-full" id="teachings-catalog-list">
             <h3 className="font-display font-bold text-base text-[#E5E5E5] flex items-center gap-2 mb-4">
               <Flame className="h-4 w-4 text-[#fca311]" />
               <span>Sermon Teachings Catalog</span>
             </h3>
 
             {filteredTeachings.length > 0 ? (
-              filteredTeachings.map((teaching) => {
+              filteredTeachings.map((teaching, index) => {
                 const isDownloaded = userDownloads.some(dl => dl.id === teaching.id);
                 const progress = downloadProgress[teaching.id] || 0;
                 const downloading = isDownloading[teaching.id];
                 const isCurrent = currentTrack?.id === teaching.id;
 
                 return (
-                  <div
-                    key={teaching.id}
-                    className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between
+                  <motion.div
+                    key={teaching.id || index}
+                    initial={{
+                      opacity: 0,
+                      y: 8,
+                    }}
+                    animate={{
+                      opacity: 1,
+                      y: 0,
+                    }}
+                    className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between w-full max-w-full overflow-hidden
                       ${isCurrent 
                         ? 'bg-gradient-to-r from-[#1c1405] via-[#121212] to-[#0a0a0a] border-[#fca311]/60 shadow-lg shadow-[#fca311]/10' 
                         : 'bg-[#0d0d0d] border-[#1f1f1f] hover:border-[#fca311]/40'
                       }`}
                     id={`teaching-item-${teaching.id}`}
                   >
-                    <div className="flex gap-4 items-center w-full sm:w-auto">
+                    <div className="flex gap-4 items-center w-full sm:w-auto min-w-0">
                       {/* Cover Thumbnail */}
                       <div className="relative w-16 h-16 rounded-xl overflow-hidden shrink-0 bg-[#000000] flex items-center justify-center border border-[#262626]">
                         <img
@@ -801,7 +935,9 @@ export default function Teachings({
 
                       {/* Metadata */}
                       <div className="min-w-0 flex-1">
-                        <p className="text-[10px] text-[#fca311] font-mono font-semibold uppercase">{teaching.series}</p>
+                        <p className="text-[10px] text-[#fca311] font-mono font-semibold uppercase truncate">
+                          {teaching.series === 'R.O.W.C' ? 'Reaching Our World Campmeeting' : teaching.series}
+                        </p>
                         <h4 className="font-display font-bold text-sm sm:text-base text-[#E5E5E5] hover:text-[#fca311] transition-colors truncate mt-0.5">
                           {teaching.title}
                         </h4>
@@ -815,6 +951,12 @@ export default function Teachings({
                             <Clock className="h-3 w-3 shrink-0 text-[#737373]" />
                             {teaching.duration}
                           </span>
+                          {teaching.date && (
+                            <span className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3 shrink-0 text-[#737373]" />
+                              {formatTeachingDate(teaching.date, teaching.series)}
+                            </span>
+                          )}
                           <span className="text-[#737373] font-mono text-[9px]">{teaching.size}</span>
                         </div>
                       </div>
@@ -864,7 +1006,7 @@ export default function Teachings({
                         )}
                       </div>
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })
             ) : (
@@ -875,64 +1017,58 @@ export default function Teachings({
           </div>
 
           {/* Media Preview Player Column (Right) */}
-          <div className="lg:col-span-5" id="sermon-player-panel">
-            <h3 className="font-display font-bold text-base text-[#E5E5E5] flex items-center gap-2 mb-4">
-              <Disc className="h-4 w-4 text-[#fca311] animate-spin" style={{ animationDuration: isPlaying ? '3s' : '0s' }} />
-              <span>Active Teaching Stream</span>
-            </h3>
-
-            <div className="bg-[#0d0d0d] border border-[#222222] rounded-3xl p-6 sm:p-8 relative overflow-hidden shadow-2xl flex flex-col h-full justify-between min-h-[420px]">
-              {/* Background amber glow */}
-              <div className="absolute -top-12 -right-12 w-48 h-48 bg-[#fca311]/10 rounded-full blur-3xl pointer-events-none" />
-
+          <aside className="lg:col-span-5 min-w-0 w-full max-w-full" id="sermon-player-panel">
+            <div className="lg:sticky lg:top-24 bg-[#161412] border border-[#332C24] rounded-3xl p-4 sm:p-7 w-full max-w-full overflow-hidden shadow-2xl relative">
               {currentTrack ? (
-                <div className="flex-1 flex flex-col justify-between">
-                  {/* Vinyl/Spin Album Visual */}
-                  <div className="flex flex-col items-center text-center mt-4">
-                    <div className="relative w-40 h-40 sm:w-44 sm:h-44 rounded-full overflow-hidden p-[3px] bg-gradient-to-tr from-[#1f1f1f] via-[#fca311] to-[#1f1f1f] shadow-2xl shadow-[#fca311]/10">
-                      <div className="w-full h-full rounded-full bg-[#000000] overflow-hidden flex items-center justify-center p-1.5 relative">
-                        <img
-                          src={currentTrack.coverUrl}
-                          alt=""
-                          referrerPolicy="no-referrer"
-                          className={`w-full h-full rounded-full object-cover select-none ${isPlaying ? 'animate-spin duration-[15000ms] ease-linear' : ''}`}
-                          style={{ animationDuration: '25s' }}
-                        />
-                        {/* Center spindle hole */}
-                        <div className="absolute inset-0 m-auto w-8 h-8 rounded-full bg-[#000000] border-4 border-[#222222] shadow-inner flex items-center justify-center">
-                          <div className="w-2.5 h-2.5 rounded-full bg-[#fca311]" />
-                        </div>
-                      </div>
-                    </div>
-
-                    <h4 className="font-display font-bold text-base sm:text-lg text-[#E5E5E5] mt-6 line-clamp-1">
-                      {currentTrack.title}
-                    </h4>
-                    <p className="text-xs text-[#fca311] font-mono mt-1 font-semibold uppercase tracking-wide">{currentTrack.series}</p>
-                    <p className="text-xs text-[#A3A3A3] mt-0.5">{currentTrack.preacher}</p>
-                  </div>
-
-                  {/* Progress bar and Scrubber */}
-                  <div className="mt-8">
-                    <div className="flex justify-between text-[10px] font-mono text-[#737373] mb-1.5">
-                      <span>{formatTime(currentTime)}</span>
-                      <span>{duration ? formatTime(duration) : currentTrack.duration}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max={duration || 100}
-                      value={currentTime}
-                      onChange={handleSeek}
-                      className="w-full h-1.5 bg-[#222222] focus:outline-none rounded-lg appearance-none cursor-pointer accent-[#fca311]"
-                      id="player-scrubber"
+                <>
+                  {/* ARTWORK */}
+                  <div className="aspect-square max-w-[260px] sm:max-w-sm mx-auto rounded-2xl overflow-hidden border border-[#332C24] bg-[#0c0a09] shadow-lg">
+                    <img
+                      src={
+                        currentTrack.coverUrl ||
+                        'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=600&auto=format&fit=crop'
+                      }
+                      alt={currentTrack.title}
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
                     />
                   </div>
 
-                  {/* Main Player controls */}
-                  <div className="flex items-center justify-center gap-4 mt-6">
-                    {/* Rewind 10s */}
+                  {/* INFO */}
+                  <div className="text-center mt-5 sm:mt-6 px-2 min-w-0">
+                    <h2 className="text-lg sm:text-2xl font-cinzel font-bold text-white truncate">
+                      {currentTrack.title}
+                    </h2>
+                    <p className="text-xs sm:text-sm text-[#fca311] mt-1 truncate font-semibold">
+                      {currentTrack.series === 'R.O.W.C' ? 'Reaching Our World Campmeeting' : currentTrack.series}
+                    </p>
+                    <p className="text-[11px] sm:text-xs text-[#A3A3A3] mt-1 truncate">
+                      {currentTrack.preacher}
+                    </p>
+                  </div>
+
+                  {/* PROGRESS */}
+                  <div className="mt-5 sm:mt-6 w-full">
+                    <input
+                      type="range"
+                      min={0}
+                      max={duration || 100}
+                      step={0.1}
+                      value={Math.min(currentTime, duration || 100)}
+                      onChange={handleSeek}
+                      className="w-full max-w-full accent-[#fca311] cursor-pointer"
+                      id="player-scrubber"
+                    />
+                    <div className="flex justify-between text-[11px] font-mono text-[#8A7463] mt-1">
+                      <span>{formatTime(currentTime)}</span>
+                      <span>{duration ? formatTime(duration) : currentTrack.duration}</span>
+                    </div>
+                  </div>
+
+                  {/* CONTROLS */}
+                  <div className="flex items-center justify-center gap-4 sm:gap-5 mt-4 sm:mt-5">
                     <button
+                      type="button"
                       onClick={() => {
                         if (audioRef.current) {
                           const nextTime = Math.max(0, audioRef.current.currentTime - 10);
@@ -940,28 +1076,28 @@ export default function Teachings({
                           setCurrentTime(nextTime);
                         }
                       }}
-                      className="p-2.5 rounded-full bg-[#181818] border border-[#2A2A2A] text-[#A3A3A3] hover:text-[#fca311] hover:border-[#fca311]/50 transition-all cursor-pointer active:scale-95 flex items-center gap-0.5 text-xs font-mono"
+                      className="p-2.5 rounded-full hover:bg-[#251F19] text-white transition-colors"
                       title="Rewind 10 seconds"
                     >
-                      <RotateCcw className="h-4 w-4" />
-                      <span className="text-[9px]">10s</span>
+                      <RotateCcw className="w-5 h-5" />
                     </button>
 
-                    {/* Play Button */}
                     <button
+                      type="button"
                       onClick={() => handlePlayPause(currentTrack)}
-                      className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[#fca311] hover:bg-[#e5920a] text-[#000000] flex items-center justify-center shadow-lg shadow-[#fca311]/25 transition-all transform hover:scale-105 cursor-pointer"
+                      className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#fca311] hover:bg-[#e5920a] text-black flex items-center justify-center shadow-lg transition-all hover:scale-105"
+                      aria-label={isPlaying ? 'Pause' : 'Play'}
                       id="player-play-btn"
                     >
                       {isPlaying ? (
-                        <Pause className="h-7 w-7 text-[#000000] fill-current" />
+                        <Pause className="w-5 h-5 sm:w-6 sm:h-6 fill-current text-black" />
                       ) : (
-                        <Play className="h-7 w-7 text-[#000000] fill-current translate-x-0.5" />
+                        <Play className="w-5 h-5 sm:w-6 sm:h-6 fill-current text-black ml-0.5" />
                       )}
                     </button>
 
-                    {/* Fast Forward 10s */}
                     <button
+                      type="button"
                       onClick={() => {
                         if (audioRef.current) {
                           const nextTime = Math.min(duration || 99999, audioRef.current.currentTime + 10);
@@ -969,59 +1105,100 @@ export default function Teachings({
                           setCurrentTime(nextTime);
                         }
                       }}
-                      className="p-2.5 rounded-full bg-[#181818] border border-[#2A2A2A] text-[#A3A3A3] hover:text-[#fca311] hover:border-[#fca311]/50 transition-all cursor-pointer active:scale-95 flex items-center gap-0.5 text-xs font-mono"
+                      className="p-2.5 rounded-full hover:bg-[#251F19] text-white transition-colors"
                       title="Forward 10 seconds"
                     >
-                      <span className="text-[9px]">10s</span>
-                      <RotateCw className="h-4 w-4" />
+                      <RotateCw className="w-5 h-5" />
                     </button>
 
-                    {/* Repeat Toggle Button */}
                     <button
+                      type="button"
                       onClick={() => setIsRepeating(!isRepeating)}
-                      className={`p-2.5 rounded-full transition-all cursor-pointer border active:scale-95 relative ${
-                        isRepeating
-                          ? 'bg-[#fca311] border-[#fca311] text-[#000000] shadow-md shadow-[#fca311]/30'
-                          : 'bg-[#181818] border-[#2A2A2A] text-[#737373] hover:text-[#fca311] hover:border-[#fca311]/50'
+                      className={`p-2.5 rounded-full transition-colors ${
+                        isRepeating ? 'bg-[#fca311] text-black' : 'hover:bg-[#251F19] text-[#8A7463] hover:text-[#fca311]'
                       }`}
-                      title={isRepeating ? 'Repeat: ON (Click to turn off)' : 'Repeat: OFF (Click to repeat sermon)'}
+                      title={isRepeating ? 'Repeat: ON' : 'Repeat: OFF'}
                     >
-                      {isRepeating ? <Repeat1 className="h-4 w-4" /> : <Repeat className="h-4 w-4" />}
+                      {isRepeating ? <Repeat1 className="w-5 h-5" /> : <Repeat className="w-5 h-5" />}
                     </button>
                   </div>
 
-                  {/* Volume bar */}
-                  <div className="flex items-center gap-3 justify-center mt-6 pt-6 border-t border-[#1f1f1f]">
+                  {/* VOLUME */}
+                  <div className="flex items-center gap-3 mt-5 sm:mt-6 w-full">
                     <button
-                      onClick={() => setIsMuted(!isMuted)}
-                      className="text-[#737373] hover:text-[#fca311] transition-colors cursor-pointer"
+                      type="button"
+                      onClick={() => setIsMuted((prev) => !prev)}
+                      className="text-[#fca311] hover:text-white shrink-0"
+                      title={isMuted ? 'Unmute' : 'Mute'}
                       id="player-mute-btn"
                     >
-                      {isMuted || volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                      {isMuted || volume === 0 ? (
+                        <VolumeX className="w-4 h-4" />
+                      ) : (
+                        <Volume2 className="w-4 h-4" />
+                      )}
                     </button>
                     <input
                       type="range"
-                      min="0"
-                      max="1"
-                      step="0.01"
-                      value={volume}
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={isMuted ? 0 : volume}
                       onChange={(e) => {
                         setVolume(parseFloat(e.target.value));
                         setIsMuted(false);
                       }}
-                      className="w-24 h-1 bg-[#222222] rounded-lg appearance-none cursor-pointer accent-[#fca311]"
+                      className="flex-1 max-w-full accent-[#fca311]"
+                      aria-label="Volume"
                       id="player-volume-slider"
                     />
                   </div>
-                </div>
+
+                  {/* ACTIONS */}
+                  <div className="mt-5 sm:mt-6 w-full">
+                    <button
+                      type="button"
+                      onClick={() => triggerDownload(currentTrack)}
+                      disabled={isDownloading[currentTrack.id]}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#fca311] hover:bg-[#e5920a] text-black text-xs font-bold transition-colors disabled:opacity-50"
+                      id="btn-player-download-teaching"
+                    >
+                      {isDownloading[currentTrack.id] ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Downloading {downloadProgress[currentTrack.id] || 0}%</span>
+                        </>
+                      ) : userDownloads.some((dl) => dl.id === currentTrack.id) ? (
+                        <>
+                          <Check className="w-4 h-4 text-black" />
+                          <span>Saved to Library</span>
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-4 h-4" />
+                          <span>Download Sermon Audio</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </>
               ) : (
-                <div className="flex-1 flex flex-col items-center justify-center text-center">
-                  <Music className="h-10 w-10 text-[#333333] mb-2" />
-                  <p className="text-sm text-[#737373]">Select a teaching from the list to load the stream.</p>
+                <div className="text-center py-12 sm:py-16">
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#1F1B16] border border-[#332C24] mx-auto flex items-center justify-center mb-4 sm:mb-5">
+                    <Music className="w-7 h-7 sm:w-8 sm:h-8 text-[#fca311]" />
+                  </div>
+
+                  <h2 className="font-cinzel font-bold text-white text-base sm:text-lg">
+                    Select a Sermon
+                  </h2>
+
+                  <p className="text-xs text-[#8A7463] mt-2 max-w-xs mx-auto">
+                    Choose a teaching from the catalogue to stream it here.
+                  </p>
                 </div>
               )}
             </div>
-          </div>
+          </aside>
         </div>
 
         {/* Admin Passcode Modal */}
@@ -1109,6 +1286,7 @@ export default function Teachings({
                     setIsUploadModalOpen(false);
                     setUploadedFileName('');
                     setAudioUrl('');
+                    setDetectedDuration('');
                   }}
                   className="absolute top-5 right-5 text-[#737373] hover:text-[#E5E5E5] p-1.5 bg-black/50 rounded-full transition-colors z-10 cursor-pointer"
                   id="btn-close-teachings-upload"
@@ -1136,31 +1314,53 @@ export default function Teachings({
                     />
                   </div>
 
-                  {/* Series & Duration */}
-                  <div className="grid grid-cols-2 gap-4">
+                  {/* Series / Category & Conditional Date / Year */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[10px] uppercase font-mono tracking-wider text-[#A3A3A3] mb-1.5">Series Name *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g., Pneumatika Series"
+                      <label className="block text-[10px] uppercase font-mono tracking-wider text-[#A3A3A3] mb-1.5">Category / Event *</label>
+                      <select
                         value={series}
                         onChange={(e) => setSeries(e.target.value)}
-                        className="w-full bg-[#050505] border border-[#262626] focus:border-[#fca311] rounded-xl py-2.5 px-3 text-xs text-[#E5E5E5] placeholder-[#555555] focus:outline-none"
+                        className="w-full bg-[#050505] border border-[#262626] focus:border-[#fca311] rounded-xl py-2.5 px-3 text-xs text-[#E5E5E5] focus:outline-none"
                         id="input-teachings-series"
-                      />
+                      >
+                        <option value="Edifice Conference">Edifice Conference</option>
+                        <option value="Reaching Our World Campmeeting">Reaching Our World Campmeeting</option>
+                        <option value="Sunday Sermon">Sunday Sermon</option>
+                      </select>
                     </div>
+
                     <div>
-                      <label className="block text-[10px] uppercase font-mono tracking-wider text-[#A3A3A3] mb-1.5">Duration *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g., 55m or 1h 12m"
-                        value={durationForm}
-                        onChange={(e) => setDurationForm(e.target.value)}
-                        className="w-full bg-[#050505] border border-[#262626] focus:border-[#fca311] rounded-xl py-2.5 px-3 text-xs text-[#E5E5E5] placeholder-[#555555] focus:outline-none"
-                        id="input-teachings-duration"
-                      />
+                      {series === 'Edifice Conference' || series === 'Reaching Our World Campmeeting' ? (
+                        <div>
+                          <label className="block text-[10px] uppercase font-mono tracking-wider text-[#A3A3A3] mb-1.5">
+                            Event Year *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="2026"
+                            value={teachingYear}
+                            onChange={(e) => setTeachingYear(e.target.value)}
+                            className="w-full bg-[#050505] border border-[#262626] focus:border-[#fca311] rounded-xl py-2.5 px-3 text-xs text-[#E5E5E5] placeholder-[#555555] focus:outline-none"
+                            id="input-teachings-year"
+                          />
+                        </div>
+                      ) : (
+                        <div>
+                          <label className="block text-[10px] uppercase font-mono tracking-wider text-[#A3A3A3] mb-1.5">
+                            Preaching Date *
+                          </label>
+                          <input
+                            type="date"
+                            required
+                            value={teachingDate}
+                            onChange={(e) => setTeachingDate(e.target.value)}
+                            className="w-full bg-[#050505] border border-[#262626] focus:border-[#fca311] rounded-xl py-2.5 px-3 text-xs text-[#E5E5E5] focus:outline-none"
+                            id="input-teachings-date"
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1219,7 +1419,14 @@ export default function Teachings({
 
                   {/* Drag-and-drop Audio File Uploader */}
                   <div>
-                    <label className="block text-[10px] uppercase font-mono tracking-wider text-[#A3A3A3] mb-1.5">Audio Track Attachment *</label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-[10px] uppercase font-mono tracking-wider text-[#A3A3A3]">Audio Track Attachment *</label>
+                      {detectedDuration && (
+                        <span className="text-[10px] font-mono text-[#fca311] bg-[#fca311]/10 px-2 py-0.5 rounded-md border border-[#fca311]/30">
+                          Detected Duration: {detectedDuration}
+                        </span>
+                      )}
+                    </div>
                     <div
                       onDragOver={(e) => {
                         e.preventDefault();
@@ -1251,7 +1458,7 @@ export default function Teachings({
                         {isUploadingFile ? (
                           <div className="space-y-2 w-full px-4">
                             <div className="flex justify-between text-[10px] font-mono text-[#A3A3A3]">
-                              <span>Processing file...</span>
+                              <span>Processing file & detecting duration...</span>
                               <span className="text-[#fca311]">{uploadProgress}%</span>
                             </div>
                             <div className="w-full bg-[#000000] h-1.5 rounded-full overflow-hidden">
@@ -1262,14 +1469,14 @@ export default function Teachings({
                           <div className="text-center">
                             <CheckCircle className="h-6 w-6 text-[#fca311] mx-auto mb-1" />
                             <p className="text-[11px] font-semibold text-[#fca311] truncate max-w-[220px] mx-auto">{uploadedFileName || "Audio loaded successfully"}</p>
-                            <p className="text-[9px] text-[#737373] font-mono mt-0.5">Size: {fileSize} (Object URL created)</p>
+                            <p className="text-[9px] text-[#737373] font-mono mt-0.5">Size: {fileSize} • Duration: {detectedDuration || 'Detected'}</p>
                             <span className="text-[9px] text-[#fca311] underline mt-1.5 block">Click to change track</span>
                           </div>
                         ) : (
                           <div className="text-center">
                             <Download className="h-5 w-5 text-[#fca311] mx-auto mb-1.5" />
                             <p className="text-xs text-[#E5E5E5] font-semibold">Drag & Drop MP3 or Click to browse</p>
-                            <p className="text-[10px] text-[#737373] mt-1">High quality sermon tracks up to 50MB</p>
+                            <p className="text-[10px] text-[#737373] mt-1">Automatic duration detection • Up to 50MB</p>
                           </div>
                         )}
                       </label>

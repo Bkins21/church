@@ -42,6 +42,15 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [dataLoading, setDataLoading] = useState<boolean>(false);
 
+  // Delete tracking states
+  const [deletingSermonId, setDeletingSermonId] = useState<string | null>(null);
+  const [deletingPubId, setDeletingPubId] = useState<string | null>(null);
+  const [deletingGalleryId, setDeletingGalleryId] = useState<string | null>(null);
+  const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
+  const [deletingRegId, setDeletingRegId] = useState<string | null>(null);
+  const [deletingSubId, setDeletingSubId] = useState<string | null>(null);
+  const [deletingBranchId, setDeletingBranchId] = useState<string | null>(null);
+
   // Audio preview playback state
   const [playingAudioUrl, setPlayingAudioUrl] = useState<string | null>(null);
   const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
@@ -170,7 +179,7 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
   // Form states for uploading sermon
   const [sermonTitle, setSermonTitle] = useState('');
   const [sermonSpeaker, setSermonSpeaker] = useState('');
-  const [sermonCategory, setSermonCategory] = useState('Sermon');
+  const [sermonCategory, setSermonCategory] = useState('Edifice Conference');
   const [sermonDuration, setSermonDuration] = useState('45 mins');
   const [sermonDate, setSermonDate] = useState(new Date().toISOString().split('T')[0]);
   const [coverUrl, setCoverUrl] = useState('');
@@ -670,71 +679,190 @@ const fetchCloudSongs = async () => {
     }
   };
 
+  // Storage URL parsing and safe file deletion helper
+  const extractStorageInfo = (url?: string | null) => {
+    if (!url || typeof url !== 'string') return null;
+    try {
+      const cleanUrl = url.split('?')[0].trim();
+      const publicMarker = '/storage/v1/object/public/';
+      const authMarker = '/storage/v1/object/authenticated/';
+      
+      let remainder = '';
+      if (cleanUrl.includes(publicMarker)) {
+        remainder = cleanUrl.split(publicMarker)[1];
+      } else if (cleanUrl.includes(authMarker)) {
+        remainder = cleanUrl.split(authMarker)[1];
+      }
+
+      if (remainder) {
+        const slashIndex = remainder.indexOf('/');
+        if (slashIndex !== -1) {
+          const bucket = decodeURIComponent(remainder.substring(0, slashIndex));
+          const path = decodeURIComponent(remainder.substring(slashIndex + 1));
+          if (bucket && path) {
+            return { bucket, path };
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Error parsing storage URL:', e);
+    }
+    return null;
+  };
+
+  const safeDeleteStorageFile = async (url?: string | null, fallbackBucket?: string) => {
+    if (!supabase || !url || typeof url !== 'string') return;
+    const storageInfo = extractStorageInfo(url);
+    if (storageInfo) {
+      try {
+        await supabase.storage.from(storageInfo.bucket).remove([storageInfo.path]);
+      } catch (e) {
+        console.warn(`Could not delete storage file from ${storageInfo.bucket}:`, e);
+      }
+    } else if (fallbackBucket) {
+      const marker = `/${fallbackBucket}/`;
+      if (url.includes(marker)) {
+        try {
+          const path = decodeURIComponent(url.split(marker)[1].split('?')[0]);
+          if (path) {
+            await supabase.storage.from(fallbackBucket).remove([path]);
+          }
+        } catch (e) {
+          console.warn(`Could not delete storage file from fallback bucket ${fallbackBucket}:`, e);
+        }
+      }
+    }
+  };
+
   // Delete sermon
-  const handleDeleteSermon = async (id: string, audioUrl: string) => {
-    if (!supabase) return;
-    if (!confirm('Are you sure you want to delete this teaching and its audio file?')) return;
+  const handleDeleteSermon = async (id: string, audioUrl?: string) => {
+    if (!confirm('Are you sure you want to permanently delete this teaching and its audio file from the website?')) {
+      return;
+    }
+
+    if (!isSupabaseConfigured || !supabase) {
+      alert('Supabase is not configured. Please check your credentials.');
+      return;
+    }
+
+    setDeletingSermonId(id);
 
     try {
-      // 1. Delete from storage if URL matches our storage domain
-      if (audioUrl.includes('/storage/v1/object/public/Teachings/')) {
-        const parts = audioUrl.split('/Teachings/');
-        if (parts.length > 1) {
-          const filePath = parts[1];
-          await supabase.storage.from('Teachings').remove([filePath]);
-        }
-      } else if (audioUrl.includes('/storage/v1/object/public/sermons/')) {
-        const parts = audioUrl.split('/sermons/');
-        if (parts.length > 1) {
-          const filePath = `sermons/${parts[1]}`;
-          await supabase.storage.from('sermons').remove([filePath]);
+      // Find teaching details to check audioUrl and coverUrl
+      const sermon = teachings.find(t => t.id === id);
+      const targetAudioUrl = audioUrl || sermon?.audioUrl || '';
+      const targetCoverUrl = sermon?.coverUrl || '';
+
+      // 1. Delete audio file from storage (Try Teachings, sermons, and auto-detected bucket)
+      if (targetAudioUrl) {
+        await safeDeleteStorageFile(targetAudioUrl, 'Teachings');
+        if (targetAudioUrl.includes('/sermons/')) {
+          await safeDeleteStorageFile(targetAudioUrl, 'sermons');
         }
       }
 
-      // 2. Delete from database
-      const { error } = await supabase
+      // 2. Delete cover file from storage if stored in Supabase storage
+      if (targetCoverUrl && (targetCoverUrl.includes('/storage/v1/object/public/') || targetCoverUrl.includes('/Teachings/') || targetCoverUrl.includes('/sermons/'))) {
+        await safeDeleteStorageFile(targetCoverUrl, 'Teachings');
+      }
+
+      // 3. Delete from database table
+      const { error: dbError } = await supabase
         .from('teachings')
         .delete()
         .eq('id', id);
 
-      if (error) throw error;
+      if (dbError) {
+        throw new Error(dbError.message || 'Failed to delete sermon from database.');
+      }
 
+      // 4. Update UI State only after database deletion succeeds
       setTeachings(prev => prev.filter(t => t.id !== id));
+
+      // 5. Clean up localStorage cache
+      try {
+        const saved = localStorage.getItem('gec_teachings_catalog');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          const updated = parsed.filter((t: any) => t.id !== id);
+          localStorage.setItem('gec_teachings_catalog', JSON.stringify(updated));
+        }
+      } catch {}
+
       window.dispatchEvent(new Event('gec_teachings_updated'));
+      alert('Teaching and associated audio file deleted successfully.');
+
     } catch (err: any) {
-      alert(`Delete failed: ${err.message}`);
+      console.error('Delete sermon error:', err);
+      alert(`Delete failed: ${err?.message || err}`);
+    } finally {
+      setDeletingSermonId(null);
     }
   };
 
   // Delete Subscriber
   const handleDeleteSub = async (id: string) => {
-    if (!supabase) return;
-    if (!confirm('Remove this subscriber from list?')) return;
+    if (!confirm('Are you sure you want to permanently remove this subscriber from the mailing list?')) {
+      return;
+    }
+
+    if (!isSupabaseConfigured || !supabase) {
+      alert('Supabase is not configured. Please check your credentials.');
+      return;
+    }
+
+    setDeletingSubId(id);
+
     try {
-      const { error } = await supabase.from('subscribers').delete().eq('id', id);
-      if (error) throw error;
+      const { error } = await supabase
+        .from('subscribers')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        throw new Error(error.message || 'Failed to remove subscriber from database.');
+      }
+
       setSubscribers(prev => prev.filter(s => s.id !== id));
+      alert('Subscriber removed successfully.');
     } catch (err: any) {
-      alert(err.message);
+      console.error('Delete subscriber error:', err);
+      alert(`Failed to delete subscriber: ${err?.message || err}`);
+    } finally {
+      setDeletingSubId(null);
     }
   };
 
   // Delete Registration
-  const handleDeleteReg = async (id: string) => {
-    if (!supabase) return;
-    if (!confirm('Remove this registration record?')) return;
-    try {
-      const { error } = await supabase.from('meeting_registrations').delete().eq('id', id);
-      if (error) {
-        // Also try standard registrations table if id was not in meeting_registrations
-        await supabase.from('registrations').delete().eq('id', id);
-      }
-      setRegistrations(prev => prev.filter(r => r.id !== id));
-      setRawMeetingRegistrations(prev => prev.filter(r => r.id !== id));
-    } catch (err: any) {
-      alert(err.message);
+ const handleDeleteReg = async (id: string) => {
+  if (!supabase) return;
+
+  if (!confirm('Remove this registration record?')) return;
+
+  try {
+    // Delete ONLY from meeting_registrations
+    const { error } = await supabase
+      .from('meeting_registrations')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Meeting registration DELETE failed:', error);
+      alert(`Delete failed: ${error.message}`);
+      return;
     }
-  };
+
+    // Only update the UI after Supabase confirms deletion
+    setRegistrations(prev => prev.filter(r => r.id !== id));
+    setRawMeetingRegistrations(prev => prev.filter(r => r.id !== id));
+
+    alert('Registration deleted successfully.');
+
+  } catch (err: any) {
+    console.error('Unexpected registration delete error:', err);
+    alert(`Delete failed: ${err?.message || err}`);
+  }
+};
 
   // Export meeting_registrations directly from Supabase as a CSV file
   const handleExportMeetingRegistrationsCSV = async () => {
@@ -1144,134 +1272,115 @@ const fetchCloudSongs = async () => {
   };
 
   const handleDeletePublication = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this publication?')) return;
-
-    const publication = publicationsList.find(p => p.id === id);
-
-    if (!publication) {
-      console.error('Publication not found:', id);
+    if (!confirm('Are you sure you want to permanently delete this publication and its PDF file?')) {
       return;
     }
 
+    if (!isSupabaseConfigured || !supabase) {
+      alert('Supabase is not configured.');
+      return;
+    }
+
+    const publication = publicationsList.find(p => p.id === id);
+    if (!publication) {
+      alert('Publication not found.');
+      return;
+    }
+
+    setDeletingPubId(id);
+
     try {
-      if (isSupabaseConfigured && supabase) {
-        const marker = '/storage/v1/object/public/Publications/';
-
-        // Delete the PDF from Supabase Storage Publications bucket
-        if (publication.fileUrl && publication.fileUrl.includes(marker)) {
-          try {
-            const url = new URL(publication.fileUrl);
-            const storagePath = decodeURIComponent(url.pathname.split(marker)[1]);
-            if (storagePath) {
-              const { error: storageError } = await supabase.storage
-                .from('Publications')
-                .remove([storagePath]);
-
-              if (storageError) {
-                console.error('Failed to delete publication file from Storage:', storageError);
-              }
-            }
-          } catch (storageErr) {
-            console.error('Could not determine publication file storage path:', storageErr);
-          }
+      // 1. Delete PDF from Storage
+      if (publication.fileUrl) {
+        await safeDeleteStorageFile(publication.fileUrl, 'Publications');
+        if (publication.fileUrl.includes('/bulletin-publications/')) {
+          await safeDeleteStorageFile(publication.fileUrl, 'bulletin-publications');
         }
-
-        // Delete the cover from Supabase Storage Publications bucket
-        if (publication.coverUrl && publication.coverUrl.includes(marker)) {
-          try {
-            const url = new URL(publication.coverUrl);
-            const storagePath = decodeURIComponent(url.pathname.split(marker)[1]);
-            if (storagePath) {
-              const { error: coverStorageError } = await supabase.storage
-                .from('Publications')
-                .remove([storagePath]);
-
-              if (coverStorageError) {
-                console.error('Failed to delete cover file from Storage:', coverStorageError);
-              }
-            }
-          } catch (coverErr) {
-            console.error('Could not determine cover file storage path:', coverErr);
-          }
-        }
-
-        // Delete row from Supabase `publications` table
-        const { error: dbErr } = await supabase
-          .from('publications')
-          .delete()
-          .eq('id', id);
-
-        if (dbErr) {
-          console.error('Failed to delete publication from database:', dbErr);
-          alert(`Database deletion failed: ${dbErr.message}`);
-          return;
+        if (publication.fileUrl.includes('/publications/')) {
+          await safeDeleteStorageFile(publication.fileUrl, 'publications');
         }
       }
 
-      // Update state immediately
-      setPublicationsList(prev => prev.filter(p => p.id !== id));
-      window.dispatchEvent(new Event('gec_publications_updated'));
+      // 2. Delete Cover Image from Storage if stored in Supabase
+      if (publication.coverUrl && (publication.coverUrl.includes('/storage/v1/object/public/') || publication.coverUrl.includes('/Publications/'))) {
+        await safeDeleteStorageFile(publication.coverUrl, 'Publications');
+      }
 
-      console.log('Publication deleted successfully:', id);
+      // 3. Delete row from Supabase `publications` table
+      const { error: dbErr } = await supabase
+        .from('publications')
+        .delete()
+        .eq('id', id);
+
+      if (dbErr) {
+        throw new Error(dbErr.message || 'Failed to delete publication from database.');
+      }
+
+      // 4. Update UI State only after database deletion succeeds
+      setPublicationsList(prev => prev.filter(p => p.id !== id));
+
+      // Clean local cache
+      try {
+        const saved = localStorage.getItem('gec_user_library');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          localStorage.setItem('gec_user_library', JSON.stringify(parsed.filter((p: any) => p.id !== id)));
+        }
+      } catch {}
+
+      window.dispatchEvent(new Event('gec_publications_updated'));
+      alert('Publication and PDF file deleted successfully.');
+
     } catch (err: any) {
       console.error('Failed to delete publication:', err);
       alert(`Failed to delete publication: ${err?.message || 'Please try again'}`);
+    } finally {
+      setDeletingPubId(null);
     }
   };
 
   const handleDeleteAllPublications = async () => {
-    if (!confirm('Are you sure you want to delete and clear ALL publications from the catalog?')) return;
+    if (!confirm('Are you sure you want to delete and clear ALL publications from the catalog? This cannot be undone.')) {
+      return;
+    }
+
+    if (!isSupabaseConfigured || !supabase) {
+      alert('Supabase is not configured.');
+      return;
+    }
 
     try {
-      if (isSupabaseConfigured && supabase) {
-        const marker = '/storage/v1/object/public/Publications/';
-
-        // Remove files from Publications bucket
-        for (const pub of publicationsList) {
-          if (pub.fileUrl && pub.fileUrl.includes(marker)) {
-            try {
-              const url = new URL(pub.fileUrl);
-              const storagePath = decodeURIComponent(url.pathname.split(marker)[1]);
-              if (storagePath) {
-                await supabase.storage.from('Publications').remove([storagePath]);
-              }
-            } catch (e) {
-              // Ignore individual storage file removal errors
-            }
-          }
-
-          if (pub.coverUrl && pub.coverUrl.includes(marker)) {
-            try {
-              const url = new URL(pub.coverUrl);
-              const storagePath = decodeURIComponent(url.pathname.split(marker)[1]);
-              if (storagePath) {
-                await supabase.storage.from('Publications').remove([storagePath]);
-              }
-            } catch (e) {
-              // Ignore individual storage file removal errors
-            }
-          }
+      // Remove all storage files
+      for (const pub of publicationsList) {
+        if (pub.fileUrl) {
+          await safeDeleteStorageFile(pub.fileUrl, 'Publications');
         }
-
-        // Delete all records from `publications` database table
-        const { error: dbErr } = await supabase
-          .from('publications')
-          .delete()
-          .neq('id', '');
-
-        if (dbErr) {
-          console.error('Failed to clear publications from database:', dbErr);
-          alert(`Database clear failed: ${dbErr.message}`);
-          return;
+        if (pub.coverUrl) {
+          await safeDeleteStorageFile(pub.coverUrl, 'Publications');
         }
       }
 
+      // Delete all records from `publications` database table
+      const { error: dbErr } = await supabase
+        .from('publications')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+
+      if (dbErr) {
+        throw new Error(dbErr.message || 'Failed to clear publications from database.');
+      }
+
       setPublicationsList([]);
+      try {
+        localStorage.removeItem('gec_user_library');
+      } catch {}
+
       window.dispatchEvent(new Event('gec_publications_updated'));
-      alert('All publications cleared from the catalog successfully.');
-    } catch (e: any) {
-      console.error('Error clearing publications:', e);
-      alert(`Failed to clear publications: ${e?.message || 'Error occurred'}`);
+      alert('All publications cleared successfully.');
+
+    } catch (err: any) {
+      console.error('Failed to clear publications:', err);
+      alert(`Failed to clear publications: ${err?.message || err}`);
     }
   };
 
@@ -1578,7 +1687,7 @@ const handleAddSong = async (e: React.FormEvent) => {
 // =========================================================
 
 const handleDeleteSong = async (id: string) => {
-  if (!confirm('Are you sure you want to delete this song? This will remove the audio file, lyrics PDF, and database record.')) {
+  if (!confirm('Are you sure you want to permanently delete this song? This will remove the audio file, lyrics PDF, and database record.')) {
     return;
   }
 
@@ -1590,10 +1699,10 @@ const handleDeleteSong = async (id: string) => {
   setDeletingSongId(id);
 
   try {
-    // 1. Get the song first to extract audio and lyrics storage paths
+    // 1. Get the song first to extract audio, lyrics, and artwork storage paths
     const { data: song, error: fetchError } = await supabase
       .from('Songs')
-      .select('id, title, audio_url, lyrics_pdf_url')
+      .select('id, title, audio_url, lyrics_pdf_url, artwork')
       .eq('id', id)
       .maybeSingle();
 
@@ -1601,85 +1710,65 @@ const handleDeleteSong = async (id: string) => {
       console.warn('Warning fetching song record before delete:', fetchError);
     }
 
-    // 2. Build list of storage files to remove
-    const filesToRemove: string[] = [];
-    const marker = '/storage/v1/object/public/Songs/';
+    const currentSong = song || songsList.find(s => s.id === id);
+    const audioUrl = currentSong?.audio_url || currentSong?.audioUrl;
+    const lyricsPdfUrl = currentSong?.lyrics_pdf_url || currentSong?.lyricsPdfUrl;
+    const artworkUrl = currentSong?.artwork || currentSong?.coverUrl;
 
-    // Audio file
-    const audioUrl = song?.audio_url || songsList.find(s => s.id === id)?.audioUrl;
-
+    // 2. Delete audio file from Songs storage bucket
     if (audioUrl) {
-      let audioPath = '';
-
-      if (audioUrl.includes(marker)) {
-        audioPath = audioUrl.split(marker)[1];
-      } else if (audioUrl.includes('/Songs/')) {
-        audioPath = audioUrl.split('/Songs/')[1];
-      }
-
-      if (audioPath) {
-        filesToRemove.push(audioPath.split('?')[0]);
+      await safeDeleteStorageFile(audioUrl, 'Songs');
+      if (audioUrl.includes('/songs/')) {
+        await safeDeleteStorageFile(audioUrl, 'songs');
       }
     }
 
-    // Lyrics PDF
-    const lyricsPdfUrl = song?.lyrics_pdf_url;
-
+    // 3. Delete lyrics PDF from Songs storage bucket
     if (lyricsPdfUrl) {
-      let lyricsPdfPath = '';
-
-      if (lyricsPdfUrl.includes(marker)) {
-        lyricsPdfPath = lyricsPdfUrl.split(marker)[1];
-      } else if (lyricsPdfUrl.includes('/Songs/')) {
-        lyricsPdfPath = lyricsPdfUrl.split('/Songs/')[1];
-      }
-
-      if (lyricsPdfPath) {
-        filesToRemove.push(lyricsPdfPath.split('?')[0]);
+      await safeDeleteStorageFile(lyricsPdfUrl, 'Songs');
+      if (lyricsPdfUrl.includes('/songs/')) {
+        await safeDeleteStorageFile(lyricsPdfUrl, 'songs');
       }
     }
 
-    // 3. Remove audio + lyrics PDF from Songs storage
-    if (filesToRemove.length > 0) {
-      const { error: storageError } = await supabase.storage
-        .from('Songs')
-        .remove(filesToRemove);
-
-      if (storageError) {
-        console.warn('Could not remove some song files from Songs bucket:', storageError);
-      }
+    // 4. Delete artwork if hosted in Supabase storage
+    if (artworkUrl && (artworkUrl.includes('/storage/v1/object/public/') || artworkUrl.includes('/Songs/'))) {
+      await safeDeleteStorageFile(artworkUrl, 'Songs');
     }
 
-    // 4. Delete database row from Songs table
+    // 5. Delete database row from Songs table
     const { error: deleteError } = await supabase
       .from('Songs')
       .delete()
       .eq('id', id);
 
     if (deleteError) {
-      console.error('Failed to delete song row from database:', deleteError);
-      alert(`Failed to delete song from database: ${deleteError.message}`);
-      return;
+      throw new Error(deleteError.message || 'Failed to delete song from database.');
     }
 
-    // 5. Remove stale localStorage
+    // 6. Update UI state only on success
+    setSongsList(prev => prev.filter(s => s.id !== id));
+
+    // 7. Remove stale localStorage
     try {
       localStorage.removeItem('gec_user_uploaded_songs');
       localStorage.removeItem('gec_songs_catalog');
-    } catch (e) {
-      // Ignore
-    }
+      const savedDownloads = localStorage.getItem('gec_user_song_downloads');
+      if (savedDownloads) {
+        const parsed = JSON.parse(savedDownloads);
+        localStorage.setItem('gec_user_song_downloads', JSON.stringify(parsed.filter((s: any) => s.id !== id)));
+      }
+    } catch (e) {}
 
-    // 6. Refresh from Supabase
+    // 8. Refresh from Supabase
     await fetchCloudSongs();
-
     window.dispatchEvent(new Event('gec_songs_updated'));
 
     alert('Song, audio file, and lyrics PDF deleted successfully.');
 
   } catch (err: any) {
     console.error('Error deleting song:', err);
-    alert(`Error deleting song: ${err?.message || err}`);
+    alert(`Failed to delete song: ${err?.message || err}`);
   } finally {
     setDeletingSongId(null);
   }
@@ -1703,7 +1792,7 @@ const handleDeleteAllSongs = async () => {
     // 1. Fetch all existing songs to identify storage files
     const { data: allSongs, error: fetchError } = await supabase
       .from('Songs')
-      .select('id, audio_url');
+      .select('id, audio_url, lyrics_pdf_url, artwork');
 
     if (fetchError) {
       console.error('Failed to fetch songs for deletion:', fetchError);
@@ -1712,29 +1801,11 @@ const handleDeleteAllSongs = async () => {
     }
 
     if (allSongs && allSongs.length > 0) {
-      // 2. Remove all audio files from Songs storage bucket
-      const filePaths: string[] = [];
-      const marker = '/storage/v1/object/public/Songs/';
+      // 2. Remove all audio and lyrics files from storage
       for (const s of allSongs) {
-        if (s.audio_url) {
-          let p = '';
-          if (s.audio_url.includes(marker)) {
-            p = s.audio_url.split(marker)[1]?.split('?')[0] || '';
-          } else if (s.audio_url.includes('/Songs/')) {
-            p = s.audio_url.split('/Songs/')[1]?.split('?')[0] || '';
-          }
-          if (p) filePaths.push(p);
-        }
-      }
-
-      if (filePaths.length > 0) {
-        const { error: storageError } = await supabase.storage
-          .from('Songs')
-          .remove(filePaths);
-
-        if (storageError) {
-          console.warn('Warning deleting storage files:', storageError);
-        }
+        if (s.audio_url) await safeDeleteStorageFile(s.audio_url, 'Songs');
+        if (s.lyrics_pdf_url) await safeDeleteStorageFile(s.lyrics_pdf_url, 'Songs');
+        if (s.artwork) await safeDeleteStorageFile(s.artwork, 'Songs');
       }
 
       // 3. Delete all rows from Songs database table
@@ -1745,9 +1816,7 @@ const handleDeleteAllSongs = async () => {
         .in('id', ids);
 
       if (dbDeleteError) {
-        console.error('Failed to delete songs from database:', dbDeleteError);
-        alert(`Failed to delete songs from database: ${dbDeleteError.message}`);
-        return;
+        throw new Error(dbDeleteError.message || 'Failed to delete songs from database.');
       }
     }
 
@@ -1756,20 +1825,18 @@ const handleDeleteAllSongs = async () => {
     try {
       localStorage.removeItem('gec_user_uploaded_songs');
       localStorage.removeItem('gec_songs_catalog');
-    } catch (e) {
-      // Ignore
-    }
+      localStorage.removeItem('gec_user_song_downloads');
+    } catch (e) {}
 
     // 5. Refresh from Supabase
     await fetchCloudSongs();
-
     window.dispatchEvent(new Event('gec_songs_updated'));
 
     alert('All songs deleted successfully.');
 
   } catch (err: any) {
     console.error('Error deleting songs:', err);
-    alert(`Error deleting songs: ${err?.message || err}`);
+    alert(`Failed to delete songs: ${err?.message || err}`);
   }
 };
 
@@ -1998,11 +2065,16 @@ const handleResetBranchToDefault = async (branchId: string) => {
   const defaultBranch = ministryBranches.find(b => b.id === branchId);
   if (!defaultBranch) return;
 
+  if (!confirm(`Are you sure you want to reset the photo for ${defaultBranch.name} to default? This will permanently delete the custom uploaded photo from storage.`)) {
+    return;
+  }
+
   const currentBranch = branchesList.find(b => b.id === branchId);
   const currentImageUrl = currentBranch?.imageUrl || currentBranch?.pastorPhoto || '';
 
   setBranchImageError(null);
   setBranchImageSuccess(null);
+  setDeletingBranchId(branchId);
 
   try {
     if (supabase && isSupabaseConfigured) {
@@ -2018,13 +2090,8 @@ const handleResetBranchToDefault = async (branchId: string) => {
         }, { onConflict: 'id' });
 
       // Clean up custom image from storage if applicable
-      if (currentImageUrl.includes('/branch-images/branches/' + branchId + '/')) {
-        try {
-          const oldPath = currentImageUrl.split('/branch-images/')[1]?.split('?')[0];
-          if (oldPath) {
-            await supabase.storage.from('branch-images').remove([oldPath]);
-          }
-        } catch {}
+      if (currentImageUrl) {
+        await safeDeleteStorageFile(currentImageUrl, 'branch-images');
       }
     }
 
@@ -2043,8 +2110,12 @@ const handleResetBranchToDefault = async (branchId: string) => {
 
     setBranchImageSuccess(`Reset image for ${defaultBranch.name} to default photo.`);
     window.dispatchEvent(new Event('gec_branches_updated'));
+    alert(`Photo for ${defaultBranch.name} reset to default successfully.`);
   } catch (err: any) {
     setBranchImageError(`Failed to reset branch photo: ${err?.message || err}`);
+    alert(`Failed to reset branch photo: ${err?.message || err}`);
+  } finally {
+    setDeletingBranchId(null);
   }
 };
 
@@ -2067,6 +2138,7 @@ const handleResetBranchToDefault = async (branchId: string) => {
     const updated = [newItem, ...galleryList];
     setGalleryList(updated);
     localStorage.setItem('gec_user_uploaded_gallery', JSON.stringify(updated));
+    window.dispatchEvent(new Event('gec_gallery_updated'));
 
     // Reset Form
     setGalleryTitle('');
@@ -2077,11 +2149,42 @@ const handleResetBranchToDefault = async (branchId: string) => {
   };
 
   // Delete Gallery Handler
-  const handleDeleteGallery = (id: string) => {
-    if (!confirm('Are you sure you want to delete this gallery image?')) return;
-    const updated = galleryList.filter(item => item.id !== id);
-    setGalleryList(updated);
-    localStorage.setItem('gec_user_uploaded_gallery', JSON.stringify(updated));
+  const handleDeleteGallery = async (id: string) => {
+    if (!confirm('Are you sure you want to permanently delete this gallery image?')) return;
+
+    setDeletingGalleryId(id);
+
+    try {
+      const item = galleryList.find(g => g.id === id);
+
+      // 1. Delete image file from Supabase storage if it was uploaded to storage
+      if (item?.imageUrl) {
+        await safeDeleteStorageFile(item.imageUrl, 'branch-images');
+        await safeDeleteStorageFile(item.imageUrl, 'Teachings');
+      }
+
+      // 2. Delete from Supabase gallery table if it exists
+      if (supabase && isSupabaseConfigured) {
+        try {
+          await supabase.from('gallery').delete().eq('id', id);
+        } catch (e) {
+          // Table may not exist if only client-persisted
+        }
+      }
+
+      // 3. Update local state and localStorage
+      const updated = galleryList.filter(item => item.id !== id);
+      setGalleryList(updated);
+      localStorage.setItem('gec_user_uploaded_gallery', JSON.stringify(updated));
+      window.dispatchEvent(new Event('gec_gallery_updated'));
+
+      alert('Gallery image deleted successfully.');
+    } catch (err: any) {
+      console.error('Error deleting gallery item:', err);
+      alert(`Failed to delete gallery item: ${err?.message || err}`);
+    } finally {
+      setDeletingGalleryId(null);
+    }
   };
 
   // Add Event Handler
@@ -2107,6 +2210,7 @@ const handleResetBranchToDefault = async (branchId: string) => {
     const updated = [newEvent, ...eventsList];
     setEventsList(updated);
     localStorage.setItem('gec_upcoming_meetings', JSON.stringify(updated));
+    window.dispatchEvent(new Event('gec_events_updated'));
 
     // Reset Form
     setEventTitleInput('');
@@ -2121,11 +2225,42 @@ const handleResetBranchToDefault = async (branchId: string) => {
   };
 
   // Delete Event Handler
-  const handleDeleteEvent = (id: string) => {
-    if (!confirm('Are you sure you want to delete this event?')) return;
-    const updated = eventsList.filter(ev => ev.id !== id);
-    setEventsList(updated);
-    localStorage.setItem('gec_upcoming_meetings', JSON.stringify(updated));
+  const handleDeleteEvent = async (id: string) => {
+    if (!confirm('Are you sure you want to permanently delete this church event?')) return;
+
+    setDeletingEventId(id);
+
+    try {
+      const event = eventsList.find(e => e.id === id);
+
+      // 1. Delete banner image from Supabase storage if applicable
+      if (event?.banner) {
+        await safeDeleteStorageFile(event.banner, 'branch-images');
+        await safeDeleteStorageFile(event.banner, 'Teachings');
+      }
+
+      // 2. Delete from Supabase events table if it exists
+      if (supabase && isSupabaseConfigured) {
+        try {
+          await supabase.from('events').delete().eq('id', id);
+        } catch (e) {
+          // Table may not exist if only client-persisted
+        }
+      }
+
+      // 3. Update local state and localStorage
+      const updated = eventsList.filter(ev => ev.id !== id);
+      setEventsList(updated);
+      localStorage.setItem('gec_upcoming_meetings', JSON.stringify(updated));
+      window.dispatchEvent(new Event('gec_events_updated'));
+
+      alert('Event deleted successfully.');
+    } catch (err: any) {
+      console.error('Error deleting event:', err);
+      alert(`Failed to delete event: ${err?.message || err}`);
+    } finally {
+      setDeletingEventId(null);
+    }
   };
 
   // Save Site Settings Handler
@@ -3239,12 +3374,11 @@ CREATE POLICY "Allow all operations for Songs" ON public."Songs" FOR ALL USING (
                             value={sermonCategory}
                             onChange={(e) => setSermonCategory(e.target.value)}
                             className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white focus:outline-none transition-all"
+                            id="select-sermon-category"
                           >
-                            <option value="Sermon">Sunday Sermon</option>
-                            <option value="Conference">Edifice Conference</option>
-                            <option value="Seminar">Theological Foundation</option>
-                            <option value="Midweek">Midweek Bulletin</option>
-                            <option value="Special">Special Ministration</option>
+                            <option value="Edifice Conference">Edifice Conference</option>
+                            <option value="Reaching Our World Campmeeting">Reaching Our World Campmeeting</option>
+                            <option value="Sunday service">Sunday service</option>
                           </select>
                         </div>
 
@@ -3430,10 +3564,15 @@ CREATE POLICY "Allow all operations for Songs" ON public."Songs" FOR ALL USING (
                                     )}
                                     <button
                                       onClick={() => handleDeleteSermon(t.id, t.audioUrl)}
-                                      className="p-1.5 text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-all"
+                                      disabled={deletingSermonId === t.id}
+                                      className="p-1.5 text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-all disabled:opacity-50 cursor-pointer"
                                       title="Delete teaching"
                                     >
-                                      <Trash2 className="h-4 w-4" />
+                                      {deletingSermonId === t.id ? (
+                                        <Loader2 className="h-4 w-4 animate-spin text-red-400" />
+                                      ) : (
+                                        <Trash2 className="h-4 w-4" />
+                                      )}
                                     </button>
                                   </div>
                                 </td>
@@ -3767,10 +3906,15 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                                   <button
                                     type="button"
                                     onClick={() => handleDeletePublication(pub.id)}
-                                    className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-all cursor-pointer"
+                                    disabled={deletingPubId === pub.id}
+                                    className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-all cursor-pointer disabled:opacity-50"
                                     title="Delete publication"
                                   >
-                                    <Trash2 className="h-4 w-4" />
+                                    {deletingPubId === pub.id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin text-red-400" />
+                                    ) : (
+                                      <Trash2 className="h-4 w-4" />
+                                    )}
                                   </button>
                                 </div>
                               </div>
@@ -3881,9 +4025,15 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                           </div>
                           <button
                             onClick={() => handleDeleteGallery(item.id)}
-                            className="absolute top-4 right-4 p-1.5 bg-rich-black/85 text-red-400 hover:text-red-300 rounded-lg transition-all border border-midnight-blue/50"
+                            disabled={deletingGalleryId === item.id}
+                            className="absolute top-4 right-4 p-1.5 bg-rich-black/85 text-red-400 hover:text-red-300 rounded-lg transition-all border border-midnight-blue/50 disabled:opacity-50"
+                            title="Delete gallery image"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            {deletingGalleryId === item.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-red-400" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
                           </button>
                         </div>
                       ))}
@@ -4047,9 +4197,15 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                           </div>
                           <button
                             onClick={() => handleDeleteEvent(event.id)}
-                            className="p-2.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl border border-midnight-blue/50 transition-all self-end sm:self-auto shrink-0"
+                            disabled={deletingEventId === event.id}
+                            className="p-2.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl border border-midnight-blue/50 transition-all self-end sm:self-auto shrink-0 disabled:opacity-50"
+                            title="Delete event"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            {deletingEventId === event.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-red-400" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
                           </button>
                         </div>
                       ))}
@@ -4745,10 +4901,15 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                                           </button>
                                           <button
                                             onClick={() => handleDeleteReg(r.id)}
-                                            className="p-1.5 text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-all"
+                                            disabled={deletingRegId === r.id}
+                                            className="p-1.5 text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-all disabled:opacity-50"
                                             title="Delete registration"
                                           >
-                                            <Trash2 className="h-3.5 w-3.5" />
+                                            {deletingRegId === r.id ? (
+                                              <Loader2 className="h-3.5 w-3.5 animate-spin text-red-400" />
+                                            ) : (
+                                              <Trash2 className="h-3.5 w-3.5" />
+                                            )}
                                           </button>
                                         </div>
                                       </td>
@@ -4901,10 +5062,15 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                               <td className="py-3.5 px-4 text-right">
                                 <button
                                   onClick={() => handleDeleteSub(s.id)}
-                                  className="p-1.5 text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-all"
+                                  disabled={deletingSubId === s.id}
+                                  className="p-1.5 text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-all disabled:opacity-50"
                                   title="Delete subscriber"
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  {deletingSubId === s.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin text-red-400" />
+                                  ) : (
+                                    <Trash2 className="h-4 w-4" />
+                                  )}
                                 </button>
                               </td>
                             </tr>
