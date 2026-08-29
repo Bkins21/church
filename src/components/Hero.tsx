@@ -5,6 +5,7 @@ import { Registration } from '../types';
 import choirHeroBg from '../assets/images/gec_worship_choir_bg_1786828117713.jpg';
 import congregationHeroBg from '../assets/images/gec_hero_worship_bg_1786827665903.jpg';
 import { supabase, isSupabaseConfigured } from '../supabase';
+import { EDIFICE_CONFERENCE_2026_IMAGE } from '../data';
 
 interface HeroProps {
   onNavigate: (tab: string) => void;
@@ -119,11 +120,11 @@ export default function Hero({ onNavigate }: HeroProps) {
     return () => clearInterval(bgInterval);
   }, [heroBackgrounds.length]);
 
-  // Calculate dynamic countdown to Edifice Conference (October 28th, 2026, 9:00 AM)
+  // Calculate dynamic countdown to Edifice Conference (October 29th, 2026, 5:00 PM)
   useEffect(() => {
     const calculateCountdown = () => {
       const now = new Date();
-      const targetDate = new Date('2026-10-28T09:00:00');
+      const targetDate = new Date('2026-10-29T17:00:00');
       const difference = targetDate.getTime() - now.getTime();
       
       if (difference <= 0) {
@@ -358,14 +359,26 @@ export default function Hero({ onNavigate }: HeroProps) {
             <div className="absolute top-0 right-0 w-64 h-64 bg-[#A36B3B]/5 rounded-full blur-3xl pointer-events-none" />
             
             <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
-              <div className="space-y-2 text-center md:text-left">
-                
-                <h3 className="font-display text-xl sm:text-2xl font-bold text-[#141416]">
-                  Edifice Conference 2026
-                </h3>
-                <p className="text-xs sm:text-sm text-[#54575E]">
-                  October 28th – November 1st, 2026 
-                </p>
+              <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left min-w-0">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border-2 border-[#E4DCD0] shadow-md shrink-0 bg-[#F7F5F0]">
+                  <img
+                    src={EDIFICE_CONFERENCE_2026_IMAGE}
+                    alt="Edifice Conference 2026"
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover object-center"
+                  />
+                </div>
+                <div className="space-y-1 min-w-0">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#A36B3B]/10 text-[#A36B3B] text-[10px] font-mono font-bold uppercase tracking-wider">
+                    <span>Next Flagship Gathering</span>
+                  </div>
+                  <h3 className="font-display text-xl sm:text-2xl font-bold text-[#141416] truncate">
+                    Edifice Conference 2026
+                  </h3>
+                  <p className="text-xs sm:text-sm text-[#54575E]">
+                    October 28th – November 1st, 2026 • Abeokuta
+                  </p>
+                </div>
               </div>
 
               {/* Countdown Grid */}

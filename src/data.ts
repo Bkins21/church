@@ -127,6 +127,8 @@ export const crossworshipSongsCatalog: Song[] = [
   }
 ];
 
+export const EDIFICE_CONFERENCE_2026_IMAGE = 'https://hnunflpzqxkwkzjhnbpz.supabase.co/storage/v1/object/public/event-images/Artboard%201%20copy.jpg';
+
 export const upcomingMeetings: ChurchEvent[] = [
   {
     id: 'edifice-conference-2026',
@@ -135,7 +137,7 @@ export const upcomingMeetings: ChurchEvent[] = [
     time: 'Thursday - 5pm, Friday - 7am, Saturday - 7am, Sunday - 6am',
     location: 'Peter Akinola Foundation, Abeokuta',
     
-    banner: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=1200&auto=format&fit=crop',
+    banner: EDIFICE_CONFERENCE_2026_IMAGE,
     description: 'Our annual centerpiece conference building a solid, unshakeable foundation in Christian theology, ministry leadership, and doctrinal clarity.',
   
     registeredCount: 0

@@ -1,7 +1,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { Calendar, MapPin, Clock, User, Mail, Phone, Ticket, QrCode, Printer, ChevronLeft, CheckCircle2, Trash2, ArrowRight, ShieldCheck, Sparkles, Building2 } from 'lucide-react';
 import { Registration, ChurchEvent } from '../types';
-import { upcomingMeetings } from '../data';
+import { upcomingMeetings, EDIFICE_CONFERENCE_2026_IMAGE } from '../data';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface MeetingsProps {
@@ -342,6 +342,24 @@ export default function Meetings({
                 {/* Decorative bronze accent blur */}
                 <div className="absolute top-0 right-0 w-40 h-40 bg-[#A37F3B]/10 rounded-full blur-3xl pointer-events-none" />
                 
+                {/* Event Flyer Banner Preview */}
+                {selectedEvent.banner && (
+                  <div className="w-full h-44 sm:h-64 rounded-2xl overflow-hidden mb-6 border border-[#E1D6C7] relative bg-black/10 shadow-sm">
+                    <img 
+                      src={selectedEvent.banner} 
+                      alt={selectedEvent.title}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover object-center"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#25160B]/80 via-transparent to-transparent pointer-events-none" />
+                    <div className="absolute bottom-3 left-4 right-4 flex items-center justify-between text-white">
+                      <span className="text-[11px] font-mono font-bold uppercase tracking-wider bg-[#25160B]/90 px-2.5 py-1 rounded-md border border-white/20">
+                        {selectedEvent.date}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 <div className="mb-8 border-b border-[#E1D6C7] pb-6">
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#A37F3B]/15 border border-[#A37F3B]/30 text-[#3A2312] rounded-full text-[11px] font-mono uppercase font-bold tracking-wider mb-2">
                     <Sparkles className="h-3 w-3 text-[#A37F3B]" />
@@ -611,18 +629,29 @@ export default function Meetings({
               </div>
 
               {/* Countdown Panel with Rich Grass Green Gradient for Edifice Conference */}
-              <div className="relative overflow-hidden bg-gradient-to-br from-[#2D6A4F] via-[#1E5138] to-[#0D2818] border-2 border-[#4E9F5A]/40 rounded-3xl p-6 sm:p-10 shadow-2xl text-white" id="hero-countdown-panel">
+              <div className="relative overflow-hidden bg-gradient-to-br from-[#2D6A4F] via-[#1E5138] to-[#0D2818] border-2 border-[#4E9F5A]/40 rounded-3xl p-6 sm:p-8 lg:p-10 shadow-2xl text-white" id="hero-countdown-panel">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-[#52B788]/20 rounded-full blur-3xl pointer-events-none" />
                 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center relative z-10">
                   <div className="lg:col-span-7 space-y-4">
-                    {/* Tag without icon */}
-                    <div className="inline-flex items-center px-3.5 py-1 bg-[#0D2818]/80 text-[#D8F3DC] border border-[#4E9F5A]/40 rounded-full text-[11px] font-mono uppercase font-bold tracking-wider shadow-sm">
-                      <span>Our next special meeting is...</span>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 min-w-0">
+                      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border-2 border-white/20 shrink-0 shadow-lg bg-[#0D2818]/60">
+                        <img 
+                          src={EDIFICE_CONFERENCE_2026_IMAGE}
+                          alt="Edifice Conference 2026 Flyer"
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover object-center"
+                        />
+                      </div>
+                      <div className="space-y-1.5 min-w-0">
+                        <div className="inline-flex items-center px-3 py-0.5 bg-[#0D2818]/80 text-[#D8F3DC] border border-[#4E9F5A]/40 rounded-full text-[10px] sm:text-[11px] font-mono uppercase font-bold tracking-wider shadow-sm">
+                          <span>Our next special meeting is...</span>
+                        </div>
+                        <h3 className="text-2xl sm:text-3xl lg:text-4xl font-cinzel font-black text-white tracking-tight">
+                          Edifice Conference 2026
+                        </h3>
+                      </div>
                     </div>
-                    <h3 className="text-2xl sm:text-3xl lg:text-4xl font-cinzel font-black text-white tracking-tight">
-                      Edifice Conference 2026
-                    </h3>
                     <p className="text-sm text-[#E8F5E9] leading-relaxed max-w-xl">
                       Join us for another time of refreshing as we get edified in prayers, teachings and apologias of God's word and the move of the Holy Ghost.
                     </p>

@@ -120,7 +120,16 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
   const [eventsList, setEventsList] = useState<ChurchEvent[]>(() => {
     try {
       const saved = localStorage.getItem('gec_upcoming_meetings');
-      return saved ? JSON.parse(saved) : upcomingMeetings;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed.map((e: ChurchEvent) => {
+          if (e.id === 'edifice-conference-2026') {
+            return { ...e, banner: upcomingMeetings[0].banner };
+          }
+          return e;
+        });
+      }
+      return upcomingMeetings;
     } catch {
       return upcomingMeetings;
     }
