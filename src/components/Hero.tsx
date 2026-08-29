@@ -376,7 +376,7 @@ export default function Hero({ onNavigate }: HeroProps) {
                     Edifice Conference 2026
                   </h3>
                   <p className="text-xs sm:text-sm text-[#54575E]">
-                    October 28th – November 1st, 2026 • Abeokuta
+                    October 29th – November 1st, 2026 • Abeokuta
                   </p>
                 </div>
               </div>
