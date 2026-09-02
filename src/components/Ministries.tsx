@@ -16,7 +16,6 @@ export default function Ministries({ onNavigate }: MinistriesProps) {
     {
       id: 'oasis-mission',
       name: 'Oasis Mission',
-      tagline: 'Empowering Youths • Discovering Purpose • Raising Kingdom Leaders',
       badge: 'Youth & Young People',
       badgeColor: 'bg-[#FFE4E6]/20 text-[#FFE4E6] border-white/20',
       icon: Users,
@@ -37,7 +36,6 @@ export default function Ministries({ onNavigate }: MinistriesProps) {
     {
       id: 'village-outreach',
       name: 'Village Outreach',
-      tagline: 'Missions • Practical Compassion • Reaching the Unreached',
       badge: 'Community & Missions',
       badgeColor: 'bg-[#DCFCE7]/20 text-[#DCFCE7] border-white/20',
       icon: Compass,
@@ -59,7 +57,6 @@ export default function Ministries({ onNavigate }: MinistriesProps) {
     {
       id: 'crossword-media',
       name: 'Crossword Media',
-      tagline: 'Publications • Digital Storytelling • Visual Communications',
       badge: 'Media & Publications',
       badgeColor: 'bg-stone-950/15 text-stone-950 border-stone-950/25',
       icon: BookOpen,
@@ -81,7 +78,6 @@ export default function Ministries({ onNavigate }: MinistriesProps) {
     {
       id: 'crossworship',
       name: 'Crossworship',
-      tagline: 'Psalms • Sound Doctrine in Melody • Intimate Worship',
       badge: 'Worship & Music',
       badgeColor: 'bg-[#E4DCD0]/20 text-[#E4DCD0] border-[#E4DCD0]/30',
       icon: Disc,
