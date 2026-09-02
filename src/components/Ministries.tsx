@@ -1,6 +1,31 @@
 import { Sparkles, Heart, BookOpen, Music, Users, ArrowRight, Calendar, Compass, ShieldCheck, Disc, Globe, Layers, CheckCircle2 } from 'lucide-react';
 import { motion } from 'motion/react';
 
+interface MinistryItem {
+  id: string;
+  name: string;
+  tagline?: string;
+  badge: string;
+  badgeColor: string;
+  icon: any;
+  cardBg: string;
+  cardBorder: string;
+  iconBg: string;
+  summary: string;
+  pillars?: string[];
+  subInitiative?: {
+    title: string;
+    tag: string;
+    description: string;
+    actionLabel: string;
+    actionTab: string;
+  };
+  action?: {
+    label: string;
+    tab: string;
+  };
+}
+
 interface MinistriesProps {
   onNavigate?: (tab: string) => void;
 }
@@ -12,7 +37,7 @@ export default function Ministries({ onNavigate }: MinistriesProps) {
     }
   };
 
-  const ministries = [
+  const ministries: MinistryItem[] = [
     {
       id: 'oasis-mission',
       name: 'Oasis Mission',
@@ -22,13 +47,17 @@ export default function Ministries({ onNavigate }: MinistriesProps) {
       cardBg: 'bg-gradient-to-br from-[#8E1B24] via-[#78141B] to-[#4F0D13] text-white',
       cardBorder: 'border-[#A3232C]',
       iconBg: 'bg-white/15 text-[#FFE4E6] border border-white/25',
-      summary: 'A ministry focused primarily on teenagers and young people, helping them grow spiritually, build godly relationships, discover purpose, and become who God has called them to be.',
+      summary: `In a world where many things compete for the attention of young people, we see them drifting, often for lack of identity. We believe God can shape and anchor their lives.
+
+Oasis is committed to raising teenagers and young people into mature, purposeful followers of Christ, helping them build a genuine relationship with God, form godly relationships, and discover God's plan for their lives.
+
+We believe this growth raises young ministers of the Gospel, equipped to preach, teach, lead, and serve, carrying Christ's message to their generation.`,
      
       // Oasis Campmeeting is explicitly highlighted as a major meeting/event under Oasis Mission
       subInitiative: {
         title: 'Oasis Campmeeting',
         tag: 'Flagship Event under Oasis Mission',
-        description: 'Oasis Campmeeting is the premier annual youth gathering under Oasis Mission — bringing teenagers and young adults together for an intensive atmosphere of prayer, prophetic insight, sound doctrinal instruction, and life transformation.',
+        description: 'In a world pulling young people in every direction, Oasis Campmeeting creates a space to pause, reset, and be shaped by God. It is the annual gathering under Oasis Mission, bringing teenagers and young adults together for an intensive atmosphere of prayer, sound doctrine, mentorship, and demonstration of the things of the Spirit.',
         actionLabel: 'View in Meetings Calendar',
         actionTab: 'meetings'
       }
@@ -42,7 +71,7 @@ export default function Ministries({ onNavigate }: MinistriesProps) {
       cardBg: 'bg-gradient-to-br from-[#166534] via-[#0D4428] to-[#052E16] text-white',
       cardBorder: 'border-[#15803D]',
       iconBg: 'bg-white/15 text-[#A7F3D0] border border-white/25',
-      summary: 'A ministry focused on reaching communities through the gospel, practical love, outreach, missions, and bringing the message of Christ to people and communities.',
+      summary: 'A ministry focused on reaching rural communities and the Unreached People Group (UPG) through the gospel, practical love, outreach, missions, and bringing the message of Christ to people and communities.',
       pillars: [
         'Rural Evangelism & Gospel Penetration into Hinterlands',
         'Demonstrating the Practical Love and Benevolence of Christ',
@@ -174,14 +203,16 @@ export default function Ministries({ onNavigate }: MinistriesProps) {
                     </div>
                   </div>
 
-                  <span className="text-xs font-mono opacity-80 italic tracking-wide">
-                    {ministry.tagline}
-                  </span>
+                  {ministry.tagline && (
+                    <span className="text-xs font-mono opacity-80 italic tracking-wide">
+                      {ministry.tagline}
+                    </span>
+                  )}
                 </div>
 
                 {/* Body Content */}
                 <div className="py-6 space-y-6">
-                  <p className="text-sm sm:text-base leading-relaxed font-sans opacity-95 max-w-4xl">
+                  <p className="text-sm sm:text-base leading-relaxed font-sans opacity-95 max-w-4xl whitespace-pre-line">
                     {ministry.summary}
                   </p>
 
