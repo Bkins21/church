@@ -133,8 +133,8 @@ export const upcomingMeetings: ChurchEvent[] = [
   {
     id: 'edifice-conference-2026',
     title: 'Edifice Conference',
-    date: 'October 29th to November 1st, 2026',
-    time: 'Thursday - 5pm, Friday - 7am, Saturday - 7am, Sunday - 6am',
+    date: 'October 30th to November 1st, 2026',
+    time: 'Friday - 5pm, Saturday - 7am, Sunday - 6am',
     location: 'Peter Akinola Foundation, Abeokuta',
     
     banner: EDIFICE_CONFERENCE_2026_IMAGE,

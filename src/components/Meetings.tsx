@@ -658,7 +658,7 @@ export default function Meetings({
                     <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-white font-semibold pt-2">
                       <span className="flex items-center gap-1.5 bg-white/10 border border-white/15 px-3 py-1.5 rounded-lg">
                         <Calendar className="h-3.5 w-3.5 text-[#B7E4C7]" />
-                        October 29th - November 1st, 2026
+                        October 30th - November 1st, 2026
                       </span>
                       <span className="flex items-center gap-1.5 bg-white/10 border border-white/15 px-3 py-1.5 rounded-lg">
                         <MapPin className="h-3.5 w-3.5 text-[#B7E4C7]" />
