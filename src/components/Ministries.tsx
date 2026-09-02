@@ -24,12 +24,7 @@ export default function Ministries({ onNavigate }: MinistriesProps) {
       cardBorder: 'border-[#A3232C]',
       iconBg: 'bg-white/15 text-[#FFE4E6] border border-white/25',
       summary: 'A ministry focused primarily on teenagers and young people, helping them grow spiritually, build godly relationships, discover purpose, and become who God has called them to be.',
-      pillars: [
-        'Spiritual Growth & Doctrinal Grounding for Teenagers and Youths',
-        'Fostering Godly Relationships & Purposeful Fellowship',
-        'Life Mentorship, Career Guidance & Purpose Discovery',
-        'Equipping Young Believers to Stand as Bold Witnesses'
-      ],
+     
       // Oasis Campmeeting is explicitly highlighted as a major meeting/event under Oasis Mission
       subInitiative: {
         title: 'Oasis Campmeeting',
@@ -195,22 +190,24 @@ export default function Ministries({ onNavigate }: MinistriesProps) {
                   </p>
 
                   {/* Core Pillars / Focus Areas */}
-                  <div className="space-y-3">
-                    <h4 className="text-xs font-mono font-bold uppercase tracking-widest opacity-85">
-                      Key Focus Areas:
-                    </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {ministry.pillars.map((pillar, pIdx) => (
-                        <div 
-                          key={pIdx}
-                          className="flex items-start gap-2.5 p-3 rounded-xl bg-black/10 border border-white/10 text-xs sm:text-sm font-sans"
-                        >
-                          <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 opacity-80" />
-                          <span>{pillar}</span>
-                        </div>
-                      ))}
+                  {ministry.pillars && ministry.pillars.length > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="text-xs font-mono font-bold uppercase tracking-widest opacity-85">
+                        Key Focus Areas:
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {ministry.pillars.map((pillar, pIdx) => (
+                          <div 
+                            key={pIdx}
+                            className="flex items-start gap-2.5 p-3 rounded-xl bg-black/10 border border-white/10 text-xs sm:text-sm font-sans"
+                          >
+                            <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 opacity-80" />
+                            <span>{pillar}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Explicit Sub-Initiative: Oasis Campmeeting under Oasis Mission */}
                   {ministry.subInitiative && (
