@@ -40,18 +40,20 @@ export default function Ministries({ onNavigate }: MinistriesProps) {
   const ministries: MinistryItem[] = [
     {
       id: 'oasis-mission',
-      name: 'Oasis Mission',
+      name: 'Oasis Ministry Focus',
       badge: 'Youth & Young People',
       badgeColor: 'bg-[#FFE4E6]/20 text-[#FFE4E6] border-white/20',
       icon: Users,
       cardBg: 'bg-gradient-to-br from-[#8E1B24] via-[#78141B] to-[#4F0D13] text-white',
       cardBorder: 'border-[#A3232C]',
       iconBg: 'bg-white/15 text-[#FFE4E6] border border-white/25',
-      summary: `In a world where many things compete for the attention of young people, we see them drifting, often for lack of identity. We believe God can shape and anchor their lives.
+      summary: `Many things compete for the attention of young people today, and without a clear identity, they drift. We believe God alone can anchor and shape a life — not religion, not activity, but a genuine knowledge of who He is.
 
-Oasis is committed to raising teenagers and young people into mature, purposeful followers of Christ, helping them build a genuine relationship with God, form godly relationships, and discover God's plan for their lives.
+Oasis exists to teach that truth simply, with no grey areas: helping teenagers and young people build a real relationship with God, form godly relationships, and discover God's plan for their lives.
 
-We believe this growth raises young ministers of the Gospel, equipped to preach, teach, lead, and serve, carrying Christ's message to their generation.`,
+We believe this growth raises young ministers of the Gospel — taught with clarity, equipped to preach, teach, lead, and serve, carrying Christ's message to their generation.
+
+'In a world pulling young people in every direction, Oasis Campmeeting creates a space to pause, reset, and be shaped by God — not by noise or activity, but by the plain, unadulterated truth of the Gospel. It is the annual gathering under Oasis Mission, bringing teenagers and young adults together for an intensive atmosphere of prayer, sound doctrine, mentorship, and demonstration of the things of the Spirit.`,
      
       // Oasis Campmeeting is explicitly highlighted as a major meeting/event under Oasis Mission
       subInitiative: {
@@ -72,12 +74,13 @@ We believe this growth raises young ministers of the Gospel, equipped to preach,
       cardBorder: 'border-[#15803D]',
       iconBg: 'bg-white/15 text-[#A7F3D0] border border-white/25',
       summary: 'A ministry focused on reaching rural communities and the Unreached People Group (UPG) through the gospel, practical love, outreach, missions, and bringing the message of Christ to people and communities.',
-      pillars: [
+      /*pillars: [
         'Rural Evangelism & Gospel Penetration into Hinterlands',
         'Demonstrating the Practical Love and Benevolence of Christ',
         'Missions Relief, Community Support & Health Outreach',
         'Planting Spiritual Seeds and Nurturing Rural Assemblies'
       ],
+      */
       action: {
         label: 'Connect with Our Assemblies',
         tab: 'branches'
@@ -92,13 +95,8 @@ We believe this growth raises young ministers of the Gospel, equipped to preach,
       cardBg: 'bg-gradient-to-br from-[#F59E0B] via-[#D97706] to-[#92400E] text-stone-950',
       cardBorder: 'border-[#FBBF24]',
       iconBg: 'bg-stone-950/15 text-stone-950 border border-stone-950/25',
-      summary: "The church's media and publication ministry. This includes church publications, digital media, creative communication, visual storytelling, and related media resources.",
-      pillars: [
-        'Weekly Bulletins, Doctrinal Treatises & Church Publications',
-        'High-Impact Digital Media, Audio/Visual Production & Sound',
-        'Creative Visual Storytelling & Theological Content Archiving',
-        'Broadcast Technology & Strategic Kingdom Communication'
-      ],
+      summary: "The Gospel must be well taught — with no grey areas, no additives, no ambitions attached. Christ taught with simplicity and clarity, and the church was edified. Crossword Media exists to carry that same standard into publications, digital platforms, and visual storytelling: teaching the Gospel plainly, sharing sound doctrine and teachings that build up the saints, and telling the story of reconciliation so it reaches as far as the tools in our hands can take it.",
+     
       action: {
         label: 'Explore Our Publications',
         tab: 'publications'
@@ -113,13 +111,13 @@ We believe this growth raises young ministers of the Gospel, equipped to preach,
       cardBg: 'bg-gradient-to-br from-[#2D1B0E] via-[#22130A] to-[#140B06] text-white',
       cardBorder: 'border-[#A37F3B]/50',
       iconBg: 'bg-[#A37F3B]/20 text-[#E5B869] border border-[#A37F3B]/40',
-      summary: "The church's worship and music ministry. This includes worship songs, choral ministrations, and musical resources connected to our dedicated Songs catalogue.",
-      pillars: [
+      summary: "Worship is not noise; it is revelation. It flows from a heart that knows who God is and who it has become in Christ — the New Creation. This ministry exists to teach that truth simply, without additives, and to lead the church into songs, choral ministrations, and the musical resources gathered in our dedicated Songs catalogue, so that every note declares Christ and edifies the saints.",
+      /*pillars: [
         'Doctrinally Sound Songwriting Rooted in Grace and Scripture',
         'Leading Deep Congregational & Apostolic Worship Encounters',
         'Crossworship Psalms, Anthem Recordings & Musical Releases',
         'Nurturing Choral Ministration, Musicians & Psalmodists'
-      ],
+      ],*/
       action: {
         label: 'Listen to Crossworship Psalms',
         tab: 'songs'
@@ -194,9 +192,11 @@ We believe this growth raises young ministers of the Gospel, equipped to preach,
                       <Icon className="h-7 w-7" />
                     </div>
                     <div>
-                      <span className={`px-3 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider uppercase border inline-block mb-1.5 ${ministry.badgeColor}`}>
-                        {ministry.badge}
-                      </span>
+                      {ministry.badge && (
+                        <span className={`px-3 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider uppercase border inline-block mb-1.5 ${ministry.badgeColor}`}>
+                          {ministry.badge}
+                        </span>
+                      )}
                       <h2 className="font-cinzel font-bold text-2xl sm:text-3xl tracking-wide">
                         {ministry.name}
                       </h2>
