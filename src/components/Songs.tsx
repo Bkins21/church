@@ -23,7 +23,6 @@ import {
   X,
 } from 'lucide-react';
 import { Song } from '../types';
-import { crossworshipSongsCatalog } from '../data';
 import { motion } from 'motion/react';
 import { supabase } from '../supabase';
 import { downloadLyricsFile } from '../utils/lyricsHelper';
@@ -41,7 +40,8 @@ export default function Songs({
   isAdmin: propIsAdmin,
 }: SongsProps = {}) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [songs, setSongs] = useState<Song[]>(crossworshipSongsCatalog);
+  const [songs, setSongs] = useState<Song[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -109,9 +109,13 @@ export default function Songs({
     let mounted = true;
 
     const fetchSongs = async () => {
-      if (!supabase) return;
+      if (!supabase) {
+        if (mounted) setIsLoading(false);
+        return;
+      }
 
       try {
+        setIsLoading(true);
         const { data, error } = await supabase
           .from('Songs')
           .select('*')
@@ -119,6 +123,7 @@ export default function Songs({
 
         if (error) {
           console.error('Could not fetch songs:', error);
+          if (mounted) setIsLoading(false);
           return;
         }
 
@@ -139,11 +144,16 @@ export default function Songs({
           }));
 
           setSongs(mappedSongs);
+          setCurrentSong((prev) => prev ?? mappedSongs[0]);
         } else {
-          setSongs(crossworshipSongsCatalog);
+          setSongs([]);
         }
       } catch (error) {
         console.error('Song fetch failed:', error);
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
       }
     };
 
@@ -638,7 +648,25 @@ export default function Songs({
             </div>
 
             <div className="space-y-3 w-full">
-              {filteredSongs.length > 0 ? (
+              {isLoading ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <div
+                    key={`song-skeleton-${i}`}
+                    className="flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-2xl border border-[#4A2D17]/40 bg-[#25160B]/70 animate-pulse w-full"
+                  >
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#3A2312]/80 shrink-0" />
+                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-[#1F1209] shrink-0 border border-[#4A2D17]/30" />
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <div className="h-3.5 bg-[#3A2312] rounded w-2/3" />
+                      <div className="h-2.5 bg-[#3A2312]/60 rounded w-1/3" />
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="w-8 h-8 rounded-xl bg-[#1D1108] border border-[#4A2D17]/30" />
+                      <div className="w-8 h-8 rounded-xl bg-[#1D1108] border border-[#4A2D17]/30" />
+                    </div>
+                  </div>
+                ))
+              ) : filteredSongs.length > 0 ? (
                 filteredSongs.map((song, index) => {
                   const isCurrent =
                     currentSong?.id === song.id;
@@ -782,7 +810,15 @@ export default function Songs({
           {/* PLAYER */}
           <aside className="lg:col-span-5 min-w-0 w-full max-w-full">
             <div className="lg:sticky lg:top-24 bg-[#25160B] border border-[#4A2D17] rounded-3xl p-4 sm:p-7 w-full max-w-full overflow-hidden">
-              {currentSong ? (
+              {isLoading && !currentSong ? (
+                <div className="space-y-4 animate-pulse p-2">
+                  <div className="aspect-square max-w-[260px] sm:max-w-sm mx-auto rounded-2xl bg-[#150B05] border border-[#4A2D17]" />
+                  <div className="h-4 bg-[#3A2312] rounded w-1/2 mx-auto mt-5" />
+                  <div className="h-3 bg-[#3A2312]/60 rounded w-1/3 mx-auto mt-2" />
+                  <div className="h-2 bg-[#3A2312]/40 rounded w-full mt-6" />
+                  <div className="w-12 h-12 rounded-full bg-[#3A2312] mx-auto mt-4" />
+                </div>
+              ) : currentSong ? (
                 <>
                   {/* ARTWORK */}
                   <div className="aspect-square max-w-[260px] sm:max-w-sm mx-auto rounded-2xl overflow-hidden border border-[#4A2D17] bg-[#150B05]">

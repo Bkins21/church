@@ -122,6 +122,7 @@ export default function Teachings({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSeries, setSelectedSeries] = useState<string>('all');
   const [cloudTeachings, setCloudTeachings] = useState<Teaching[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   
   // Supabase cloudTeachings is the authoritative source of truth, fallback to prop/static catalog if empty
   const catalog = cloudTeachings.length > 0 
@@ -130,8 +131,12 @@ export default function Teachings({
 
   // Fetch teachings directly from Supabase teachings table
   const fetchCloudTeachings = async () => {
-    if (!supabase) return;
+    if (!supabase) {
+      setIsLoading(false);
+      return;
+    }
     try {
+      setIsLoading(true);
       const { data, error } = await supabase
         .from('teachings')
         .select('*')
@@ -157,9 +162,12 @@ export default function Teachings({
           size: t.size || '18.5 MB'
         }));
         setCloudTeachings(mapped);
+        setCurrentTrack(prev => prev ?? mapped[0] ?? null);
       }
     } catch (err) {
       console.error('Supabase fetch failure from teachings table:', err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -884,7 +892,27 @@ export default function Teachings({
               <span>Sermon Teachings Catalog</span>
             </h3>
 
-            {filteredTeachings.length > 0 ? (
+            {isLoading ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <div
+                  key={`teaching-skeleton-${i}`}
+                  className="p-4 rounded-2xl border border-[#1f1f1f] bg-[#0d0d0d] animate-pulse flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between w-full"
+                >
+                  <div className="flex gap-4 items-center w-full sm:w-auto min-w-0 flex-1">
+                    <div className="w-16 h-16 rounded-xl bg-[#1a1a1a] shrink-0 border border-[#262626]" />
+                    <div className="space-y-2 flex-1 min-w-0">
+                      <div className="h-4 bg-[#262626] rounded w-3/4" />
+                      <div className="h-3 bg-[#262626]/70 rounded w-1/2" />
+                      <div className="h-2.5 bg-[#262626]/40 rounded w-1/3" />
+                    </div>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <div className="w-10 h-10 rounded-xl bg-[#1a1a1a] border border-[#262626]" />
+                    <div className="w-24 h-10 rounded-xl bg-[#1a1a1a] border border-[#262626]" />
+                  </div>
+                </div>
+              ))
+            ) : filteredTeachings.length > 0 ? (
               filteredTeachings.map((teaching, index) => {
                 const isDownloaded = userDownloads.some(dl => dl.id === teaching.id);
                 const progress = downloadProgress[teaching.id] || 0;

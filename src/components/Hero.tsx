@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react';
 import { Calendar, Music, MapPin, ArrowRight, Clock, BookOpen, Volume2, Users, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Registration } from '../types';
-import choirHeroBg from '../assets/images/gec_worship_choir_bg_1786828117713.jpg';
-import congregationHeroBg from '../assets/images/gec_hero_worship_bg_1786827665903.jpg';
 import { supabase, isSupabaseConfigured } from '../supabase';
 import { EDIFICE_CONFERENCE_2026_IMAGE } from '../data';
 
@@ -17,17 +15,6 @@ interface HeroBackground {
   src: string;
   alt: string;
 }
-
-const FALLBACK_BACKGROUNDS: HeroBackground[] = [
-  {
-    src: choirHeroBg,
-    alt: "God's Edifice Church Choir & Crossworship Ministration",
-  },
-  {
-    src: congregationHeroBg,
-    alt: "God's Edifice Church Congregation Worship Atmosphere",
-  }
-];
 
 function formatAltText(filename: string): string {
   const nameWithoutExt = filename.replace(/\.[^/.]+$/, '');
@@ -49,7 +36,8 @@ function formatAltText(filename: string): string {
 
 export default function Hero({ onNavigate }: HeroProps) {
   const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
-  const [heroBackgrounds, setHeroBackgrounds] = useState<HeroBackground[]>(FALLBACK_BACKGROUNDS);
+  const [heroBackgrounds, setHeroBackgrounds] = useState<HeroBackground[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [currentBgIndex, setCurrentBgIndex] = useState(0);
 
   // Fetch dynamic hero images from Supabase Storage bucket "hero-images"
@@ -57,9 +45,13 @@ export default function Hero({ onNavigate }: HeroProps) {
     let isMounted = true;
 
     const fetchHeroImages = async () => {
-      if (!isSupabaseConfigured || !supabase) return;
+      if (!isSupabaseConfigured || !supabase) {
+        if (isMounted) setIsLoading(false);
+        return;
+      }
 
       try {
+        setIsLoading(true);
         const { data, error } = await supabase.storage
           .from('hero-images')
           .list('', {
@@ -70,17 +62,24 @@ export default function Hero({ onNavigate }: HeroProps) {
 
         if (error) {
           console.warn('Could not load hero images from Supabase:', error);
+          if (isMounted) setIsLoading(false);
           return;
         }
 
-        if (!data || data.length === 0) return;
+        if (!data || data.length === 0) {
+          if (isMounted) setIsLoading(false);
+          return;
+        }
 
         const validImageRegex = /\.(jpe?g|png|webp)$/i;
         const validFiles = data
           .filter((item: any) => item.name && validImageRegex.test(item.name))
           .sort((a: any, b: any) => a.name.localeCompare(b.name));
 
-        if (validFiles.length === 0) return;
+        if (validFiles.length === 0) {
+          if (isMounted) setIsLoading(false);
+          return;
+        }
 
         const dynamicBackgrounds: HeroBackground[] = validFiles.map((file: any) => {
           const { data: urlData } = supabase.storage
@@ -94,11 +93,29 @@ export default function Hero({ onNavigate }: HeroProps) {
         });
 
         if (isMounted && dynamicBackgrounds.length > 0) {
-          setHeroBackgrounds(dynamicBackgrounds);
-          setCurrentBgIndex(0);
+          // Preload the first image so it renders immediately without flicker
+          const img = new Image();
+          img.src = dynamicBackgrounds[0].src;
+          img.onload = () => {
+            if (isMounted) {
+              setHeroBackgrounds(dynamicBackgrounds);
+              setCurrentBgIndex(0);
+              setIsLoading(false);
+            }
+          };
+          img.onerror = () => {
+            if (isMounted) {
+              setHeroBackgrounds(dynamicBackgrounds);
+              setCurrentBgIndex(0);
+              setIsLoading(false);
+            }
+          };
+        } else if (isMounted) {
+          setIsLoading(false);
         }
       } catch (err) {
         console.warn('Could not load hero images from Supabase:', err);
+        if (isMounted) setIsLoading(false);
       }
     };
 
@@ -204,40 +221,47 @@ export default function Hero({ onNavigate }: HeroProps) {
       
       {/* SECTION 1: Full-Bleed Grand Architectural Viewport Hero */}
       <section 
-        className="relative w-full min-h-[100svh] sm:min-h-[calc(100svh-120px)] flex items-center justify-center overflow-hidden"
+        className="relative w-full min-h-[100svh] sm:min-h-[calc(100svh-120px)] flex items-center justify-center overflow-hidden bg-[#141416]"
         id="hero-main-viewport"
       >
         {/* Dynamic Motion Background Image Layer with Ken Burns Effect - Spanning 100% full width and height */}
         <div className="absolute inset-0 w-full h-full z-0 overflow-hidden pointer-events-none">
-          <AnimatePresence mode="sync">
-            <motion.div
-              key={currentBgIndex}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 1.8, ease: "easeInOut" }}
-              className="absolute inset-0 w-full h-full"
-            >
-              <motion.img
-                src={(heroBackgrounds[currentBgIndex] || heroBackgrounds[0])?.src}
-                alt={(heroBackgrounds[currentBgIndex] || heroBackgrounds[0])?.alt}
-                referrerPolicy="no-referrer"
-                initial={{ scale: 1.02, x: 0, y: 0 }}
-                animate={{ 
-                  scale: [1.02, 1.12, 1.06, 1.14, 1.02],
-                  x: [0, -12, 10, -6, 0],
-                  y: [0, -8, 6, -4, 0]
-                }}
-                transition={{ 
-                  duration: 20, 
-                  repeat: Infinity, 
-                  repeatType: "mirror",
-                  ease: "easeInOut" 
-                }}
-                className="w-full h-full object-cover object-center filter brightness-70 contrast-105 will-change-transform"
-              />
-            </motion.div>
-          </AnimatePresence>
+          {!isLoading && heroBackgrounds.length > 0 ? (
+            <AnimatePresence mode="sync">
+              <motion.div
+                key={currentBgIndex}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 1.8, ease: "easeInOut" }}
+                className="absolute inset-0 w-full h-full"
+              >
+                <motion.img
+                  src={heroBackgrounds[currentBgIndex]?.src}
+                  alt={heroBackgrounds[currentBgIndex]?.alt}
+                  referrerPolicy="no-referrer"
+                  initial={{ scale: 1.02, x: 0, y: 0 }}
+                  animate={{ 
+                    scale: [1.02, 1.12, 1.06, 1.14, 1.02],
+                    x: [0, -12, 10, -6, 0],
+                    y: [0, -8, 6, -4, 0]
+                  }}
+                  transition={{ 
+                    duration: 20, 
+                    repeat: Infinity, 
+                    repeatType: "mirror",
+                    ease: "easeInOut" 
+                  }}
+                  className="w-full h-full object-cover object-center filter brightness-70 contrast-105 will-change-transform"
+                />
+              </motion.div>
+            </AnimatePresence>
+          ) : (
+            /* Ambient loading atmosphere without obsolete AI images */
+            <div className="absolute inset-0 w-full h-full bg-[#141416]">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(163,107,59,0.18)_0%,_rgba(20,20,22,0.95)_75%)] animate-pulse" />
+            </div>
+          )}
 
           {/* Subtle Floating Atmospheric Stage Light Particles */}
           <div className="absolute inset-0 pointer-events-none overflow-hidden z-[1]">

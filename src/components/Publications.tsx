@@ -43,14 +43,17 @@ export default function Publications({ onPurchaseSuccess, userLibrary = [], cust
 
   // Source of truth: Supabase `publications` table
   const [allPublications, setAllPublications] = useState<Publication[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
     const loadPublications = async () => {
       if (!isSupabaseConfigured || !supabase) {
+        setIsLoading(false);
         return;
       }
 
       try {
+        setIsLoading(true);
         const { data, error } = await supabase
           .from('publications')
           .select('*');
@@ -75,6 +78,8 @@ export default function Publications({ onPurchaseSuccess, userLibrary = [], cust
         setAllPublications(publications);
       } catch (err) {
         console.warn('Network error loading publications from Supabase:', err);
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -294,7 +299,22 @@ export default function Publications({ onPurchaseSuccess, userLibrary = [], cust
         </div>
 
         {/* Structured List / Grid by Year & Month */}
-        {sortedYears.length > 0 && filteredPublications.length > 0 ? (
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={`pub-skeleton-${i}`}
+                className="flex flex-col bg-[#FFFFFF] border border-[#E4DCD0] rounded-2xl overflow-hidden shadow-sm animate-pulse"
+              >
+                <div className="aspect-[3/4] bg-[#FAF7F2]" />
+                <div className="p-4 space-y-2">
+                  <div className="h-4 bg-[#E4DCD0] rounded w-3/4" />
+                  <div className="h-3 bg-[#E4DCD0]/60 rounded w-1/2" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : sortedYears.length > 0 && filteredPublications.length > 0 ? (
           <div className="space-y-12" id="bulletins-by-period">
             {sortedYears.map((yr) => {
               const monthsInYear = groupedByYearAndMonth[yr];
