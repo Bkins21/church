@@ -304,7 +304,7 @@ We believe this growth raises young ministers of the Gospel — taught with clar
             Get Involved in Ministry
           </h3>
           <p className="text-sm sm:text-base text-[#54575E] leading-relaxed max-w-2xl mx-auto font-sans">
-            Every believer has a place to grow and serve. Discover your calling, use your spiritual gifts, and partner with God's work across our branches and mission departments.
+            Every believer is called into the work of the ministry, none is a spectator. Discover your gifting, grow in it, and put it to work across our branches and mission departments, as we labor together for souls and for the edifying of the body of Christ.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
             <button

@@ -1,4 +1,5 @@
 import { ChurchEvent, Teaching, Publication, Branch, GalleryItem, Song } from './types';
+import edificeConferenceFlyer from './assets/images/edifice-conference-2026.jpg';
 
 export const crossworshipSongsCatalog: Song[] = [
   {
@@ -127,7 +128,7 @@ export const crossworshipSongsCatalog: Song[] = [
   }
 ];
 
-export const EDIFICE_CONFERENCE_2026_IMAGE = 'https://hnunflpzqxkwkzjhnbpz.supabase.co/storage/v1/object/public/event-images/Artboard%201%20copy.jpg';
+export const EDIFICE_CONFERENCE_2026_IMAGE = edificeConferenceFlyer;
 
 export const upcomingMeetings: ChurchEvent[] = [
   {
