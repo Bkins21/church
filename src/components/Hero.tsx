@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Calendar, Music, MapPin, ArrowRight, Clock, BookOpen, Volume2, Users, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Registration } from '../types';
+import { Registration, HeroImage } from '../types';
 import { supabase, isSupabaseConfigured } from '../supabase';
-import { EDIFICE_CONFERENCE_2026_IMAGE } from '../data';
+import { EDIFICE_CONFERENCE_2026_IMAGE, DEFAULT_HOME_HERO_IMAGES } from '../data';
 
 interface HeroProps {
   onNavigate: (tab: string) => void;
@@ -40,57 +40,62 @@ export default function Hero({ onNavigate }: HeroProps) {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [currentBgIndex, setCurrentBgIndex] = useState(0);
 
-  // Fetch dynamic hero images from Supabase Storage bucket "hero-images"
+  // Fetch dynamic hero images strictly assigned to section = 'home' at the Supabase query level
   useEffect(() => {
     let isMounted = true;
 
     const fetchHeroImages = async () => {
-      if (!isSupabaseConfigured || !supabase) {
-        if (isMounted) setIsLoading(false);
-        return;
-      }
-
       try {
         setIsLoading(true);
-        const { data, error } = await supabase.storage
-          .from('hero-images')
-          .list('', {
-            limit: 100,
-            offset: 0,
-            sortBy: { column: 'name', order: 'asc' },
-          });
+        let loadedHomeImages: HeroImage[] = [];
 
-        if (error) {
-          console.warn('Could not load hero images from Supabase:', error);
-          if (isMounted) setIsLoading(false);
-          return;
+        // 1. Supabase Query Level: Query ONLY records where section = 'home'
+        if (isSupabaseConfigured && supabase) {
+          try {
+            const { data, error } = await supabase
+              .from('hero_images')
+              .select('*')
+              .eq('section', 'home')
+              .order('display_order', { ascending: true });
+
+            if (!error && data && data.length > 0) {
+              loadedHomeImages = data.map((item: any) => ({
+                id: item.id,
+                section: 'home',
+                imageUrl: item.image_url,
+                title: item.title,
+                altText: item.alt_text || item.title,
+                displayOrder: item.display_order ?? 0,
+              }));
+            }
+          } catch (dbErr) {
+            console.warn('Could not query hero_images table from Supabase:', dbErr);
+          }
         }
 
-        if (!data || data.length === 0) {
-          if (isMounted) setIsLoading(false);
-          return;
+        // 2. Client-side localStorage cache check (if table not yet initialized in Supabase)
+        if (loadedHomeImages.length === 0) {
+          try {
+            const cached = localStorage.getItem('gec_hero_images_catalog');
+            if (cached) {
+              const parsed = JSON.parse(cached) as HeroImage[];
+              const homeOnly = parsed.filter(item => item.section === 'home');
+              if (homeOnly.length > 0) {
+                loadedHomeImages = homeOnly;
+              }
+            }
+          } catch {}
         }
 
-        const validImageRegex = /\.(jpe?g|png|webp)$/i;
-        const validFiles = data
-          .filter((item: any) => item.name && validImageRegex.test(item.name))
-          .sort((a: any, b: any) => a.name.localeCompare(b.name));
-
-        if (validFiles.length === 0) {
-          if (isMounted) setIsLoading(false);
-          return;
+        // 3. Fallback: Strict Home-specific default catalog (NEVER contains who_we_are images)
+        if (loadedHomeImages.length === 0) {
+          loadedHomeImages = DEFAULT_HOME_HERO_IMAGES;
         }
 
-        const dynamicBackgrounds: HeroBackground[] = validFiles.map((file: any) => {
-          const { data: urlData } = supabase.storage
-            .from('hero-images')
-            .getPublicUrl(file.name);
-
-          return {
-            src: urlData.publicUrl,
-            alt: formatAltText(file.name),
-          };
-        });
+        const dynamicBackgrounds: HeroBackground[] = loadedHomeImages.map((img) => ({
+          src: img.imageUrl,
+          alt: img.altText || img.title || "God's Edifice Church Worship Atmosphere",
+        }));
 
         if (isMounted && dynamicBackgrounds.length > 0) {
           // Preload the first image so it renders immediately without flicker
@@ -114,15 +119,26 @@ export default function Hero({ onNavigate }: HeroProps) {
           setIsLoading(false);
         }
       } catch (err) {
-        console.warn('Could not load hero images from Supabase:', err);
-        if (isMounted) setIsLoading(false);
+        console.warn('Could not load home hero images from Supabase:', err);
+        if (isMounted) {
+          const fallbackBackgrounds = DEFAULT_HOME_HERO_IMAGES.map((img) => ({
+            src: img.imageUrl,
+            alt: img.altText || "God's Edifice Church Worship Atmosphere",
+          }));
+          setHeroBackgrounds(fallbackBackgrounds);
+          setIsLoading(false);
+        }
       }
     };
 
     fetchHeroImages();
 
+    // Listen for cross-tab or CMS hero images updates
+    window.addEventListener('gec_hero_images_updated', fetchHeroImages);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('gec_hero_images_updated', fetchHeroImages);
     };
   }, []);
 

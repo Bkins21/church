@@ -9,8 +9,8 @@ import {
   FileSpreadsheet, Tag, Phone, MapPin, Check, Filter, RefreshCw, Radio, X, Globe, Building2
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured, checkIfAdmin } from '../supabase';
-import { Teaching, Registration, Subscriber, Song, GalleryItem, ChurchEvent, Publication, PublicationType, Branch } from '../types';
-import { upcomingMeetings, galleryItems, crossworshipSongsCatalog, ministryBranches } from '../data';
+import { Teaching, Registration, Subscriber, Song, GalleryItem, ChurchEvent, Publication, PublicationType, Branch, HeroImage, HeroSection } from '../types';
+import { upcomingMeetings, galleryItems, crossworshipSongsCatalog, ministryBranches, DEFAULT_HOME_HERO_IMAGES, DEFAULT_WHO_WE_ARE_HERO_IMAGES } from '../data';
 import AdminAnalyticsDashboard, { RawMeetingRegistration } from './AdminAnalyticsDashboard';
 
 interface CrosswordMediaProps {
@@ -33,7 +33,7 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   
   // Dashboard states
-  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'analytics' | 'songs' | 'teachings' | 'publications' | 'gallery' | 'events' | 'branches' | 'registrations' | 'subscribers' | 'settings' | 'database'>('overview');
+  const [activeSubTab, setActiveSubTab] = useState<'overview' | 'analytics' | 'hero' | 'songs' | 'teachings' | 'publications' | 'gallery' | 'events' | 'branches' | 'registrations' | 'subscribers' | 'settings' | 'database'>('overview');
   
   // Data lists
   const [teachings, setTeachings] = useState<Teaching[]>([]);
@@ -48,6 +48,7 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
   const [deletingGalleryId, setDeletingGalleryId] = useState<string | null>(null);
   const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
   const [deletingRegId, setDeletingRegId] = useState<string | null>(null);
+  const [deletingHeroId, setDeletingHeroId] = useState<string | null>(null);
   const [deletingSubId, setDeletingSubId] = useState<string | null>(null);
   const [deletingBranchId, setDeletingBranchId] = useState<string | null>(null);
 
@@ -220,6 +221,28 @@ export default function CrosswordMedia({ onClose, onNavigateHome }: CrosswordMed
   const [copiedBranchSql, setCopiedBranchSql] = useState<boolean>(false);
   const branchFileInputRef = useRef<HTMLInputElement>(null);
 
+  // Hero Images Management States
+  const [heroImagesList, setHeroImagesList] = useState<HeroImage[]>(() => {
+    try {
+      const cached = localStorage.getItem('gec_hero_images_catalog');
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return [...DEFAULT_HOME_HERO_IMAGES, ...DEFAULT_WHO_WE_ARE_HERO_IMAGES];
+  });
+  const [heroSectionFilter, setHeroSectionFilter] = useState<'all' | 'home' | 'who_we_are'>('all');
+  const [uploadHeroSection, setUploadHeroSection] = useState<HeroSection>('home');
+  const [uploadHeroTitle, setUploadHeroTitle] = useState('');
+  const [uploadHeroAlt, setUploadHeroAlt] = useState('');
+  const [uploadHeroFile, setUploadHeroFile] = useState<File | null>(null);
+  const [uploadHeroPreview, setUploadHeroPreview] = useState<string | null>(null);
+  const [uploadingHero, setUploadingHero] = useState<boolean>(false);
+  const [uploadHeroProgress, setUploadHeroProgress] = useState<number>(0);
+  const [heroError, setHeroError] = useState<string | null>(null);
+  const [heroSuccess, setHeroSuccess] = useState<string | null>(null);
+  const [seedingHero, setSeedingHero] = useState<boolean>(false);
+  const [copiedHeroSql, setCopiedHeroSql] = useState<boolean>(false);
+  const heroFileInputRef = useRef<HTMLInputElement>(null);
+
   // Monitor Supabase Auth state
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
@@ -380,7 +403,232 @@ const fetchCloudSongs = async () => {
     }
   };
 
-  // Sync songs, publications, and branches across tabs and listen for changes
+  // Fetch hero images strictly with section categorization from Supabase
+  const fetchCloudHeroImages = async () => {
+    if (!supabase || !isSupabaseConfigured) return;
+    try {
+      const { data, error } = await supabase
+        .from('hero_images')
+        .select('*')
+        .order('display_order', { ascending: true });
+
+      if (!error && data && data.length > 0) {
+        const mapped: HeroImage[] = data.map((item: any) => ({
+          id: item.id,
+          section: (item.section === 'who_we_are' ? 'who_we_are' : 'home') as HeroSection,
+          imageUrl: item.image_url,
+          title: item.title,
+          altText: item.alt_text || item.title,
+          displayOrder: item.display_order ?? 0,
+          createdAt: item.created_at,
+        }));
+        setHeroImagesList(mapped);
+        localStorage.setItem('gec_hero_images_catalog', JSON.stringify(mapped));
+      }
+    } catch (err) {
+      console.warn('Could not fetch hero_images from Supabase in Admin:', err);
+    }
+  };
+
+  const handleHeroFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      setHeroError('Image file size exceeds 10 MB limit.');
+      return;
+    }
+    setHeroError(null);
+    setHeroSuccess(null);
+    setUploadHeroFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setUploadHeroPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleUploadHeroImage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uploadHeroFile) {
+      setHeroError('Please choose an image file to upload.');
+      return;
+    }
+    if (!supabase) {
+      setHeroError('Supabase is not configured.');
+      return;
+    }
+
+    try {
+      setUploadingHero(true);
+      setUploadHeroProgress(20);
+      setHeroError(null);
+      setHeroSuccess(null);
+
+      const cleanFileName = uploadHeroFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const storagePath = `${uploadHeroSection}/${Date.now()}_${cleanFileName}`;
+
+      setUploadHeroProgress(45);
+      const { error: uploadErr } = await supabase.storage
+        .from('hero-images')
+        .upload(storagePath, uploadHeroFile, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: uploadHeroFile.type || 'image/jpeg'
+        });
+
+      if (uploadErr) {
+        throw new Error(`Storage upload failed: ${uploadErr.message}`);
+      }
+
+      setUploadHeroProgress(70);
+      const { data: urlData } = supabase.storage
+        .from('hero-images')
+        .getPublicUrl(storagePath);
+
+      const publicUrl = urlData?.publicUrl;
+      if (!publicUrl) {
+        throw new Error('Failed to obtain public URL for uploaded hero image.');
+      }
+
+      setUploadHeroProgress(85);
+      const nextOrder = heroImagesList.filter(img => img.section === uploadHeroSection).length + 1;
+      const newHeroImage: HeroImage = {
+        id: `hero-${uploadHeroSection}-${Date.now()}`,
+        section: uploadHeroSection,
+        imageUrl: publicUrl,
+        title: uploadHeroTitle.trim() || (uploadHeroSection === 'home' ? "God's Edifice Church Worship" : "God's Edifice Church Family"),
+        altText: uploadHeroAlt.trim() || uploadHeroTitle.trim() || (uploadHeroSection === 'home' ? "God's Edifice Church Worship Atmosphere" : "God's Edifice Church Family"),
+        displayOrder: nextOrder,
+        createdAt: new Date().toISOString()
+      };
+
+      // Upsert into Supabase hero_images table
+      const { error: dbErr } = await supabase
+        .from('hero_images')
+        .upsert({
+          id: newHeroImage.id,
+          section: newHeroImage.section,
+          image_url: newHeroImage.imageUrl,
+          title: newHeroImage.title,
+          alt_text: newHeroImage.altText,
+          display_order: newHeroImage.displayOrder,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' });
+
+      if (dbErr) {
+        console.warn('Supabase DB upsert hero_images note:', dbErr);
+      }
+
+      // Update local catalog
+      const updated = [...heroImagesList, newHeroImage];
+      setHeroImagesList(updated);
+      localStorage.setItem('gec_hero_images_catalog', JSON.stringify(updated));
+
+      // Broadcast update event so Home and Who We Are components refresh instantly
+      window.dispatchEvent(new CustomEvent('gec_hero_images_updated'));
+
+      setHeroSuccess(`Successfully uploaded image and assigned strictly to "${uploadHeroSection === 'home' ? 'Home' : 'Who We Are'}" hero section!`);
+      setUploadHeroFile(null);
+      setUploadHeroPreview(null);
+      setUploadHeroTitle('');
+      setUploadHeroAlt('');
+      if (heroFileInputRef.current) heroFileInputRef.current.value = '';
+      setUploadHeroProgress(100);
+    } catch (err: any) {
+      setHeroError(err?.message || 'Failed to upload hero image.');
+    } finally {
+      setUploadingHero(false);
+    }
+  };
+
+  const handleSwitchHeroSection = async (img: HeroImage, targetSection: HeroSection) => {
+    try {
+      const updated = heroImagesList.map(item => {
+        if (item.id === img.id) {
+          return { ...item, section: targetSection };
+        }
+        return item;
+      });
+      setHeroImagesList(updated);
+      localStorage.setItem('gec_hero_images_catalog', JSON.stringify(updated));
+
+      if (supabase && isSupabaseConfigured) {
+        await supabase
+          .from('hero_images')
+          .update({ section: targetSection, updated_at: new Date().toISOString() })
+          .eq('id', img.id);
+      }
+
+      window.dispatchEvent(new CustomEvent('gec_hero_images_updated'));
+      setHeroSuccess(`Image moved strictly to "${targetSection === 'home' ? 'Home' : 'Who We Are'}" section!`);
+      setTimeout(() => setHeroSuccess(null), 3000);
+    } catch (err: any) {
+      setHeroError(`Failed to update section: ${err?.message || 'Error'}`);
+    }
+  };
+
+  const handleDeleteHeroImage = async (img: HeroImage) => {
+    if (!window.confirm(`Are you sure you want to remove this hero image from ${img.section === 'home' ? 'Home' : 'Who We Are'}?`)) {
+      return;
+    }
+    try {
+      setDeletingHeroId(img.id);
+      const updated = heroImagesList.filter(item => item.id !== img.id);
+      setHeroImagesList(updated);
+      localStorage.setItem('gec_hero_images_catalog', JSON.stringify(updated));
+
+      if (supabase && isSupabaseConfigured) {
+        await supabase
+          .from('hero_images')
+          .delete()
+          .eq('id', img.id);
+      }
+
+      window.dispatchEvent(new CustomEvent('gec_hero_images_updated'));
+      setHeroSuccess('Hero image removed successfully.');
+      setTimeout(() => setHeroSuccess(null), 3000);
+    } catch (err: any) {
+      setHeroError(`Failed to delete: ${err?.message || 'Error'}`);
+    } finally {
+      setDeletingHeroId(null);
+    }
+  };
+
+  const handleSyncSeedHeroToSupabase = async () => {
+    if (!supabase) return;
+    setSeedingHero(true);
+    setHeroError(null);
+    setHeroSuccess(null);
+    try {
+      const records = heroImagesList.map(img => ({
+        id: img.id,
+        section: img.section,
+        image_url: img.imageUrl,
+        title: img.title || '',
+        alt_text: img.altText || '',
+        display_order: img.displayOrder || 0,
+        updated_at: new Date().toISOString()
+      }));
+
+      const { error } = await supabase
+        .from('hero_images')
+        .upsert(records, { onConflict: 'id' });
+
+      if (error) throw error;
+      setHeroSuccess('Synced all hero images directly into Supabase database table!');
+      setTimeout(() => setHeroSuccess(null), 4000);
+    } catch (err: any) {
+      if (err?.message?.includes('schema cache') || err?.code === 'PGRST205') {
+        setHeroError('Supabase table "public.hero_images" not yet created. Run the SQL snippet in the "DATABASE SETUP" tab to provision it.');
+      } else {
+        setHeroError(`Sync error: ${err?.message || 'Check database permissions'}`);
+      }
+    } finally {
+      setSeedingHero(false);
+    }
+  };
+
+  // Sync songs, publications, branches, and hero images across tabs and listen for changes
   useEffect(() => {
     // Clear stale localStorage so old items never resurrect
     try {
@@ -394,6 +642,7 @@ const fetchCloudSongs = async () => {
     fetchCloudSongs();
     fetchCloudPublications();
     fetchCloudBranches();
+    fetchCloudHeroImages();
 
     const handleSongsUpdate = () => {
       fetchCloudSongs();
@@ -407,13 +656,19 @@ const fetchCloudSongs = async () => {
       fetchCloudBranches();
     };
 
+    const handleHeroUpdate = () => {
+      fetchCloudHeroImages();
+    };
+
     window.addEventListener('gec_songs_updated', handleSongsUpdate);
     window.addEventListener('gec_publications_updated', handlePubsUpdate);
     window.addEventListener('gec_branches_updated', handleBranchesUpdate);
+    window.addEventListener('gec_hero_images_updated', handleHeroUpdate);
     return () => {
       window.removeEventListener('gec_songs_updated', handleSongsUpdate);
       window.removeEventListener('gec_publications_updated', handlePubsUpdate);
       window.removeEventListener('gec_branches_updated', handleBranchesUpdate);
+      window.removeEventListener('gec_hero_images_updated', handleHeroUpdate);
     };
   }, []);
 
@@ -422,9 +677,10 @@ const fetchCloudSongs = async () => {
     if (!supabase) return;
     setDataLoading(true);
     try {
-      // Fetch Songs & Branches
+      // Fetch Songs, Branches & Hero Images
       await fetchCloudSongs();
       await fetchCloudBranches();
+      await fetchCloudHeroImages();
 
       // 1. Fetch Sermons / Teachings
       const { data: teachingsData, error: tError } = await supabase
@@ -450,10 +706,11 @@ const fetchCloudSongs = async () => {
         setTeachings(mappedTeachings);
       }
 
-      // 2. Fetch Registrations
-      const { data: meetingRegsData } = await supabase
+      // 2. Fetch Registrations from Supabase
+      const { data: meetingRegsData, error: mError } = await supabase
         .from('meeting_registrations')
-        .select('*');
+        .select('*')
+        .order('created_at', { ascending: false });
 
       if (meetingRegsData) {
         setRawMeetingRegistrations(meetingRegsData);
@@ -464,56 +721,80 @@ const fetchCloudSongs = async () => {
         .select('*')
         .order('created_at', { ascending: false });
 
-      const allCombinedRaw = [
-        ...(meetingRegsData || []).map((m: any) => ({
-          id: m.id || `mreg-${m.email}-${m.first_name}`,
-          eventId: 'edifice-conference-2026',
-          eventTitle: "God's Edifice Church Conference",
-          eventDate: m.meeting_date || '2026-10-01',
-          eventLocation: m.address || m.nearest_branch || 'Lekki HQ',
-          userName: `${m.first_name || ''} ${m.surname || ''}`.trim() || 'Attendee',
-          firstName: m.first_name || '',
-          surname: m.surname || '',
-          userEmail: m.email || '',
-          userPhone: m.phone_number || '',
-          userBranch: m.nearest_branch || '',
-          ticketCode: `GEC-${Math.floor(100000 + Math.random() * 900000)}`,
-          registrationDate: new Date().toISOString(),
-          mode: 'physical' as const,
-          address: m.address || '',
-          ageRange: m.age || '',
-          gender: m.gender || '',
-          expectations: m.expecations_prayer_request || '',
-          howHeard: m.how_you_heard || ''
-        })),
-        ...(!rError && regsData ? regsData.map((r: any) => ({
-          id: r.id,
-          eventId: r.event_id || r.eventId || 'edifice-conference-2026',
-          eventTitle: r.event_title || r.eventTitle || r.event_name || r.eventName || "God's Edifice Church Conference",
-          eventDate: r.event_date || r.eventDate || '2026-10-01',
-          eventLocation: r.event_location || r.eventLocation || 'Lekki HQ',
-          userName: r.user_name || r.userName || `${r.surname || ''} ${r.first_name || ''}`.trim() || 'Attendee',
-          firstName: r.first_name || '',
-          surname: r.surname || '',
-          userEmail: r.user_email || r.userEmail || r.email || '',
-          userPhone: r.user_phone || r.userPhone || r.phone || '',
-          userBranch: r.user_branch || r.userBranch || r.location || 'Main Branch',
-          ticketCode: r.ticket_code || r.ticketCode || `GEC-${Math.floor(100000 + Math.random() * 900000)}`,
-          registrationDate: r.registration_date || r.registrationDate || r.created_at || new Date().toISOString(),
-          mode: (r.mode as 'physical' | 'virtual') || 'physical'
-        })) : [])
-      ];
+      // Every registration record in the database is an individual person,
+      // even when multiple people share the same family or organizational email address.
+      // Deduplication is strictly based on the unique database record ID.
+      const allRegs: Registration[] = [];
+      const seenRecordIds = new Set<string>();
 
-      // Filter duplicates by email if any
-      const uniqueRegs: Registration[] = [];
-      const seenEmails = new Set();
-      for (const reg of allCombinedRaw) {
-        if (!seenEmails.has(reg.userEmail)) {
-          seenEmails.add(reg.userEmail);
-          uniqueRegs.push(reg);
+      // 1. Process all records from meeting_registrations (primary church conference table)
+      if (meetingRegsData && meetingRegsData.length > 0) {
+        for (const m of meetingRegsData) {
+          const recId = String(m.id ?? '');
+          if (recId) seenRecordIds.add(recId);
+
+          const firstName = m.first_name || '';
+          const surname = m.surname || '';
+          const fullName = `${firstName} ${surname}`.trim() || 'Church Attendee';
+          const isVirtual = (m.address && m.address.toLowerCase().includes('online')) || 
+                            (m.nearest_branch && m.nearest_branch.toLowerCase().includes('online'));
+
+          allRegs.push({
+            id: recId || `mreg-${m.email || 'attendee'}-${Math.random().toString(36).substring(2, 9)}`,
+            eventId: 'edifice-conference-2026',
+            eventTitle: "God's Edifice Church Conference",
+            eventDate: m.meeting_date || '2026-10-01',
+            eventLocation: m.address || m.nearest_branch || 'Lekki HQ',
+            userName: fullName,
+            firstName: firstName,
+            surname: surname,
+            userEmail: m.email || '',
+            userPhone: m.phone_number || '',
+            userBranch: m.nearest_branch || 'Lekki HQ',
+            ticketCode: `GEC-${Math.floor(100000 + Math.random() * 900000)}`,
+            registrationDate: m.created_at || m.meeting_date || new Date().toISOString(),
+            mode: isVirtual ? 'virtual' : 'physical',
+            address: m.address || '',
+            ageRange: m.age || '',
+            gender: m.gender || '',
+            expectations: m.expecations_prayer_request || '',
+            howHeard: m.how_you_heard || ''
+          });
         }
       }
-      setRegistrations(uniqueRegs);
+
+      // 2. Incorporate legacy registrations if any, ensuring no ID collision
+      if (!rError && regsData && regsData.length > 0) {
+        for (const r of regsData) {
+          const recId = String(r.id ?? '');
+          if (!recId || !seenRecordIds.has(recId)) {
+            if (recId) seenRecordIds.add(recId);
+
+            const firstName = r.first_name || '';
+            const surname = r.surname || '';
+            const fullName = r.user_name || r.userName || `${firstName} ${surname}`.trim() || 'Church Attendee';
+
+            allRegs.push({
+              id: recId || `reg-${Math.random().toString(36).substring(2, 9)}`,
+              eventId: r.event_id || r.eventId || 'edifice-conference-2026',
+              eventTitle: r.event_title || r.eventTitle || r.event_name || r.eventName || "God's Edifice Church Conference",
+              eventDate: r.event_date || r.eventDate || '2026-10-01',
+              eventLocation: r.event_location || r.eventLocation || 'Lekki HQ',
+              userName: fullName,
+              firstName: firstName,
+              surname: surname,
+              userEmail: r.user_email || r.userEmail || r.email || '',
+              userPhone: r.user_phone || r.userPhone || r.phone || '',
+              userBranch: r.user_branch || r.userBranch || r.location || 'Lekki HQ',
+              ticketCode: r.ticket_code || r.ticketCode || `GEC-${Math.floor(100000 + Math.random() * 900000)}`,
+              registrationDate: r.registration_date || r.registrationDate || r.created_at || new Date().toISOString(),
+              mode: (r.mode as 'physical' | 'virtual') || 'physical'
+            });
+          }
+        }
+      }
+
+      setRegistrations(allRegs);
 
       // 3. Fetch Subscribers
       const { data: subsData, error: sError } = await supabase
@@ -2573,6 +2854,64 @@ DROP POLICY IF EXISTS "Allow admin delete storage branch-images" ON storage.obje
 CREATE POLICY "Allow admin delete storage branch-images" 
 ON storage.objects FOR DELETE TO authenticated 
 USING (bucket_id = 'branch-images' AND public.is_admin());
+
+-- 8. Hero Images Table & Policies (Distinguishes between 'home' and 'who_we_are' hero sections):
+CREATE TABLE IF NOT EXISTS public.hero_images (
+  id TEXT PRIMARY KEY,
+  section TEXT NOT NULL DEFAULT 'home', -- 'home' | 'who_we_are'
+  image_url TEXT NOT NULL,
+  title TEXT,
+  alt_text TEXT,
+  display_order INT DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.hero_images ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow public select hero_images" ON public.hero_images;
+CREATE POLICY "Allow public select hero_images"
+ON public.hero_images FOR SELECT TO anon, authenticated, public
+USING (true);
+
+DROP POLICY IF EXISTS "Allow admin all hero_images" ON public.hero_images;
+CREATE POLICY "Allow admin all hero_images"
+ON public.hero_images FOR ALL TO anon, authenticated, public
+USING (true)
+WITH CHECK (true);
+
+-- 9. Storage Bucket & Policies: "hero-images"
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('hero-images', 'hero-images', true) 
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+DROP POLICY IF EXISTS "Allow public select storage hero-images" ON storage.objects;
+CREATE POLICY "Allow public select storage hero-images" 
+ON storage.objects FOR SELECT TO anon, authenticated, public 
+USING (bucket_id = 'hero-images');
+
+DROP POLICY IF EXISTS "Allow all storage hero-images" ON storage.objects;
+CREATE POLICY "Allow all storage hero-images" 
+ON storage.objects FOR ALL TO anon, authenticated, public 
+USING (bucket_id = 'hero-images')
+WITH CHECK (bucket_id = 'hero-images');
+
+-- Seed Initial Hero Images Records (Separates Home and Who We Are)
+INSERT INTO public.hero_images (id, section, image_url, title, alt_text, display_order)
+VALUES 
+  ('hero-home-1', 'home', 'https://hnunflpzqxkwkzjhnbpz.supabase.co/storage/v1/object/public/hero-images/0U0A0972.JPG', 'God''s Edifice Church Worship', 'God''s Edifice Church Worship Atmosphere', 1),
+  ('hero-home-2', 'home', 'https://hnunflpzqxkwkzjhnbpz.supabase.co/storage/v1/object/public/hero-images/0U0A1011.JPG', 'Crossworship Choir', 'Crossworship Choir Ministration', 2),
+  ('hero-home-3', 'home', 'https://hnunflpzqxkwkzjhnbpz.supabase.co/storage/v1/object/public/hero-images/0U0A1287.JPG', 'God''s Edifice Ministry', 'God''s Edifice Church Ministry Atmosphere', 3),
+  ('hero-home-4', 'home', 'https://hnunflpzqxkwkzjhnbpz.supabase.co/storage/v1/object/public/hero-images/0U0A1537.JPG', 'The Word Exaltation', 'Word Exaltation and Preaching', 4),
+  ('hero-home-5', 'home', 'https://hnunflpzqxkwkzjhnbpz.supabase.co/storage/v1/object/public/hero-images/0U0A1540.JPG', 'Congregation Praising God', 'Congregation Praising God in Joy', 5),
+  ('hero-home-6', 'home', 'https://hnunflpzqxkwkzjhnbpz.supabase.co/storage/v1/object/public/hero-images/0U0A1571.JPG', 'Sanctuary Devotion', 'Sanctuary Prayer and Devotion', 6),
+  ('hero-who-we-are-1', 'who_we_are', 'https://hnunflpzqxkwkzjhnbpz.supabase.co/storage/v1/object/public/hero-images/group%201.jpg', 'God''s Edifice Church Family', 'God''s Edifice Church Family Gathering', 1)
+ON CONFLICT (id) DO UPDATE SET 
+  section = EXCLUDED.section,
+  image_url = EXCLUDED.image_url,
+  title = EXCLUDED.title,
+  alt_text = EXCLUDED.alt_text,
+  display_order = EXCLUDED.display_order;
 `;
 
   const copyToClipboard = () => {
@@ -2581,50 +2920,51 @@ USING (bucket_id = 'branch-images' AND public.is_admin());
   };
 
   return (
-    <div className="min-h-screen bg-[#06080d] text-soft-white py-12 px-4 sm:px-6 z-50 relative" id="crosswordmedia-root">
+    <div className="min-h-screen bg-[#141416] text-[#F7F5F0] py-10 px-4 sm:px-6 z-50 relative" id="crosswordmedia-root">
       
-      {/* Decorative Blur Backgrounds */}
-      <div className="absolute top-0 left-0 right-0 h-[400px] bg-gradient-to-b from-[#0e162d]/40 to-transparent pointer-events-none blur-3xl" />
-      <div className="absolute top-1/4 right-10 w-[300px] h-[300px] rounded-full bg-royal-blue/10 blur-[100px] pointer-events-none" />
-      <div className="absolute bottom-1/4 left-10 w-[350px] h-[350px] rounded-full bg-cci-gold-600/5 blur-[120px] pointer-events-none" />
+      {/* Subtle Warm Atmospheric Glows matching Hero/Footer */}
+      <div className="absolute top-0 left-0 right-0 h-[400px] bg-gradient-to-b from-[#A36B3B]/15 to-transparent pointer-events-none blur-3xl" />
+      <div className="absolute top-1/4 right-10 w-[320px] h-[320px] rounded-full bg-[#C28B57]/10 blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-1/4 left-10 w-[350px] h-[350px] rounded-full bg-[#E6C35C]/5 blur-[130px] pointer-events-none" />
 
       <div className="max-w-7xl mx-auto relative z-10">
         
         {/* Navigation back */}
-        <div className="flex justify-between items-center mb-10 border-b border-midnight-blue pb-6">
+        <div className="flex justify-between items-center mb-8 border-b border-[#2D2A26] pb-5">
           <button 
             onClick={onClose}
-            className="flex items-center gap-2 text-xs font-mono tracking-wider text-light-gray hover:text-white transition-all bg-midnight-blue/40 hover:bg-midnight-blue/80 px-4 py-2 rounded-xl border border-midnight-blue/50"
+            className="flex items-center gap-2 text-xs font-sans font-semibold tracking-wider text-[#D5C9B8] hover:text-white transition-all bg-[#1C1D21] hover:bg-[#222326] px-4 py-2.5 rounded-xl border border-[#2D2A26] shadow-sm cursor-pointer"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="h-4 w-4 text-[#C28B57]" />
             <span>BACK TO WEBSITE</span>
           </button>
 
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-cci-gold-500 animate-pulse" />
-            <h1 className="font-display font-black text-lg tracking-widest text-white uppercase">
-              GEC <span className="text-cci-gold-400">MEDIA HUB</span>
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#C28B57] animate-pulse" />
+            <h1 className="font-cinzel font-bold text-lg tracking-wider text-white uppercase">
+              GOD'S EDIFICE <span className="text-[#C28B57]">ADMIN PORTAL</span>
             </h1>
           </div>
         </div>
 
         {/* --- UNCONFIGURED FALLBACK UI --- */}
         {!isSupabaseConfigured && (
-          <div className="max-w-2xl mx-auto bg-charcoal/50 border border-amber-500/30 rounded-3xl p-8 text-center backdrop-blur-md shadow-2xl mt-12">
-            <AlertCircle className="h-16 w-16 text-amber-500 mx-auto mb-6" />
-            <h2 className="font-display font-bold text-2xl text-soft-white tracking-tight">
+          <div className="max-w-2xl mx-auto bg-[#1C1D21] border border-[#2D2A26] rounded-3xl p-8 sm:p-10 text-center shadow-2xl mt-12">
+            <div className="w-16 h-16 rounded-2xl bg-[#A36B3B]/15 border border-[#C28B57]/30 flex items-center justify-center mx-auto mb-6 text-[#C28B57]">
+              <AlertCircle className="h-8 w-8" />
+            </div>
+            <h2 className="font-cinzel font-bold text-2xl text-white tracking-wide">
               Supabase Connection Required
             </h2>
-            <p className="text-sm text-light-gray mt-4 leading-relaxed">
-              To utilize the hidden admin dashboard, you need to link your Supabase account.
-              Please add the following variables under the **Settings & Secrets** panel in AI Studio:
+            <p className="text-sm font-sans text-[#D5C9B8] mt-3 leading-relaxed">
+              To utilize the hidden admin dashboard, link your Supabase project in the AI Studio environment settings:
             </p>
-            <div className="bg-rich-black/90 p-4 rounded-xl border border-midnight-blue text-left font-mono text-xs text-amber-400/90 mt-6 space-y-2 select-all">
+            <div className="bg-[#141416] p-4 rounded-xl border border-[#332F2A] text-left font-mono text-xs text-[#E6C35C] mt-6 space-y-2 select-all">
               <div>VITE_SUPABASE_URL=your-supabase-project-url</div>
               <div>VITE_SUPABASE_ANON_KEY=your-supabase-anon-key</div>
             </div>
-            <p className="text-xs text-slate-450 mt-4 font-mono">
-              (After setting the variables, please reload or wait for the system to redeploy).
+            <p className="text-xs text-[#8A8E96] mt-4 font-sans">
+              (After setting the variables, reload the page to initialize the secure portal connection).
             </p>
           </div>
         )}
@@ -2632,61 +2972,61 @@ USING (bucket_id = 'branch-images' AND public.is_admin());
         {/* --- SUPABASE CONFIGURED: AUTH LAYER --- */}
         {isSupabaseConfigured && checkingAuth && (
           <div className="flex flex-col justify-center items-center h-[50vh]">
-            <Loader2 className="h-10 w-10 text-cci-gold-400 animate-spin" />
-            <p className="text-xs text-light-gray mt-4 font-mono">Verifying apostolic secure session...</p>
+            <Loader2 className="h-10 w-10 text-[#C28B57] animate-spin" />
+            <p className="text-xs text-[#D5C9B8] mt-4 font-sans">Verifying church administrator session...</p>
           </div>
         )}
 
         {isSupabaseConfigured && !checkingAuth && !session && (
-          <div className="max-w-md mx-auto bg-charcoal/45 border border-midnight-blue rounded-3xl p-8 sm:p-10 backdrop-blur-md shadow-2xl mt-10">
+          <div className="max-w-md mx-auto bg-[#1C1D21] border border-[#2D2A26] rounded-3xl p-8 sm:p-10 shadow-2xl mt-10">
             <div className="text-center mb-8">
-              <div className="w-16 h-16 rounded-full bg-midnight-blue/55 border border-electric-blue/30 flex items-center justify-center mx-auto mb-4 text-electric-blue shadow-inner">
+              <div className="w-16 h-16 rounded-2xl bg-[#141416] border border-[#3A332B] flex items-center justify-center mx-auto mb-4 text-[#C28B57] shadow-inner">
                 <Key className="h-7 w-7" />
               </div>
-              <h2 className="font-display font-bold text-2xl text-white">
+              <h2 className="font-cinzel font-bold text-2xl text-white">
                 Admin Authentication
               </h2>
-              <p className="text-xs text-light-gray mt-2">
-                Sign in with Supabase Auth to access GEC crosswordmedia management portal.
+              <p className="text-xs font-sans text-[#D5C9B8] mt-2">
+                Sign in to manage registrations, media content, and analytics.
               </p>
             </div>
 
             <form onSubmit={handleAuth} className="space-y-4">
               <div>
-                <label className="block text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                <label className="block text-[11px] font-sans uppercase tracking-wider text-[#D5C9B8] font-semibold mb-1.5">
                   Email Address
                 </label>
                 <div className="relative">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-medium-gray" />
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#8A8E96]" />
                   <input
                     type="email"
                     required
                     placeholder="admin@gacedifice.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 pl-10 pr-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                    className="w-full bg-[#141416] border border-[#332F2A] focus:border-[#C28B57] rounded-xl py-3 pl-10 pr-4 text-xs font-sans text-white placeholder-[#8A8E96] focus:outline-none transition-all"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                <label className="block text-[11px] font-sans uppercase tracking-wider text-[#D5C9B8] font-semibold mb-1.5">
                   Password
                 </label>
                 <div className="relative">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-medium-gray" />
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#8A8E96]" />
                   <input
                     type={showPassword ? 'text' : 'password'}
                     required
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 pl-10 pr-10 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                    className="w-full bg-[#141416] border border-[#332F2A] focus:border-[#C28B57] rounded-xl py-3 pl-10 pr-10 text-xs font-sans text-white placeholder-[#8A8E96] focus:outline-none transition-all"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-medium-gray hover:text-white"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8A8E96] hover:text-white"
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -2694,8 +3034,8 @@ USING (bucket_id = 'branch-images' AND public.is_admin());
               </div>
 
               {authError && (
-                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2 text-[11px] text-red-400 font-mono">
-                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <div className="p-3 bg-red-950/80 border border-red-500/30 rounded-xl flex items-start gap-2 text-xs text-red-200 font-sans">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-400" />
                   <span>{authError}</span>
                 </div>
               )}
@@ -2703,15 +3043,15 @@ USING (bucket_id = 'branch-images' AND public.is_admin());
               <button
                 type="submit"
                 disabled={authLoading}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-royal-blue to-electric-blue hover:from-electric-blue hover:to-royal-blue font-display font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all text-white disabled:opacity-50 mt-6 shadow-lg shadow-royal-blue/20"
+                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-[#A36B3B] to-[#C28B57] hover:from-[#8D5A30] hover:to-[#A36B3B] font-sans font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all text-white disabled:opacity-50 mt-6 shadow-lg shadow-[#A36B3B]/20 cursor-pointer"
               >
                 {authLoading ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Processing Secure Alignment...</span>
+                    <span>Signing In...</span>
                   </>
                 ) : (
-                  <span>{authMode === 'login' ? 'Sign In' : 'Register Admin'}</span>
+                  <span>{authMode === 'login' ? 'Sign In to Admin Portal' : 'Register Admin Account'}</span>
                 )}
               </button>
             </form>
@@ -2719,7 +3059,7 @@ USING (bucket_id = 'branch-images' AND public.is_admin());
             <div className="mt-6 text-center">
               <button
                 onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
-                className="text-[11px] text-cci-gold-400 hover:text-cci-gold-300 font-mono"
+                className="text-xs text-[#C28B57] hover:text-[#E6C35C] font-sans"
               >
                 {authMode === 'login' 
                   ? "Don't have an admin account? Register one" 
@@ -2731,32 +3071,34 @@ USING (bucket_id = 'branch-images' AND public.is_admin());
 
         {/* --- EXPLICIT SECURITY LAYER: AUTHENTICATED BUT NOT ADMIN --- */}
         {isSupabaseConfigured && !checkingAuth && session && !isAdminUser && (
-          <div className="max-w-md mx-auto bg-charcoal/45 border border-red-500/30 rounded-3xl p-8 sm:p-10 text-center backdrop-blur-md shadow-2xl mt-10">
-            <AlertCircle className="h-14 w-14 text-red-400 mx-auto mb-6" />
-            <h2 className="font-display font-bold text-2xl text-white">
+          <div className="max-w-md mx-auto bg-[#1C1D21] border border-red-500/30 rounded-3xl p-8 sm:p-10 text-center shadow-2xl mt-10">
+            <div className="w-16 h-16 rounded-2xl bg-red-950/50 border border-red-500/30 flex items-center justify-center mx-auto mb-6 text-red-400">
+              <AlertCircle className="h-8 w-8" />
+            </div>
+            <h2 className="font-cinzel font-bold text-2xl text-white">
               Access Restricted
             </h2>
-            <p className="text-xs text-light-gray mt-3 leading-relaxed">
-              Your account (**{session.user.email}**) is successfully authenticated, but you do not possess the required **Admin** role privileges in our database.
+            <p className="text-xs font-sans text-[#D5C9B8] mt-3 leading-relaxed">
+              Your account (<strong className="text-white">{session.user.email}</strong>) is authenticated, but lacks Admin role privileges in the database.
             </p>
-            <p className="text-xs text-slate-400 mt-4 font-sans italic">
-              (Note: For immediate development access, logging in with email **boluakintola@gmail.com** bypasses this check, or you can run the provided database setup script in your SQL editor).
+            <p className="text-xs text-[#8A8E96] mt-4 font-sans italic">
+              (Admin access can be configured by adding your email to admin_users in Supabase or using the provided database script).
             </p>
 
             <div className="mt-8 flex gap-3">
               <button
                 onClick={handleLogout}
-                className="flex-1 py-2.5 px-4 rounded-xl border border-midnight-blue hover:bg-midnight-blue text-xs font-semibold text-soft-white transition-all flex items-center justify-center gap-1.5"
+                className="flex-1 py-2.5 px-4 rounded-xl border border-[#2D2A26] bg-[#141416] hover:bg-[#222326] text-xs font-semibold text-[#D5C9B8] hover:text-white transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <LogOut className="h-3.5 w-3.5" />
                 <span>Sign Out</span>
               </button>
               <button
                 onClick={() => setActiveSubTab('database')}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-royal-blue to-electric-blue hover:from-electric-blue hover:to-royal-blue text-xs font-bold uppercase tracking-wider text-white transition-all flex items-center justify-center gap-1.5"
+                className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#A36B3B] to-[#C28B57] hover:from-[#8D5A30] hover:to-[#A36B3B] text-xs font-bold uppercase tracking-wider text-white transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
               >
                 <Database className="h-3.5 w-3.5" />
-                <span>See SQL Script</span>
+                <span>View Schema</span>
               </button>
             </div>
 
@@ -2767,15 +3109,15 @@ USING (bucket_id = 'branch-images' AND public.is_admin());
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="text-left mt-8 bg-rich-black/95 p-4 rounded-xl border border-midnight-blue"
+                  className="text-left mt-8 bg-[#141416] p-4 rounded-xl border border-[#2D2A26]"
                 >
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-[10px] font-mono text-slate-400 uppercase tracking-widest">PostgreSQL Setup</span>
-                    <button onClick={copyToClipboard} className="text-[10px] font-mono text-cci-gold-400 hover:text-cci-gold-300 flex items-center gap-1 bg-midnight-blue/40 px-2 py-1 rounded">
+                    <span className="text-[10px] font-sans text-[#8A8E96] uppercase tracking-wider font-semibold">PostgreSQL Schema Setup</span>
+                    <button onClick={copyToClipboard} className="text-[10px] font-sans font-semibold text-[#C28B57] hover:text-[#E6C35C] flex items-center gap-1 bg-[#222326] px-2.5 py-1 rounded-lg border border-[#2D2A26]">
                       <Clipboard className="h-3 w-3" /> Copy
                     </button>
                   </div>
-                  <pre className="text-[9px] font-mono text-slate-400 max-h-[160px] overflow-y-auto whitespace-pre-wrap select-all leading-normal">
+                  <pre className="text-[9px] font-mono text-[#D5C9B8] max-h-[160px] overflow-y-auto whitespace-pre-wrap select-all leading-normal">
                     {sqlSetupScript}
                   </pre>
                 </motion.div>
@@ -2790,108 +3132,120 @@ USING (bucket_id = 'branch-images' AND public.is_admin());
             
             {/* Sidebar Controls */}
             <div className="lg:col-span-1 space-y-3">
-              <div className="bg-[#131B2E] border-2 border-[#2A3756] rounded-2xl p-4 sm:p-5 shadow-xl">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 font-bold">
+              <div className="bg-[#1C1D21] border border-[#2D2A26] rounded-2xl p-4 sm:p-5 shadow-xl">
+                <div className="flex items-center gap-3 mb-6 p-2 rounded-xl bg-[#141416] border border-[#2D2A26]">
+                  <div className="w-10 h-10 rounded-xl bg-[#A36B3B]/15 border border-[#C28B57]/30 flex items-center justify-center text-[#C28B57] font-bold">
                     <User className="h-5 w-5" />
                   </div>
                   <div className="overflow-hidden">
-                    <div className="text-[11px] font-mono text-amber-400 font-bold uppercase tracking-widest">Active Admin</div>
-                    <div className="text-sm text-white font-bold truncate font-sans">{session.user.email}</div>
+                    <div className="text-[10px] font-sans text-[#C28B57] font-bold uppercase tracking-wider">Active Admin</div>
+                    <div className="text-xs text-white font-semibold truncate font-sans">{session.user.email}</div>
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
                   <button
                     onClick={() => setActiveSubTab('overview')}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-sans font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
                       activeSubTab === 'overview' 
-                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
-                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
+                        ? 'bg-gradient-to-r from-[#A36B3B] to-[#C28B57] text-white shadow-lg shadow-[#A36B3B]/20 border-l-4 border-[#E6C35C]' 
+                        : 'text-[#D5C9B8] hover:bg-[#222326] hover:text-white'
                     }`}
                   >
-                    <LayoutDashboard className="h-4 w-4 text-amber-300" />
+                    <LayoutDashboard className="h-4 w-4 text-[#E6C35C]" />
                     <span>DASHBOARD OVERVIEW</span>
                   </button>
 
                   <button
                     onClick={() => setActiveSubTab('analytics')}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-sans font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
                       activeSubTab === 'analytics' 
-                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
-                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
+                        ? 'bg-gradient-to-r from-[#A36B3B] to-[#C28B57] text-white shadow-lg shadow-[#A36B3B]/20 border-l-4 border-[#E6C35C]' 
+                        : 'text-[#D5C9B8] hover:bg-[#222326] hover:text-white'
                     }`}
                   >
-                    <BarChart3 className="h-4 w-4 text-amber-300" />
+                    <BarChart3 className="h-4 w-4 text-[#E6C35C]" />
                     <span>DATA ANALYTICS</span>
                   </button>
 
                   <button
-                    onClick={() => setActiveSubTab('songs')}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
-                      activeSubTab === 'songs' 
-                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
-                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
+                    onClick={() => setActiveSubTab('hero')}
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-sans font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
+                      activeSubTab === 'hero' 
+                        ? 'bg-gradient-to-r from-[#A36B3B] to-[#C28B57] text-white shadow-lg shadow-[#A36B3B]/20 border-l-4 border-[#E6C35C]' 
+                        : 'text-[#D5C9B8] hover:bg-[#222326] hover:text-white'
                     }`}
                   >
-                    <Music className="h-4 w-4 text-sky-400" />
+                    <ImageIcon className="h-4 w-4 text-[#C28B57]" />
+                    <span>HERO IMAGES ({heroImagesList.length})</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveSubTab('songs')}
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-sans font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
+                      activeSubTab === 'songs' 
+                        ? 'bg-gradient-to-r from-[#A36B3B] to-[#C28B57] text-white shadow-lg shadow-[#A36B3B]/20 border-l-4 border-[#E6C35C]' 
+                        : 'text-[#D5C9B8] hover:bg-[#222326] hover:text-white'
+                    }`}
+                  >
+                    <Music className="h-4 w-4 text-[#C28B57]" />
                     <span>UPLOAD SONGS ({songsList.length})</span>
                   </button>
 
                   <button
                     onClick={() => setActiveSubTab('teachings')}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-sans font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
                       activeSubTab === 'teachings' 
-                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
-                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
+                        ? 'bg-gradient-to-r from-[#A36B3B] to-[#C28B57] text-white shadow-lg shadow-[#A36B3B]/20 border-l-4 border-[#E6C35C]' 
+                        : 'text-[#D5C9B8] hover:bg-[#222326] hover:text-white'
                     }`}
                   >
-                    <FileText className="h-4 w-4 text-sky-400" />
+                    <FileText className="h-4 w-4 text-[#C28B57]" />
                     <span>UPLOAD TEACHINGS ({teachings.length})</span>
                   </button>
 
                   <button
                     onClick={() => setActiveSubTab('publications')}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-sans font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
                       activeSubTab === 'publications' 
-                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
-                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
+                        ? 'bg-gradient-to-r from-[#A36B3B] to-[#C28B57] text-white shadow-lg shadow-[#A36B3B]/20 border-l-4 border-[#E6C35C]' 
+                        : 'text-[#D5C9B8] hover:bg-[#222326] hover:text-white'
                     }`}
                   >
-                    <BookOpen className="h-4 w-4 text-amber-400" />
+                    <BookOpen className="h-4 w-4 text-[#E6C35C]" />
                     <span>PUBLICATIONS ({publicationsList.length})</span>
                   </button>
 
                   <button
                     onClick={() => setActiveSubTab('gallery')}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-sans font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
                       activeSubTab === 'gallery' 
-                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
-                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
+                        ? 'bg-gradient-to-r from-[#A36B3B] to-[#C28B57] text-white shadow-lg shadow-[#A36B3B]/20 border-l-4 border-[#E6C35C]' 
+                        : 'text-[#D5C9B8] hover:bg-[#222326] hover:text-white'
                     }`}
                   >
-                    <ImageIcon className="h-4 w-4 text-sky-400" />
+                    <ImageIcon className="h-4 w-4 text-[#C28B57]" />
                     <span>UPLOAD GALLERY ({galleryList.length})</span>
                   </button>
 
                   <button
                     onClick={() => setActiveSubTab('events')}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-sans font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
                       activeSubTab === 'events' 
-                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
-                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
+                        ? 'bg-gradient-to-r from-[#A36B3B] to-[#C28B57] text-white shadow-lg shadow-[#A36B3B]/20 border-l-4 border-[#E6C35C]' 
+                        : 'text-[#D5C9B8] hover:bg-[#222326] hover:text-white'
                     }`}
                   >
-                    <Calendar className="h-4 w-4 text-sky-400" />
+                    <Calendar className="h-4 w-4 text-[#C28B57]" />
                     <span>MANAGE EVENTS ({eventsList.length})</span>
                   </button>
 
                   <button
                     onClick={() => setActiveSubTab('branches')}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-sans font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
                       activeSubTab === 'branches' 
-                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
-                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
+                        ? 'bg-gradient-to-r from-[#A36B3B] to-[#C28B57] text-white shadow-lg shadow-[#A36B3B]/20 border-l-4 border-[#E6C35C]' 
+                        : 'text-[#D5C9B8] hover:bg-[#222326] hover:text-white'
                     }`}
                   >
                     <Building2 className="h-4 w-4 text-emerald-400" />
@@ -2900,10 +3254,10 @@ USING (bucket_id = 'branch-images' AND public.is_admin());
 
                   <button
                     onClick={() => setActiveSubTab('registrations')}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-sans font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
                       activeSubTab === 'registrations' 
-                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
-                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
+                        ? 'bg-gradient-to-r from-[#A36B3B] to-[#C28B57] text-white shadow-lg shadow-[#A36B3B]/20 border-l-4 border-[#E6C35C]' 
+                        : 'text-[#D5C9B8] hover:bg-[#222326] hover:text-white'
                     }`}
                   >
                     <Users className="h-4 w-4 text-emerald-400" />
@@ -2912,10 +3266,10 @@ USING (bucket_id = 'branch-images' AND public.is_admin());
 
                   <button
                     onClick={() => setActiveSubTab('subscribers')}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-sans font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
                       activeSubTab === 'subscribers' 
-                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
-                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
+                        ? 'bg-gradient-to-r from-[#A36B3B] to-[#C28B57] text-white shadow-lg shadow-[#A36B3B]/20 border-l-4 border-[#E6C35C]' 
+                        : 'text-[#D5C9B8] hover:bg-[#222326] hover:text-white'
                     }`}
                   >
                     <MessageSquare className="h-4 w-4 text-emerald-400" />
@@ -2924,33 +3278,33 @@ USING (bucket_id = 'branch-images' AND public.is_admin());
 
                   <button
                     onClick={() => setActiveSubTab('settings')}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-sans font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
                       activeSubTab === 'settings' 
-                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
-                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
+                        ? 'bg-gradient-to-r from-[#A36B3B] to-[#C28B57] text-white shadow-lg shadow-[#A36B3B]/20 border-l-4 border-[#E6C35C]' 
+                        : 'text-[#D5C9B8] hover:bg-[#222326] hover:text-white'
                     }`}
                   >
-                    <Settings className="h-4 w-4 text-purple-400" />
+                    <Settings className="h-4 w-4 text-[#E6C35C]" />
                     <span>SITE SETTINGS</span>
                   </button>
 
                   <button
                     onClick={() => setActiveSubTab('database')}
-                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-mono font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
+                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-sans font-bold tracking-wider flex items-center gap-3 transition-all cursor-pointer ${
                       activeSubTab === 'database' 
-                        ? 'bg-blue-600 text-white shadow-md border-l-4 border-amber-400' 
-                        : 'text-[#CBD5E1] hover:bg-[#1E293B] hover:text-white'
+                        ? 'bg-gradient-to-r from-[#A36B3B] to-[#C28B57] text-white shadow-lg shadow-[#A36B3B]/20 border-l-4 border-[#E6C35C]' 
+                        : 'text-[#D5C9B8] hover:bg-[#222326] hover:text-white'
                     }`}
                   >
-                    <Database className="h-4 w-4 text-purple-400" />
+                    <Database className="h-4 w-4 text-[#E6C35C]" />
                     <span>DATABASE SETUP</span>
                   </button>
                 </div>
 
-                <div className="mt-8 pt-4 border-t border-[#2A3756]">
+                <div className="mt-6 pt-4 border-t border-[#2D2A26]">
                   <button
                     onClick={handleLogout}
-                    className="w-full text-left px-4 py-2.5 rounded-xl text-xs font-mono font-bold text-red-400 hover:bg-red-950/50 flex items-center gap-3 transition-all cursor-pointer"
+                    className="w-full text-left px-4 py-2.5 rounded-xl text-xs font-sans font-bold text-red-400 hover:bg-red-950/40 border border-red-500/20 flex items-center gap-3 transition-all cursor-pointer"
                   >
                     <LogOut className="h-4 w-4" />
                     <span>SIGN OUT ADMIN</span>
@@ -2976,24 +3330,24 @@ USING (bucket_id = 'branch-images' AND public.is_admin());
                   />
 
                   {/* Information block */}
-                  <div className="bg-[#131B2E] border-2 border-[#2A3756] p-6 rounded-2xl shadow-xl">
-                    <h3 className="font-display font-bold text-lg text-white mb-2">
+                  <div className="bg-[#1C1D21] border border-[#2D2A26] p-6 sm:p-8 rounded-2xl shadow-xl">
+                    <h3 className="font-cinzel font-bold text-lg text-white mb-2">
                       Supabase Integrated Backend Active
                     </h3>
-                    <p className="text-sm font-medium text-[#CBD5E1] leading-relaxed max-w-2xl">
-                      Welcome to the Crossword Media Administration console. Use the sidebar sections to upload new sermons directly to Supabase storage buckets, sync teachings to the PostgreSQL database, manage attendees, and view live registration trends.
+                    <p className="text-sm font-sans text-[#D5C9B8] leading-relaxed max-w-2xl">
+                      Welcome to the God's Edifice Church Administration console. Use the sidebar sections to upload sermons directly to storage, sync teachings to the PostgreSQL database, manage attendees, and view live registration trends.
                     </p>
-                    <div className="mt-6 flex flex-wrap gap-4">
+                    <div className="mt-6 flex flex-wrap gap-3">
                       <button 
                         onClick={() => setActiveSubTab('analytics')} 
-                        className="py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-sky-500 hover:from-sky-500 hover:to-blue-600 text-xs font-bold uppercase tracking-wider text-white shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                        className="py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#A36B3B] to-[#C28B57] hover:from-[#8D5A30] hover:to-[#A36B3B] text-xs font-sans font-bold uppercase tracking-wider text-white shadow-md transition-all flex items-center gap-2 cursor-pointer"
                       >
-                        <BarChart3 className="h-4 w-4 text-amber-300" /> Full Visual Analytics
+                        <BarChart3 className="h-4 w-4 text-[#E6C35C]" /> Full Visual Analytics
                       </button>
                       <button 
                         onClick={handleExportMeetingRegistrationsCSV}
                         disabled={exportingCsv}
-                        className="py-2.5 px-4 rounded-xl bg-[#0A0E1A] hover:bg-[#1E293B] border-2 border-[#2A3756] text-xs font-mono font-bold text-amber-300 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                        className="py-2.5 px-4 rounded-xl bg-[#141416] hover:bg-[#222326] border border-[#2D2A26] text-xs font-sans font-semibold text-[#E6C35C] transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
                         title="Export all meeting_registrations records from Supabase"
                       >
                         {exportingCsv ? (
@@ -3001,19 +3355,19 @@ USING (bucket_id = 'branch-images' AND public.is_admin());
                         ) : (
                           <Download className="h-4 w-4 text-emerald-400" />
                         )}
-                        <span>Export CSV (meeting_registrations)</span>
+                        <span>Export CSV ({registrations.length} Records)</span>
                       </button>
                       <button 
                         onClick={() => setActiveSubTab('registrations')} 
-                        className="py-2.5 px-4 rounded-xl bg-[#1E293B] hover:bg-[#2A3756] border-2 border-[#2A3756] text-xs font-semibold text-white transition-all flex items-center gap-2 cursor-pointer"
+                        className="py-2.5 px-4 rounded-xl bg-[#222326] hover:bg-[#2D2A26] border border-[#2D2A26] text-xs font-sans font-semibold text-white transition-all flex items-center gap-2 cursor-pointer"
                       >
-                        <Users className="h-4 w-4 text-sky-400" /> View Attendees List
+                        <Users className="h-4 w-4 text-[#C28B57]" /> View Attendees List
                       </button>
                       <button 
                         onClick={() => setActiveSubTab('database')} 
-                        className="py-2.5 px-4 rounded-xl bg-[#1E293B] hover:bg-[#2A3756] border-2 border-[#2A3756] text-xs font-semibold text-white transition-all flex items-center gap-2 cursor-pointer"
+                        className="py-2.5 px-4 rounded-xl bg-[#222326] hover:bg-[#2D2A26] border border-[#2D2A26] text-xs font-sans font-semibold text-white transition-all flex items-center gap-2 cursor-pointer"
                       >
-                        <Database className="h-4 w-4 text-purple-400" /> Schema Management
+                        <Database className="h-4 w-4 text-[#E6C35C]" /> Schema Management
                       </button>
                     </div>
                   </div>
@@ -4580,99 +4934,99 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                 <div className="space-y-6">
                   {/* KPI Data Boards */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="bg-gradient-to-br from-charcoal/80 to-[#18233D] border border-midnight-blue p-5 rounded-2xl shadow-lg relative overflow-hidden group">
-                      <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-all" />
+                    <div className="bg-[#1C1D21] border border-[#2D2A26] p-5 rounded-2xl shadow-lg relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-[#C28B57]/10 rounded-full blur-2xl group-hover:bg-[#C28B57]/20 transition-all" />
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Total Registered</span>
-                        <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                        <span className="text-[10px] font-sans uppercase tracking-wider text-[#8A8E96] font-semibold">Total Registered</span>
+                        <div className="p-2 rounded-xl bg-[#A36B3B]/15 text-[#C28B57] border border-[#C28B57]/30">
                           <Users className="h-4 w-4" />
                         </div>
                       </div>
-                      <div className="text-2xl font-bold font-display text-white mt-2">
+                      <div className="text-2xl font-bold font-cinzel text-white mt-2">
                         {registrations.length}
                       </div>
-                      <div className="flex items-center gap-1.5 text-[10px] font-mono text-emerald-400 mt-2">
+                      <div className="flex items-center gap-1.5 text-[10px] font-sans text-emerald-400 mt-2 font-medium">
                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                         <span>Live Supabase Database Sync</span>
                       </div>
                     </div>
 
-                    <div className="bg-gradient-to-br from-charcoal/80 to-[#18233D] border border-midnight-blue p-5 rounded-2xl shadow-lg relative overflow-hidden group">
-                      <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl group-hover:bg-amber-500/20 transition-all" />
+                    <div className="bg-[#1C1D21] border border-[#2D2A26] p-5 rounded-2xl shadow-lg relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-[#E6C35C]/10 rounded-full blur-2xl group-hover:bg-[#E6C35C]/20 transition-all" />
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Physical In-Person</span>
-                        <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                        <span className="text-[10px] font-sans uppercase tracking-wider text-[#8A8E96] font-semibold">Physical In-Person</span>
+                        <div className="p-2 rounded-xl bg-[#E6C35C]/15 text-[#E6C35C] border border-[#E6C35C]/30">
                           <MapPin className="h-4 w-4" />
                         </div>
                       </div>
-                      <div className="text-2xl font-bold font-display text-amber-300 mt-2">
+                      <div className="text-2xl font-bold font-cinzel text-[#E6C35C] mt-2">
                         {registrations.filter(r => (r.address && !r.address.toLowerCase().includes('online')) || (r.eventLocation && !r.eventLocation.toLowerCase().includes('online'))).length}
                       </div>
-                      <div className="text-[10px] font-mono text-slate-400 mt-2">
+                      <div className="text-[10px] font-sans text-[#8A8E96] mt-2">
                         {registrations.length > 0 
                           ? `${Math.round((registrations.filter(r => (r.address && !r.address.toLowerCase().includes('online')) || (r.eventLocation && !r.eventLocation.toLowerCase().includes('online'))).length / registrations.length) * 100)}% of total attendees`
                           : '0% attending in person'}
                       </div>
                     </div>
 
-                    <div className="bg-gradient-to-br from-charcoal/80 to-[#18233D] border border-midnight-blue p-5 rounded-2xl shadow-lg relative overflow-hidden group">
-                      <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/10 rounded-full blur-2xl group-hover:bg-purple-500/20 transition-all" />
+                    <div className="bg-[#1C1D21] border border-[#2D2A26] p-5 rounded-2xl shadow-lg relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-[#A36B3B]/10 rounded-full blur-2xl group-hover:bg-[#A36B3B]/20 transition-all" />
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Online Streamers</span>
-                        <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                        <span className="text-[10px] font-sans uppercase tracking-wider text-[#8A8E96] font-semibold">Online Streamers</span>
+                        <div className="p-2 rounded-xl bg-[#A36B3B]/15 text-[#C28B57] border border-[#C28B57]/30">
                           <Radio className="h-4 w-4" />
                         </div>
                       </div>
-                      <div className="text-2xl font-bold font-display text-purple-300 mt-2">
+                      <div className="text-2xl font-bold font-cinzel text-[#D5C9B8] mt-2">
                         {registrations.filter(r => (r.address && r.address.toLowerCase().includes('online')) || (r.eventLocation && r.eventLocation.toLowerCase().includes('online'))).length}
                       </div>
-                      <div className="text-[10px] font-mono text-slate-400 mt-2">
+                      <div className="text-[10px] font-sans text-[#8A8E96] mt-2">
                         Virtual Zoom & YouTube linkers
                       </div>
                     </div>
 
-                    <div className="bg-gradient-to-br from-charcoal/80 to-[#18233D] border border-midnight-blue p-5 rounded-2xl shadow-lg relative overflow-hidden group">
+                    <div className="bg-[#1C1D21] border border-[#2D2A26] p-5 rounded-2xl shadow-lg relative overflow-hidden group">
                       <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-all" />
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Active Branches</span>
+                        <span className="text-[10px] font-sans uppercase tracking-wider text-[#8A8E96] font-semibold">Active Branches</span>
                         <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                           <CheckCircle2 className="h-4 w-4" />
                         </div>
                       </div>
-                      <div className="text-2xl font-bold font-display text-emerald-400 mt-2">
+                      <div className="text-2xl font-bold font-cinzel text-emerald-400 mt-2">
                         {new Set(registrations.map(r => r.userBranch || 'Lekki HQ')).size}
                       </div>
-                      <div className="text-[10px] font-mono text-slate-400 mt-2">
+                      <div className="text-[10px] font-sans text-[#8A8E96] mt-2">
                         Spread across regional centers
                       </div>
                     </div>
                   </div>
 
                   {/* Tab header controls & Export Buttons */}
-                  <div className="bg-charcoal/45 border border-midnight-blue rounded-2xl p-6">
-                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6 border-b border-midnight-blue pb-4">
+                  <div className="bg-[#1C1D21] border border-[#2D2A26] rounded-2xl p-6">
+                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6 border-b border-[#2D2A26] pb-4">
                       <div>
-                        <h4 className="font-display font-bold text-base text-white flex items-center gap-2">
-                          <Users className="h-5 w-5 text-cci-gold-400" />
+                        <h4 className="font-cinzel font-bold text-base text-white flex items-center gap-2">
+                          <Users className="h-5 w-5 text-[#C28B57]" />
                           <span>Edifice Conference & Event Data Boards</span>
-                          <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[10px] font-mono font-bold">
+                          <span className="px-2.5 py-0.5 rounded-full bg-[#A36B3B]/15 text-[#E6C35C] border border-[#C28B57]/30 text-[10px] font-sans font-bold">
                             {registrations.length} Records
                           </span>
                         </h4>
-                        <p className="text-[11px] text-light-gray mt-1">
+                        <p className="text-xs font-sans text-[#D5C9B8] mt-1">
                           Export complete multi-tab workbooks to Excel (.xlsx) and manage attendee check-in statuses.
                         </p>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
                         {/* View Switcher: Table vs Charts */}
-                        <div className="flex items-center bg-rich-black/80 border border-midnight-blue rounded-xl p-1 text-xs">
+                        <div className="flex items-center bg-[#141416] border border-[#2D2A26] rounded-xl p-1 text-xs">
                           <button
                             onClick={() => setRegViewMode('table')}
-                            className={`px-3 py-1.5 rounded-lg font-mono text-[11px] flex items-center gap-1.5 transition-all ${
+                            className={`px-3 py-1.5 rounded-lg font-sans text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
                               regViewMode === 'table'
-                                ? 'bg-royal-blue text-white font-bold shadow'
-                                : 'text-slate-400 hover:text-white'
+                                ? 'bg-gradient-to-r from-[#A36B3B] to-[#C28B57] text-white font-bold shadow'
+                                : 'text-[#8A8E96] hover:text-white'
                             }`}
                           >
                             <Users className="h-3.5 w-3.5" />
@@ -4680,13 +5034,13 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                           </button>
                           <button
                             onClick={() => setRegViewMode('charts')}
-                            className={`px-3 py-1.5 rounded-lg font-mono text-[11px] flex items-center gap-1.5 transition-all ${
+                            className={`px-3 py-1.5 rounded-lg font-sans text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
                               regViewMode === 'charts'
-                                ? 'bg-royal-blue text-white font-bold shadow'
-                                : 'text-slate-400 hover:text-white'
+                                ? 'bg-gradient-to-r from-[#A36B3B] to-[#C28B57] text-white font-bold shadow'
+                                : 'text-[#8A8E96] hover:text-white'
                             }`}
                           >
-                            <BarChart3 className="h-3.5 w-3.5 text-cci-gold-400" />
+                            <BarChart3 className="h-3.5 w-3.5 text-[#E6C35C]" />
                             <span>Data Charts</span>
                           </button>
                         </div>
@@ -4695,7 +5049,7 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                         <button
                           onClick={handleExportMeetingRegistrationsExcel}
                           disabled={exportingExcel}
-                          className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white border border-emerald-400/30 text-xs font-mono font-bold rounded-xl flex items-center gap-2 transition-all shadow-md disabled:opacity-50 cursor-pointer"
+                          className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white border border-emerald-400/30 text-xs font-sans font-bold rounded-xl flex items-center gap-2 transition-all shadow-md disabled:opacity-50 cursor-pointer"
                           title="Generate complete Excel workbook with Master List, Branch Breakdown, and KPI Data Boards"
                         >
                           {exportingExcel ? (
@@ -4715,13 +5069,13 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                         <button
                           onClick={handleExportMeetingRegistrationsCSV}
                           disabled={exportingCsv}
-                          className="px-3 py-2 bg-midnight-blue hover:bg-midnight-blue/80 text-slate-300 hover:text-white border border-midnight-blue text-xs font-mono font-bold rounded-xl flex items-center gap-1.5 transition-all shadow disabled:opacity-50 cursor-pointer"
+                          className="px-3 py-2 bg-[#222326] hover:bg-[#2D2A26] text-[#D5C9B8] hover:text-white border border-[#2D2A26] text-xs font-sans font-semibold rounded-xl flex items-center gap-1.5 transition-all shadow disabled:opacity-50 cursor-pointer"
                           title="Download as CSV text file"
                         >
                           {exportingCsv ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-300" />
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-[#D5C9B8]" />
                           ) : (
-                            <Download className="h-3.5 w-3.5 text-slate-400" />
+                            <Download className="h-3.5 w-3.5 text-[#C28B57]" />
                           )}
                           <span>CSV</span>
                         </button>
@@ -4740,15 +5094,15 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                     ) : (
                       <>
                         {/* Filter Bar */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-5 p-3 rounded-xl bg-rich-black/60 border border-midnight-blue">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-5 p-3 rounded-xl bg-[#141416] border border-[#2D2A26]">
                           <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-medium-gray" />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#8A8E96]" />
                             <input
                               type="text"
                               placeholder="Search attendee name, email..."
                               value={searchTerm}
                               onChange={(e) => setSearchTerm(e.target.value)}
-                              className="w-full bg-rich-black border border-midnight-blue rounded-lg py-2 pl-9 pr-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                              className="w-full bg-[#1C1D21] border border-[#332F2A] rounded-lg py-2 pl-9 pr-3 text-xs font-sans text-white placeholder-[#8A8E96] focus:outline-none focus:border-[#C28B57]"
                             />
                           </div>
 
@@ -4756,7 +5110,7 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                             <select
                               value={regBranchFilter}
                               onChange={(e) => setRegBranchFilter(e.target.value)}
-                              className="w-full bg-rich-black border border-midnight-blue rounded-lg py-2 px-3 text-xs text-white focus:outline-none focus:border-amber-400"
+                              className="w-full bg-[#1C1D21] border border-[#332F2A] rounded-lg py-2 px-3 text-xs font-sans text-white focus:outline-none focus:border-[#C28B57]"
                             >
                               <option value="ALL">All Branches</option>
                               {Array.from(new Set(registrations.map(r => r.userBranch || 'Lekki HQ'))).map(branch => (
@@ -4769,7 +5123,7 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                             <select
                               value={regModeFilter}
                               onChange={(e) => setRegModeFilter(e.target.value)}
-                              className="w-full bg-rich-black border border-midnight-blue rounded-lg py-2 px-3 text-xs text-white focus:outline-none focus:border-amber-400"
+                              className="w-full bg-[#1C1D21] border border-[#332F2A] rounded-lg py-2 px-3 text-xs font-sans text-white focus:outline-none focus:border-[#C28B57]"
                             >
                               <option value="ALL">All Modes (Physical & Virtual)</option>
                               <option value="PHYSICAL">Physical In-Person Only</option>
@@ -4778,7 +5132,7 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                           </div>
 
                           <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-mono text-slate-400">
+                            <span className="text-xs font-sans text-[#8A8E96]">
                               Showing {
                                 registrations
                                   .filter(r => {
@@ -4801,7 +5155,7 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                                   setRegBranchFilter('ALL');
                                   setRegModeFilter('ALL');
                                 }}
-                                className="text-[10px] font-mono text-amber-400 hover:underline"
+                                className="text-xs font-sans font-semibold text-[#C28B57] hover:text-[#E6C35C] cursor-pointer"
                               >
                                 Reset
                               </button>
@@ -4811,8 +5165,8 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
 
                         {/* Attendee Table */}
                         <div className="overflow-x-auto">
-                          <table className="w-full text-left text-xs text-light-gray">
-                            <thead className="text-[10px] font-mono text-slate-400 uppercase tracking-widest border-b border-midnight-blue">
+                          <table className="w-full text-left text-xs text-[#D5C9B8]">
+                            <thead className="text-[10px] font-sans uppercase tracking-wider text-[#8A8E96] font-semibold border-b border-[#2D2A26]">
                               <tr>
                                 <th className="py-3 px-4">Attendee</th>
                                 <th className="py-3 px-4">Contact Info</th>
@@ -4821,7 +5175,7 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                                 <th className="py-3 px-4 text-right">Actions</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-midnight-blue/50">
+                            <tbody className="divide-y divide-[#2D2A26]/60">
                               {registrations
                                 .filter(r => {
                                   const matchesSearch = (r.firstName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -4838,34 +5192,34 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                                   const currentStatus = regStatusMap[r.id] || 'Confirmed';
                                   const isOnline = (r.address && r.address.toLowerCase().includes('online')) || (r.eventLocation && r.eventLocation.toLowerCase().includes('online'));
                                   return (
-                                    <tr key={r.id} className="hover:bg-midnight-blue/20 transition-all group">
+                                    <tr key={r.id} className="hover:bg-[#222326]/60 transition-all group">
                                       <td className="py-3.5 px-4">
                                         <div className="flex items-center gap-3">
-                                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-royal-blue to-electric-blue text-white font-bold text-xs flex items-center justify-center shrink-0 border border-white/10 shadow">
+                                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#A36B3B] to-[#C28B57] text-white font-bold text-xs flex items-center justify-center shrink-0 border border-white/10 shadow">
                                             {(r.firstName?.[0] || 'A').toUpperCase()}{(r.surname?.[0] || 'T').toUpperCase()}
                                           </div>
                                           <div>
-                                            <div className="font-semibold text-white group-hover:text-amber-400 transition-colors">
+                                            <div className="font-semibold text-white group-hover:text-[#E6C35C] transition-colors font-sans">
                                               {r.surname} {r.firstName}
                                             </div>
-                                            <div className="text-[10px] font-mono text-slate-400">
+                                            <div className="text-[10px] font-sans text-[#8A8E96]">
                                               {r.age || 'Adult'} • {r.gender || 'Member'}
                                             </div>
                                           </div>
                                         </div>
                                       </td>
                                       <td className="py-3.5 px-4 font-sans">
-                                        <div className="text-slate-300 select-all">{r.userEmail}</div>
-                                        <div className="text-[11px] font-mono text-slate-400">{r.userPhone || 'N/A'}</div>
+                                        <div className="text-[#D5C9B8] select-all">{r.userEmail}</div>
+                                        <div className="text-[11px] font-sans text-[#8A8E96]">{r.userPhone || 'N/A'}</div>
                                       </td>
                                       <td className="py-3.5 px-4">
                                         <div className="flex items-center gap-1.5 flex-wrap">
-                                          <span className="bg-amber-500/10 text-amber-300 border border-amber-500/20 px-2 py-0.5 rounded text-[10px] font-mono uppercase font-bold">
+                                          <span className="bg-[#A36B3B]/15 text-[#E6C35C] border border-[#C28B57]/30 px-2 py-0.5 rounded text-[10px] font-sans uppercase font-bold">
                                             {r.userBranch || 'Lekki HQ'}
                                           </span>
-                                          <span className={`px-2 py-0.5 rounded text-[9px] font-mono uppercase font-semibold ${
+                                          <span className={`px-2 py-0.5 rounded text-[9px] font-sans uppercase font-semibold ${
                                             isOnline 
-                                              ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30' 
+                                              ? 'bg-[#A36B3B]/20 text-[#D5C9B8] border border-[#C28B57]/30' 
                                               : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
                                           }`}>
                                             {isOnline ? 'Virtual' : 'Physical'}
@@ -4876,24 +5230,24 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                                         <select
                                           value={currentStatus}
                                           onChange={(e) => handleStatusChange(r.id, e.target.value)}
-                                          className={`text-[10px] font-mono font-bold rounded-lg px-2.5 py-1 border transition-all cursor-pointer ${
+                                          className={`text-[10px] font-sans font-bold rounded-lg px-2.5 py-1 border transition-all cursor-pointer ${
                                             currentStatus === 'Checked-In'
                                               ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
                                               : currentStatus === 'Follow-Up'
-                                              ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                                              : 'bg-blue-500/15 text-blue-300 border-blue-500/30'
+                                              ? 'bg-[#E6C35C]/15 text-[#E6C35C] border-[#E6C35C]/30'
+                                              : 'bg-[#A36B3B]/15 text-[#C28B57] border-[#C28B57]/30'
                                           }`}
                                         >
-                                          <option value="Confirmed" className="bg-slate-900 text-white">Confirmed</option>
-                                          <option value="Checked-In" className="bg-slate-900 text-white">Checked-In</option>
-                                          <option value="Follow-Up" className="bg-slate-900 text-white">Follow-Up</option>
+                                          <option value="Confirmed" className="bg-[#1C1D21] text-white">Confirmed</option>
+                                          <option value="Checked-In" className="bg-[#1C1D21] text-white">Checked-In</option>
+                                          <option value="Follow-Up" className="bg-[#1C1D21] text-white">Follow-Up</option>
                                         </select>
                                       </td>
                                       <td className="py-3.5 px-4 text-right">
                                         <div className="flex items-center justify-end gap-1.5">
                                           <button
                                             onClick={() => setSelectedRegAttendee(r)}
-                                            className="px-2.5 py-1 text-[11px] font-mono font-bold text-sky-400 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 rounded-lg transition-all flex items-center gap-1"
+                                            className="px-2.5 py-1 text-xs font-sans font-semibold text-[#C28B57] bg-[#A36B3B]/10 hover:bg-[#A36B3B]/20 border border-[#C28B57]/30 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
                                             title="View full attendee dossier"
                                           >
                                             <Eye className="h-3.5 w-3.5" />
@@ -4902,7 +5256,7 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                                           <button
                                             onClick={() => handleDeleteReg(r.id)}
                                             disabled={deletingRegId === r.id}
-                                            className="p-1.5 text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-all disabled:opacity-50"
+                                            className="p-1.5 text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-all disabled:opacity-50 cursor-pointer"
                                             title="Delete registration"
                                           >
                                             {deletingRegId === r.id ? (
@@ -4918,7 +5272,7 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                                 })}
                               {registrations.length === 0 && (
                                 <tr>
-                                  <td colSpan={5} className="py-12 text-center text-slate-500 font-mono">
+                                  <td colSpan={5} className="py-12 text-center text-[#8A8E96] font-sans">
                                     No registrations collected yet.
                                   </td>
                                 </tr>
@@ -4933,62 +5287,62 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                   {/* Attendee Dossier Modal */}
                   {selectedRegAttendee && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-                      <div className="bg-[#131B2E] border border-midnight-blue rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative">
-                        <div className="flex items-center justify-between pb-4 border-b border-midnight-blue">
+                      <div className="bg-[#1C1D21] border border-[#2D2A26] rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative">
+                        <div className="flex items-center justify-between pb-4 border-b border-[#2D2A26]">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 text-slate-950 font-bold text-base flex items-center justify-center">
+                            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#A36B3B] to-[#C28B57] text-white font-bold text-base flex items-center justify-center">
                               {(selectedRegAttendee.firstName?.[0] || 'A').toUpperCase()}
                             </div>
                             <div>
-                              <h3 className="text-base font-bold text-white font-display">
+                              <h3 className="text-base font-bold text-white font-cinzel">
                                 {selectedRegAttendee.surname} {selectedRegAttendee.firstName}
                               </h3>
-                              <p className="text-[11px] font-mono text-amber-400">Registration Dossier</p>
+                              <p className="text-xs font-sans text-[#C28B57] font-semibold">Registration Dossier</p>
                             </div>
                           </div>
                           <button
                             onClick={() => setSelectedRegAttendee(null)}
-                            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-midnight-blue transition-all"
+                            className="p-2 rounded-xl text-[#8A8E96] hover:text-white hover:bg-[#222326] transition-all cursor-pointer"
                           >
                             <X className="h-4 w-4" />
                           </button>
                         </div>
 
-                        <div className="space-y-4 my-5 text-xs text-slate-300">
-                          <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-rich-black/70 border border-midnight-blue">
+                        <div className="space-y-4 my-5 text-xs text-[#D5C9B8]">
+                          <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-[#141416] border border-[#2D2A26]">
                             <div>
-                              <span className="text-[10px] font-mono uppercase text-slate-500 block">Email</span>
+                              <span className="text-[10px] font-sans uppercase text-[#8A8E96] font-semibold block">Email</span>
                               <span className="text-white font-medium break-all">{selectedRegAttendee.userEmail}</span>
                             </div>
                             <div>
-                              <span className="text-[10px] font-mono uppercase text-slate-500 block">Phone</span>
-                              <span className="text-white font-mono">{selectedRegAttendee.userPhone || 'N/A'}</span>
+                              <span className="text-[10px] font-sans uppercase text-[#8A8E96] font-semibold block">Phone</span>
+                              <span className="text-white font-sans">{selectedRegAttendee.userPhone || 'N/A'}</span>
                             </div>
                             <div>
-                              <span className="text-[10px] font-mono uppercase text-slate-500 block">Nearest Branch</span>
-                              <span className="text-amber-300 font-bold">{selectedRegAttendee.userBranch || 'Lekki HQ'}</span>
+                              <span className="text-[10px] font-sans uppercase text-[#8A8E96] font-semibold block">Nearest Branch</span>
+                              <span className="text-[#E6C35C] font-bold">{selectedRegAttendee.userBranch || 'Lekki HQ'}</span>
                             </div>
                             <div>
-                              <span className="text-[10px] font-mono uppercase text-slate-500 block">Age / Gender</span>
+                              <span className="text-[10px] font-sans uppercase text-[#8A8E96] font-semibold block">Age / Gender</span>
                               <span className="text-white">{selectedRegAttendee.age || 'N/A'} • {selectedRegAttendee.gender || 'N/A'}</span>
                             </div>
                           </div>
 
-                          <div className="p-3 rounded-2xl bg-rich-black/70 border border-midnight-blue">
-                            <span className="text-[10px] font-mono uppercase text-slate-500 block mb-1">Residential Address</span>
-                            <p className="text-slate-200">{selectedRegAttendee.address || selectedRegAttendee.eventLocation || 'Online Virtual Attendee'}</p>
+                          <div className="p-3 rounded-2xl bg-[#141416] border border-[#2D2A26]">
+                            <span className="text-[10px] font-sans uppercase text-[#8A8E96] font-semibold block mb-1">Residential Address</span>
+                            <p className="text-[#D5C9B8]">{selectedRegAttendee.address || selectedRegAttendee.eventLocation || 'Online Virtual Attendee'}</p>
                           </div>
 
                           {(selectedRegAttendee.expecations_prayer_request || selectedRegAttendee.expectations) && (
-                            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20">
-                              <span className="text-[10px] font-mono uppercase text-amber-400 block mb-1 font-bold">Expectations & Prayer Requests</span>
-                              <p className="text-slate-200 italic leading-relaxed">
+                            <div className="p-3 rounded-2xl bg-[#A36B3B]/10 border border-[#C28B57]/20">
+                              <span className="text-[10px] font-sans uppercase text-[#C28B57] block mb-1 font-bold">Expectations & Prayer Requests</span>
+                              <p className="text-[#D5C9B8] italic leading-relaxed">
                                 "{selectedRegAttendee.expecations_prayer_request || selectedRegAttendee.expectations}"
                               </p>
                             </div>
                           )}
 
-                          <div className="flex items-center justify-between text-[10px] font-mono text-slate-500 pt-2 border-t border-midnight-blue/60">
+                          <div className="flex items-center justify-between text-xs font-sans text-[#8A8E96] pt-2 border-t border-[#2D2A26]">
                             <span>How heard: {selectedRegAttendee.how_you_heard || selectedRegAttendee.howHeard || 'Member Invitation'}</span>
                             <span>Date: {selectedRegAttendee.created_at || selectedRegAttendee.registrationDate || 'Recent'}</span>
                           </div>
@@ -4997,14 +5351,14 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                         <div className="flex items-center justify-end gap-2 pt-2">
                           <a
                             href={`mailto:${selectedRegAttendee.userEmail}?subject=God's Edifice Church Conference Confirmation`}
-                            className="px-4 py-2 rounded-xl bg-midnight-blue hover:bg-midnight-blue/80 text-white font-mono text-xs flex items-center gap-1.5 transition-all"
+                            className="px-4 py-2 rounded-xl bg-[#222326] hover:bg-[#2D2A26] border border-[#2D2A26] text-white font-sans text-xs font-semibold flex items-center gap-1.5 transition-all"
                           >
-                            <Mail className="h-3.5 w-3.5 text-sky-400" />
+                            <Mail className="h-3.5 w-3.5 text-[#C28B57]" />
                             <span>Email Attendee</span>
                           </a>
                           <button
                             onClick={() => setSelectedRegAttendee(null)}
-                            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold font-mono text-xs transition-all"
+                            className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#A36B3B] to-[#C28B57] hover:from-[#8D5A30] hover:to-[#A36B3B] text-white font-bold font-sans text-xs transition-all cursor-pointer shadow-md"
                           >
                             Close
                           </button>
@@ -5017,53 +5371,53 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
 
               {/* Subscribers Tab */}
               {activeSubTab === 'subscribers' && (
-                <div className="bg-charcoal/45 border border-midnight-blue rounded-2xl p-6">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 border-b border-midnight-blue pb-4">
+                <div className="bg-[#1C1D21] border border-[#2D2A26] rounded-2xl p-6">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 border-b border-[#2D2A26] pb-4">
                     <div>
-                      <h4 className="font-display font-bold text-base text-white">
+                      <h4 className="font-cinzel font-bold text-base text-white">
                         Newsletter Subscribers ({subscribers.length})
                       </h4>
-                      <p className="text-[11px] text-light-gray mt-1">
-                         believers subscribed to receive spiritual resources.
+                      <p className="text-xs font-sans text-[#D5C9B8] mt-1">
+                        Believers subscribed to receive spiritual resources.
                       </p>
                     </div>
                     <div className="relative w-full sm:w-64">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-medium-gray" />
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#8A8E96]" />
                       <input
                         type="text"
                         placeholder="Search emails..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full bg-rich-black/95 border border-midnight-blue rounded-xl py-2 pl-9 pr-4 text-xs text-white focus:outline-none focus:border-cci-gold-500"
+                        className="w-full bg-[#141416] border border-[#332F2A] rounded-xl py-2 pl-9 pr-4 text-xs font-sans text-white focus:outline-none focus:border-[#C28B57]"
                       />
                     </div>
                   </div>
 
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs text-light-gray">
-                      <thead className="text-[10px] font-mono text-slate-400 uppercase tracking-widest border-b border-midnight-blue">
+                    <table className="w-full text-left text-xs text-[#D5C9B8]">
+                      <thead className="text-[10px] font-sans uppercase tracking-wider text-[#8A8E96] font-semibold border-b border-[#2D2A26]">
                         <tr>
                           <th className="py-3 px-4">Subscriber Email</th>
                           <th className="py-3 px-4">Subscribed At</th>
                           <th className="py-3 px-4 text-right">Action</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-midnight-blue/50">
+                      <tbody className="divide-y divide-[#2D2A26]/60">
                         {subscribers
                           .filter(s => s.email.toLowerCase().includes(searchTerm.toLowerCase()))
                           .map((s) => (
-                            <tr key={s.id} className="hover:bg-midnight-blue/15 transition-all">
-                              <td className="py-3.5 px-4 font-semibold text-white select-all">
+                            <tr key={s.id} className="hover:bg-[#222326]/60 transition-all">
+                              <td className="py-3.5 px-4 font-semibold text-white select-all font-sans">
                                 {s.email}
                               </td>
-                              <td className="py-3.5 px-4 font-mono text-slate-400 text-[11px]">
+                              <td className="py-3.5 px-4 font-sans text-[#8A8E96] text-xs">
                                 {new Date(s.subscribedAt).toLocaleString()}
                               </td>
                               <td className="py-3.5 px-4 text-right">
                                 <button
                                   onClick={() => handleDeleteSub(s.id)}
                                   disabled={deletingSubId === s.id}
-                                  className="p-1.5 text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-all disabled:opacity-50"
+                                  className="p-1.5 text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-all disabled:opacity-50 cursor-pointer"
                                   title="Delete subscriber"
                                 >
                                   {deletingSubId === s.id ? (
@@ -5077,7 +5431,7 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                           ))}
                         {subscribers.length === 0 && (
                           <tr>
-                            <td colSpan={3} className="py-10 text-center text-slate-500 font-mono">
+                            <td colSpan={3} className="py-10 text-center text-[#8A8E96] font-sans">
                               No subscribers found.
                             </td>
                           </tr>
@@ -5088,12 +5442,485 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                 </div>
               )}
 
+              {/* Hero Images Management Tab */}
+              {activeSubTab === 'hero' && (
+                <div className="space-y-8" id="hero-images-management-root">
+                  {/* KPI Overview Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="bg-[#1C1D21] border border-[#2D2A26] p-5 rounded-2xl shadow-lg relative overflow-hidden group">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-sans uppercase tracking-wider text-[#8A8E96] font-semibold">Total Hero Photos</span>
+                        <div className="p-2 rounded-xl bg-[#A36B3B]/15 text-[#C28B57] border border-[#C28B57]/30">
+                          <ImageIcon className="h-4 w-4" />
+                        </div>
+                      </div>
+                      <div className="text-2xl font-bold font-cinzel text-white mt-2">
+                        {heroImagesList.length}
+                      </div>
+                      <div className="text-xs font-sans text-[#8A8E96] mt-2 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#E6C35C]" />
+                        <span>Section-Isolated Collections</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-[#1C1D21] border border-[#2D2A26] p-5 rounded-2xl shadow-lg relative overflow-hidden group">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-sans uppercase tracking-wider text-[#8A8E96] font-semibold">Home Hero Carousel</span>
+                        <div className="p-2 rounded-xl bg-[#A36B3B]/15 text-[#E6C35C] border border-[#C28B57]/30">
+                          <Building2 className="h-4 w-4" />
+                        </div>
+                      </div>
+                      <div className="text-2xl font-bold font-cinzel text-[#E6C35C] mt-2">
+                        {heroImagesList.filter(i => i.section === 'home').length}
+                      </div>
+                      <div className="text-xs font-sans text-[#8A8E96] mt-2">
+                        Rotating Home Worship Carousel
+                      </div>
+                    </div>
+
+                    <div className="bg-[#1C1D21] border border-[#2D2A26] p-5 rounded-2xl shadow-lg relative overflow-hidden group">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-sans uppercase tracking-wider text-[#8A8E96] font-semibold">Who We Are Hero</span>
+                        <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          <Users className="h-4 w-4" />
+                        </div>
+                      </div>
+                      <div className="text-2xl font-bold font-cinzel text-emerald-400 mt-2">
+                        {heroImagesList.filter(i => i.section === 'who_we_are').length}
+                      </div>
+                      <div className="text-xs font-sans text-[#8A8E96] mt-2">
+                        About Us Header Banner (group 1.jpg)
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Upload New Hero Image Box */}
+                  <div className="bg-[#1C1D21] border border-[#2D2A26] rounded-2xl p-6 sm:p-8">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-5 mb-6 border-b border-[#2D2A26]">
+                      <div>
+                        <h3 className="font-cinzel font-bold text-lg text-white flex items-center gap-2">
+                          <Upload className="h-5 w-5 text-[#C28B57]" />
+                          <span>Upload & Categorize Hero Image</span>
+                        </h3>
+                        <p className="text-xs font-sans text-[#D5C9B8] mt-1">
+                          Explicitly specify whether the photo belongs to the <strong>Home Hero</strong> or <strong>Who We Are Hero</strong>.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSyncSeedHeroToSupabase}
+                        disabled={seedingHero}
+                        className="self-start sm:self-auto px-4 py-2 rounded-xl bg-[#222326] hover:bg-[#2D2A26] border border-[#C28B57]/30 text-xs font-sans font-semibold text-[#E6C35C] flex items-center gap-2 cursor-pointer disabled:opacity-50 transition-all shadow"
+                        title="Sync all current hero images into Supabase database table"
+                      >
+                        {seedingHero ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                        <span>Sync Catalog to Supabase</span>
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleUploadHeroImage} className="space-y-6">
+                      {/* Explicit Section Radio Cards */}
+                      <div>
+                        <label className="block text-[11px] font-sans uppercase tracking-wider text-[#D5C9B8] font-semibold mb-3">
+                          Select Target Hero Section (Strict Separation) *
+                        </label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <label
+                            onClick={() => setUploadHeroSection('home')}
+                            className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-3.5 ${
+                              uploadHeroSection === 'home'
+                                ? 'bg-[#A36B3B]/15 border-[#C28B57] text-white shadow-lg'
+                                : 'bg-[#141416] border-[#2D2A26] text-[#8A8E96] hover:border-[#3D3A36]'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="hero-section-choice"
+                              value="home"
+                              checked={uploadHeroSection === 'home'}
+                              onChange={() => setUploadHeroSection('home')}
+                              className="sr-only"
+                            />
+                            <div className={`p-2.5 rounded-xl shrink-0 ${uploadHeroSection === 'home' ? 'bg-gradient-to-r from-[#A36B3B] to-[#C28B57] text-white' : 'bg-[#222326] text-[#8A8E96]'}`}>
+                              <Building2 className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-sm font-bold text-white font-cinzel">Home Hero Section</h4>
+                                {uploadHeroSection === 'home' && (
+                                  <span className="px-2 py-0.5 rounded text-[9px] font-sans font-bold bg-[#A36B3B]/20 text-[#E6C35C] border border-[#C28B57]/30">
+                                    Selected
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs font-sans text-[#D5C9B8] mt-1 leading-relaxed">
+                                Used exclusively in the Homepage worship carousel. Will NEVER appear on the Who We Are page.
+                              </p>
+                            </div>
+                          </label>
+
+                          <label
+                            onClick={() => setUploadHeroSection('who_we_are')}
+                            className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-3.5 ${
+                              uploadHeroSection === 'who_we_are'
+                                ? 'bg-emerald-500/15 border-emerald-400 text-white shadow-lg'
+                                : 'bg-[#141416] border-[#2D2A26] text-[#8A8E96] hover:border-[#3D3A36]'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="hero-section-choice"
+                              value="who_we_are"
+                              checked={uploadHeroSection === 'who_we_are'}
+                              onChange={() => setUploadHeroSection('who_we_are')}
+                              className="sr-only"
+                            />
+                            <div className={`p-2.5 rounded-xl shrink-0 ${uploadHeroSection === 'who_we_are' ? 'bg-emerald-500 text-white' : 'bg-[#222326] text-[#8A8E96]'}`}>
+                              <Users className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-sm font-bold text-white font-cinzel">Who We Are Hero Section</h4>
+                                {uploadHeroSection === 'who_we_are' && (
+                                  <span className="px-2 py-0.5 rounded text-[9px] font-sans font-bold bg-emerald-400/20 text-emerald-300 border border-emerald-400/30">
+                                    Selected
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs font-sans text-[#D5C9B8] mt-1 leading-relaxed">
+                                Used exclusively in the About Us / Who We Are editorial header (e.g. church group photos). Will NEVER appear on Home.
+                              </p>
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* File selector & preview */}
+                      <div>
+                        <label className="block text-[10px] font-sans uppercase tracking-wider text-[#8A8E96] font-semibold mb-2">
+                          Select Image File (JPG, PNG, WebP — Max 10 MB) *
+                        </label>
+                        <div className="border-2 border-dashed border-[#2D2A26] hover:border-[#C28B57]/50 rounded-2xl p-6 text-center bg-[#141416] transition-all">
+                          <input
+                            ref={heroFileInputRef}
+                            type="file"
+                            accept="image/jpeg,image/jpg,image/png,image/webp"
+                            onChange={handleHeroFileSelect}
+                            className="hidden"
+                            id="hero-file-upload-input"
+                          />
+
+                          {uploadHeroFile ? (
+                            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                              {uploadHeroPreview && (
+                                <img
+                                  src={uploadHeroPreview}
+                                  alt="Preview"
+                                  className="w-24 h-24 object-cover rounded-xl border border-[#C28B57]/40 shadow-md"
+                                />
+                              )}
+                              <div className="text-left">
+                                <p className="text-xs font-bold text-white font-sans">{uploadHeroFile.name}</p>
+                                <p className="text-[10px] text-[#8A8E96] font-sans mt-0.5">
+                                  {(uploadHeroFile.size / (1024 * 1024)).toFixed(2)} MB • {uploadHeroFile.type}
+                                </p>
+                                <div className="flex items-center gap-2 mt-2">
+                                  <label
+                                    htmlFor="hero-file-upload-input"
+                                    className="px-3 py-1 bg-[#222326] hover:bg-[#2D2A26] text-white rounded-lg text-xs font-sans font-semibold cursor-pointer transition-all border border-[#2D2A26]"
+                                  >
+                                    Change File
+                                  </label>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setUploadHeroFile(null);
+                                      setUploadHeroPreview(null);
+                                      if (heroFileInputRef.current) heroFileInputRef.current.value = '';
+                                    }}
+                                    className="px-3 py-1 bg-red-500/15 text-red-400 hover:bg-red-500/25 rounded-lg text-xs font-sans transition-all cursor-pointer border border-red-500/20"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              <div className="w-12 h-12 rounded-2xl bg-[#222326] text-[#C28B57] flex items-center justify-center mx-auto border border-[#2D2A26]">
+                                <ImageIcon className="h-6 w-6" />
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold text-[#D5C9B8]">
+                                  Drag and drop your hero photo here, or browse
+                                </p>
+                                <p className="text-[11px] text-[#8A8E96] mt-0.5 font-sans">
+                                  High-resolution horizontal images recommended (1920x1080 or larger)
+                                </p>
+                              </div>
+                              <label
+                                htmlFor="hero-file-upload-input"
+                                className="inline-block px-4 py-2 bg-gradient-to-r from-[#A36B3B] to-[#C28B57] hover:from-[#8D5A30] hover:to-[#A36B3B] text-white font-sans font-bold rounded-xl text-xs cursor-pointer transition-all shadow-md"
+                              >
+                                Browse Local Files
+                              </label>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Metadata Details */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-sans uppercase tracking-wider text-[#8A8E96] font-semibold mb-1.5">
+                            Photo Title / Caption
+                          </label>
+                          <input
+                            type="text"
+                            value={uploadHeroTitle}
+                            onChange={(e) => setUploadHeroTitle(e.target.value)}
+                            placeholder={uploadHeroSection === 'home' ? "e.g. God's Edifice Church Worship Atmosphere" : "e.g. God's Edifice Church Family Gathering"}
+                            className="w-full bg-[#141416] border border-[#332F2A] focus:border-[#C28B57] rounded-xl py-3 px-4 text-xs font-sans text-white placeholder-[#8A8E96] focus:outline-none transition-all"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-sans uppercase tracking-wider text-[#8A8E96] font-semibold mb-1.5">
+                            Alt Text / Accessibility Label
+                          </label>
+                          <input
+                            type="text"
+                            value={uploadHeroAlt}
+                            onChange={(e) => setUploadHeroAlt(e.target.value)}
+                            placeholder="Descriptive text for screen readers"
+                            className="w-full bg-[#141416] border border-[#332F2A] focus:border-[#C28B57] rounded-xl py-3 px-4 text-xs font-sans text-white placeholder-[#8A8E96] focus:outline-none transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Feedback Alerts */}
+                      {heroError && (
+                        <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-start gap-2 text-xs text-red-400 font-sans">
+                          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                          <span>{heroError}</span>
+                        </div>
+                      )}
+
+                      {heroSuccess && (
+                        <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-start gap-2 text-xs text-emerald-400 font-sans">
+                          <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+                          <span>{heroSuccess}</span>
+                        </div>
+                      )}
+
+                      {/* Progress Bar */}
+                      {uploadingHero && (
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-xs font-sans text-[#E6C35C]">
+                            <span>Uploading to Supabase Storage and recording category...</span>
+                            <span>{uploadHeroProgress}%</span>
+                          </div>
+                          <div className="w-full h-2 bg-[#141416] rounded-full overflow-hidden border border-[#2D2A26]">
+                            <div
+                              className="h-full bg-gradient-to-r from-[#A36B3B] to-[#E6C35C] transition-all duration-300 rounded-full"
+                              style={{ width: `${uploadHeroProgress}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      <button
+                        type="submit"
+                        disabled={uploadingHero || !uploadHeroFile}
+                        className="py-3 px-8 rounded-xl bg-gradient-to-r from-[#A36B3B] to-[#C28B57] hover:from-[#8D5A30] hover:to-[#A36B3B] text-white font-bold font-sans text-xs uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg disabled:opacity-50 cursor-pointer"
+                      >
+                        {uploadingHero ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>Processing Hero Image...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="h-4 w-4" />
+                            <span>Add to {uploadHeroSection === 'home' ? 'Home' : 'Who We Are'} Collection</span>
+                          </>
+                        )}
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Active Hero Image Catalog & Filters */}
+                  <div className="bg-[#1C1D21] border border-[#2D2A26] rounded-2xl p-6 sm:p-8">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 mb-6 border-b border-[#2D2A26]">
+                      <div>
+                        <h3 className="font-cinzel font-bold text-lg text-white">
+                          Current Active Hero Image Collections
+                        </h3>
+                        <p className="text-xs font-sans text-[#D5C9B8] mt-1">
+                          Review, switch sections, or delete images in real-time. Changes propagate to the website immediately.
+                        </p>
+                      </div>
+
+                      {/* Filter Pills */}
+                      <div className="flex items-center gap-2 bg-[#141416] p-1.5 rounded-xl border border-[#2D2A26] self-start sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => setHeroSectionFilter('all')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-sans font-bold transition-all cursor-pointer ${
+                            heroSectionFilter === 'all'
+                              ? 'bg-gradient-to-r from-[#A36B3B] to-[#C28B57] text-white shadow'
+                              : 'text-[#8A8E96] hover:text-white'
+                          }`}
+                        >
+                          All ({heroImagesList.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setHeroSectionFilter('home')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-sans font-bold transition-all cursor-pointer ${
+                            heroSectionFilter === 'home'
+                              ? 'bg-[#A36B3B]/20 text-[#E6C35C] border border-[#C28B57]/40 shadow'
+                              : 'text-[#8A8E96] hover:text-white'
+                          }`}
+                        >
+                          Home ({heroImagesList.filter(i => i.section === 'home').length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setHeroSectionFilter('who_we_are')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-sans font-bold transition-all cursor-pointer ${
+                            heroSectionFilter === 'who_we_are'
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow'
+                              : 'text-[#8A8E96] hover:text-white'
+                          }`}
+                        >
+                          Who We Are ({heroImagesList.filter(i => i.section === 'who_we_are').length})
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Image Cards Grid */}
+                    {(() => {
+                      const filtered = heroImagesList.filter(img => {
+                        if (heroSectionFilter === 'home') return img.section === 'home';
+                        if (heroSectionFilter === 'who_we_are') return img.section === 'who_we_are';
+                        return true;
+                      });
+
+                      if (filtered.length === 0) {
+                        return (
+                          <div className="py-12 text-center border border-dashed border-[#2D2A26] rounded-2xl px-4 bg-[#141416]/50">
+                            <ImageIcon className="h-10 w-10 text-[#8A8E96] mx-auto mb-2" />
+                            <p className="text-sm font-bold text-white font-cinzel">No hero images in this section</p>
+                            <p className="text-xs text-[#8A8E96] mt-1 font-sans">Upload a photo using the form above to add it to this section.</p>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                          {filtered.map((img) => {
+                            const isHome = img.section === 'home';
+                            const targetSection: HeroSection = isHome ? 'who_we_are' : 'home';
+
+                            return (
+                              <div
+                                key={img.id}
+                                className="bg-[#141416] border border-[#2D2A26] hover:border-[#C28B57]/50 rounded-2xl overflow-hidden flex flex-col transition-all shadow-md group"
+                              >
+                                {/* Thumbnail */}
+                                <div className="relative aspect-video bg-[#0C0D0E] overflow-hidden">
+                                  <img
+                                    src={img.imageUrl}
+                                    alt={img.altText || img.title || 'Hero'}
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                  {/* Section Badge */}
+                                  <div className="absolute top-3 left-3">
+                                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-sans font-bold tracking-wider uppercase shadow-md flex items-center gap-1.5 border ${
+                                      isHome
+                                        ? 'bg-[#1C1D21]/90 text-[#E6C35C] border-[#C28B57]/50 backdrop-blur-sm'
+                                        : 'bg-emerald-950/90 text-emerald-300 border-emerald-500/50 backdrop-blur-sm'
+                                    }`}>
+                                      {isHome ? <Building2 className="h-3 w-3" /> : <Users className="h-3 w-3" />}
+                                      <span>{isHome ? 'HOME HERO' : 'WHO WE ARE HERO'}</span>
+                                    </span>
+                                  </div>
+
+                                  {/* External View Link */}
+                                  <a
+                                    href={img.imageUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="absolute top-3 right-3 p-1.5 rounded-lg bg-black/60 text-[#D5C9B8] hover:text-white backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                    title="Open full-resolution image in new tab"
+                                  >
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                  </a>
+                                </div>
+
+                                {/* Content Info */}
+                                <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+                                  <div>
+                                    <h4 className="text-xs font-bold text-white line-clamp-1 font-cinzel">
+                                      {img.title || 'Untitled Hero Image'}
+                                    </h4>
+                                    <p className="text-[11px] text-[#D5C9B8] mt-1 line-clamp-2 font-sans">
+                                      {img.altText || 'No descriptive alt text'}
+                                    </p>
+                                    <p className="text-[9px] font-sans text-[#8A8E96] mt-2 truncate">
+                                      {img.imageUrl}
+                                    </p>
+                                  </div>
+
+                                  {/* Actions */}
+                                  <div className="pt-3 border-t border-[#2D2A26] flex items-center justify-between gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSwitchHeroSection(img, targetSection)}
+                                      className={`px-3 py-1.5 rounded-lg text-[10px] font-sans font-bold tracking-wider uppercase transition-all cursor-pointer border flex items-center gap-1.5 ${
+                                        isHome
+                                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25'
+                                          : 'bg-[#A36B3B]/15 text-[#E6C35C] border-[#C28B57]/30 hover:bg-[#A36B3B]/25'
+                                      }`}
+                                      title={`Move this image to ${isHome ? 'Who We Are' : 'Home'}`}
+                                    >
+                                      <RefreshCw className="h-3 w-3" />
+                                      <span>Move to {isHome ? 'Who We Are' : 'Home'}</span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteHeroImage(img)}
+                                      disabled={deletingHeroId === img.id}
+                                      className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-all cursor-pointer disabled:opacity-50"
+                                      title="Delete image from collection"
+                                    >
+                                      {deletingHeroId === img.id ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+
               {/* Site Settings Tab */}
               {activeSubTab === 'settings' && (
-                <div className="bg-charcoal/45 border border-midnight-blue rounded-2xl p-6 sm:p-8">
-                  <div className="flex items-center gap-2 mb-6 border-b border-midnight-blue pb-4">
-                    <Settings className="h-5 w-5 text-cci-gold-400" />
-                    <h3 className="font-display font-bold text-lg text-white">
+                <div className="bg-[#1C1D21] border border-[#2D2A26] rounded-2xl p-6 sm:p-8">
+                  <div className="flex items-center gap-2 mb-6 border-b border-[#2D2A26] pb-4">
+                    <Settings className="h-5 w-5 text-[#C28B57]" />
+                    <h3 className="font-cinzel font-bold text-lg text-white">
                       Edit Site Preferences & Branding
                     </h3>
                   </div>
@@ -5101,7 +5928,7 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                   <form onSubmit={handleSaveSettings} className="space-y-6">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                        <label className="block text-[10px] font-sans uppercase tracking-wider text-[#8A8E96] font-semibold mb-1.5">
                           Church Name
                         </label>
                         <input
@@ -5109,12 +5936,12 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                           required
                           value={churchNameSetting}
                           onChange={(e) => setChurchNameSetting(e.target.value)}
-                          className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                          className="w-full bg-[#141416] border border-[#332F2A] focus:border-[#C28B57] rounded-xl py-3 px-4 text-xs font-sans text-white placeholder-[#8A8E96] focus:outline-none transition-all"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                        <label className="block text-[10px] font-sans uppercase tracking-wider text-[#8A8E96] font-semibold mb-1.5">
                           Head / Resident Pastor
                         </label>
                         <input
@@ -5122,13 +5949,13 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                           required
                           value={residentPastorSetting}
                           onChange={(e) => setResidentPastorSetting(e.target.value)}
-                          className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                          className="w-full bg-[#141416] border border-[#332F2A] focus:border-[#C28B57] rounded-xl py-3 px-4 text-xs font-sans text-white placeholder-[#8A8E96] focus:outline-none transition-all"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                      <label className="block text-[10px] font-sans uppercase tracking-wider text-[#8A8E96] font-semibold mb-1.5">
                         Resident Pastor Photo URL
                       </label>
                       <input
@@ -5136,13 +5963,13 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                         required
                         value={pastorPhotoSetting}
                         onChange={(e) => setPastorPhotoSetting(e.target.value)}
-                        className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                        className="w-full bg-[#141416] border border-[#332F2A] focus:border-[#C28B57] rounded-xl py-3 px-4 text-xs font-sans text-white placeholder-[#8A8E96] focus:outline-none transition-all"
                       />
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                        <label className="block text-[10px] font-sans uppercase tracking-wider text-[#8A8E96] font-semibold mb-1.5">
                           Contact Support Email
                         </label>
                         <input
@@ -5150,12 +5977,12 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                           required
                           value={contactEmailSetting}
                           onChange={(e) => setContactEmailSetting(e.target.value)}
-                          className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                          className="w-full bg-[#141416] border border-[#332F2A] focus:border-[#C28B57] rounded-xl py-3 px-4 text-xs font-sans text-white placeholder-[#8A8E96] focus:outline-none transition-all"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                        <label className="block text-[10px] font-sans uppercase tracking-wider text-[#8A8E96] font-semibold mb-1.5">
                           Contact Phone Number
                         </label>
                         <input
@@ -5163,14 +5990,14 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
                           required
                           value={contactPhoneSetting}
                           onChange={(e) => setContactPhoneSetting(e.target.value)}
-                          className="w-full bg-rich-black/95 border border-midnight-blue focus:border-cci-gold-500 rounded-xl py-3 px-4 text-xs text-white placeholder-medium-gray focus:outline-none transition-all"
+                          className="w-full bg-[#141416] border border-[#332F2A] focus:border-[#C28B57] rounded-xl py-3 px-4 text-xs font-sans text-white placeholder-[#8A8E96] focus:outline-none transition-all"
                         />
                       </div>
                     </div>
 
                     <button
                       type="submit"
-                      className="py-2.5 px-6 rounded-xl bg-gradient-to-r from-royal-blue to-electric-blue text-xs font-bold uppercase tracking-wider text-white hover:opacity-95 transition-all flex items-center gap-1.5 shadow-md"
+                      className="py-2.5 px-6 rounded-xl bg-gradient-to-r from-[#A36B3B] to-[#C28B57] hover:from-[#8D5A30] hover:to-[#A36B3B] text-xs font-bold font-sans uppercase tracking-wider text-white transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
                     >
                       <CheckCircle2 className="h-4 w-4" /> Save Configuration
                     </button>
@@ -5180,28 +6007,28 @@ CREATE POLICY "Allow all operations for publications" ON public.publications FOR
 
               {/* SQL setup helper tab */}
               {activeSubTab === 'database' && (
-                <div className="bg-charcoal/45 border border-midnight-blue rounded-2xl p-6">
-                  <div className="flex justify-between items-center mb-4 border-b border-midnight-blue pb-4">
+                <div className="bg-[#1C1D21] border border-[#2D2A26] rounded-2xl p-6">
+                  <div className="flex justify-between items-center mb-4 border-b border-[#2D2A26] pb-4">
                     <div>
-                      <h4 className="font-display font-bold text-lg text-white flex items-center gap-2">
-                        <Database className="h-5 w-5 text-cci-gold-400" />
+                      <h4 className="font-cinzel font-bold text-lg text-white flex items-center gap-2">
+                        <Database className="h-5 w-5 text-[#C28B57]" />
                         Supabase PostgreSQL SQL Script
                       </h4>
-                      <p className="text-xs text-light-gray mt-1">
+                      <p className="text-xs font-sans text-[#D5C9B8] mt-1">
                         Run this script in your Supabase SQL Editor to instantly provision all required tables.
                       </p>
                     </div>
                     <button
                       onClick={copyToClipboard}
-                      className="py-2 px-4 rounded-xl bg-midnight-blue hover:bg-midnight-blue/80 border border-electric-blue/20 text-xs font-mono text-soft-white flex items-center gap-1.5 transition-all shrink-0"
+                      className="py-2 px-4 rounded-xl bg-[#222326] hover:bg-[#2D2A26] border border-[#2D2A26] text-xs font-sans font-semibold text-white flex items-center gap-1.5 transition-all shrink-0 cursor-pointer"
                     >
-                      <Clipboard className="h-4 w-4" />
+                      <Clipboard className="h-4 w-4 text-[#C28B57]" />
                       <span>COPY SQL SCRIPT</span>
                     </button>
                   </div>
 
                   <div className="relative">
-                    <pre className="bg-rich-black/90 p-5 rounded-2xl border border-midnight-blue text-left font-mono text-[11px] text-emerald-400/90 max-h-[450px] overflow-y-auto overflow-x-auto whitespace-pre select-all leading-relaxed">
+                    <pre className="bg-[#141416] p-5 rounded-2xl border border-[#2D2A26] text-left font-mono text-[11px] text-emerald-400/90 max-h-[450px] overflow-y-auto overflow-x-auto whitespace-pre select-all leading-relaxed">
                       {sqlSetupScript}
                     </pre>
                   </div>

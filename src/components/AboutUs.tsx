@@ -1,11 +1,113 @@
+import { useState, useEffect } from 'react';
 import { Heart, Users, BookOpen, MapPin, Calendar } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
+import { supabase, isSupabaseConfigured } from '../supabase';
+import { DEFAULT_WHO_WE_ARE_HERO_IMAGES } from '../data';
+import { HeroImage } from '../types';
 
 interface AboutUsProps {
   onNavigate?: (tab: string) => void;
 }
 
 export default function AboutUs({ onNavigate }: AboutUsProps) {
+  // Who We Are Hero Images State (Queries strictly section = 'who_we_are')
+  const [whoWeAreImages, setWhoWeAreImages] = useState<HeroImage[]>(() => {
+    try {
+      const cached = localStorage.getItem('gec_hero_images_catalog');
+      if (cached) {
+        const parsed = JSON.parse(cached) as HeroImage[];
+        const filtered = parsed.filter(item => item.section === 'who_we_are');
+        if (filtered.length > 0) return filtered;
+      }
+    } catch {}
+    return DEFAULT_WHO_WE_ARE_HERO_IMAGES;
+  });
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchWhoWeAreImages = async () => {
+      try {
+        let loaded: HeroImage[] = [];
+
+        // 1. Supabase Query Level: Query ONLY records where section = 'who_we_are'
+        if (isSupabaseConfigured && supabase) {
+          try {
+            const { data, error } = await supabase
+              .from('hero_images')
+              .select('*')
+              .eq('section', 'who_we_are')
+              .order('display_order', { ascending: true });
+
+            if (!error && data && data.length > 0) {
+              loaded = data.map((item: any) => ({
+                id: item.id,
+                section: 'who_we_are',
+                imageUrl: item.image_url,
+                title: item.title,
+                altText: item.alt_text || item.title,
+                displayOrder: item.display_order ?? 0,
+              }));
+            }
+          } catch (dbErr) {
+            console.warn('Could not query who_we_are hero images from Supabase:', dbErr);
+          }
+        }
+
+        // 2. Client-side localStorage cache check
+        if (loaded.length === 0) {
+          try {
+            const cached = localStorage.getItem('gec_hero_images_catalog');
+            if (cached) {
+              const parsed = JSON.parse(cached) as HeroImage[];
+              const filtered = parsed.filter(item => item.section === 'who_we_are');
+              if (filtered.length > 0) {
+                loaded = filtered;
+              }
+            }
+          } catch {}
+        }
+
+        // 3. Fallback: Dedicated Who We Are default catalog (Contains group 1.jpg, NEVER home worship photos)
+        if (loaded.length === 0) {
+          loaded = DEFAULT_WHO_WE_ARE_HERO_IMAGES;
+        }
+
+        if (isMounted && loaded.length > 0) {
+          setWhoWeAreImages(loaded);
+          setCurrentImageIndex(0);
+        }
+      } catch (err) {
+        console.warn('Error loading who_we_are hero images:', err);
+        if (isMounted) {
+          setWhoWeAreImages(DEFAULT_WHO_WE_ARE_HERO_IMAGES);
+        }
+      }
+    };
+
+    fetchWhoWeAreImages();
+
+    // Listen for updates from Admin CMS
+    window.addEventListener('gec_hero_images_updated', fetchWhoWeAreImages);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('gec_hero_images_updated', fetchWhoWeAreImages);
+    };
+  }, []);
+
+  // Smooth rotation if multiple Who We Are hero images are present
+  useEffect(() => {
+    if (whoWeAreImages.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentImageIndex(prev => (prev + 1) % whoWeAreImages.length);
+    }, 7500);
+    return () => clearInterval(interval);
+  }, [whoWeAreImages.length]);
+
+  const activeHeroImage = whoWeAreImages[currentImageIndex] || whoWeAreImages[0] || DEFAULT_WHO_WE_ARE_HERO_IMAGES[0];
+
   const coreValues = [
     {
       title: 'Belong',
@@ -58,9 +160,10 @@ export default function AboutUs({ onNavigate }: AboutUsProps) {
         {/* Full-bleed background image with watermark cropped out & dark blue/black clarity gradients */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           <img
-            src="https://hnunflpzqxkwkzjhnbpz.supabase.co/storage/v1/object/public/hero-images/group%201.jpg"
-            alt="God's Edifice Church Family"
-            className="w-full h-full object-cover object-[center_60%] scale-[1.55] sm:scale-[1.5] -translate-y-[20%] origin-center filter brightness-[0.92] contrast-[1.08] transition-transform duration-700"
+            key={activeHeroImage.id || activeHeroImage.imageUrl}
+            src={activeHeroImage.imageUrl}
+            alt={activeHeroImage.altText || activeHeroImage.title || "God's Edifice Church Family"}
+            className="w-full h-full object-cover object-[center_60%] scale-[1.55] sm:scale-[1.5] -translate-y-[20%] origin-center filter brightness-[0.92] contrast-[1.08] transition-opacity duration-1000"
             referrerPolicy="no-referrer"
           />
           {/* Subtle dark blue to black gradient overlays maximizing picture visibility while ensuring readability */}

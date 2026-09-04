@@ -1,4 +1,4 @@
-import { ChurchEvent, Teaching, Publication, Branch, GalleryItem, Song } from './types';
+import { ChurchEvent, Teaching, Publication, Branch, GalleryItem, Song, HeroImage } from './types';
 import edificeConferenceFlyer from './assets/images/edifice-conference-2026.jpg';
 
 export const crossworshipSongsCatalog: Song[] = [];
@@ -158,4 +158,66 @@ export const galleryItems: GalleryItem[] = [
     imageUrl: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=800&auto=format&fit=crop',
     date: '2026-06-07'
   }
+];
+
+export const DEFAULT_HOME_HERO_IMAGES: HeroImage[] = [
+  {
+    id: 'hero-home-1',
+    section: 'home',
+    imageUrl: 'https://hnunflpzqxkwkzjhnbpz.supabase.co/storage/v1/object/public/hero-images/0U0A0972.JPG',
+    title: "God's Edifice Church Worship",
+    altText: "God's Edifice Church Worship Atmosphere",
+    displayOrder: 1,
+  },
+  {
+    id: 'hero-home-2',
+    section: 'home',
+    imageUrl: 'https://hnunflpzqxkwkzjhnbpz.supabase.co/storage/v1/object/public/hero-images/0U0A1011.JPG',
+    title: "Crossworship Choir",
+    altText: "Crossworship Choir Ministration",
+    displayOrder: 2,
+  },
+  {
+    id: 'hero-home-3',
+    section: 'home',
+    imageUrl: 'https://hnunflpzqxkwkzjhnbpz.supabase.co/storage/v1/object/public/hero-images/0U0A1287.JPG',
+    title: "God's Edifice Ministry",
+    altText: "God's Edifice Church Ministry Atmosphere",
+    displayOrder: 3,
+  },
+  {
+    id: 'hero-home-4',
+    section: 'home',
+    imageUrl: 'https://hnunflpzqxkwkzjhnbpz.supabase.co/storage/v1/object/public/hero-images/0U0A1537.JPG',
+    title: "The Word Exaltation",
+    altText: "Word Exaltation and Preaching",
+    displayOrder: 4,
+  },
+  {
+    id: 'hero-home-5',
+    section: 'home',
+    imageUrl: 'https://hnunflpzqxkwkzjhnbpz.supabase.co/storage/v1/object/public/hero-images/0U0A1540.JPG',
+    title: "Congregation Praising God",
+    altText: "Congregation Praising God in Joy",
+    displayOrder: 5,
+  },
+  {
+    id: 'hero-home-6',
+    section: 'home',
+    imageUrl: 'https://hnunflpzqxkwkzjhnbpz.supabase.co/storage/v1/object/public/hero-images/0U0A1571.JPG',
+    title: "Sanctuary Devotion",
+    altText: "Sanctuary Prayer and Devotion",
+    displayOrder: 6,
+  },
+];
+
+export const DEFAULT_WHO_WE_ARE_HERO_IMAGES: HeroImage[] = [
+  {
+    id: 'hero-who-we-are-1',
+    section: 'who_we_are',
+    imageUrl: 'https://hnunflpzqxkwkzjhnbpz.supabase.co/storage/v1/object/public/hero-images/group%201.jpg',
+    title: "God's Edifice Church Family",
+    altText: "God's Edifice Church Family Gathering",
+    displayOrder: 1,
+  },
 ];

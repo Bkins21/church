@@ -119,3 +119,15 @@ export interface Subscriber {
   subscribedAt: string;
 }
 
+export type HeroSection = 'home' | 'who_we_are';
+
+export interface HeroImage {
+  id: string;
+  section: HeroSection;
+  imageUrl: string;
+  title?: string;
+  altText?: string;
+  displayOrder?: number;
+  createdAt?: string;
+}
+

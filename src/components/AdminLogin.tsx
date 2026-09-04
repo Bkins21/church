@@ -95,17 +95,18 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
   };
 
   return (
-    <div className="min-h-screen bg-[#090D16] text-[#F8FAFC] flex flex-col justify-center items-center px-4 relative overflow-hidden" id="admin-login-page">
-      {/* Subtle Background Glows */}
-      <div className="absolute -top-[250px] left-1/2 -translate-x-1/2 w-[550px] h-[550px] bg-blue-600/15 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-100px] right-10 w-[350px] h-[350px] bg-amber-500/10 rounded-full blur-[100px] pointer-events-none" />
+    <div className="min-h-screen bg-[#141416] text-[#F7F5F0] flex flex-col justify-center items-center px-4 relative overflow-hidden" id="admin-login-page">
+      {/* Subtle Warm Atmospheric Glows matching Hero/Footer */}
+      <div className="absolute -top-[250px] left-1/2 -translate-x-1/2 w-[550px] h-[550px] bg-[#A36B3B]/15 rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute bottom-[-100px] right-10 w-[380px] h-[380px] bg-[#C28B57]/10 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute top-1/3 left-10 w-[300px] h-[300px] bg-[#E6C35C]/5 rounded-full blur-[100px] pointer-events-none" />
 
-      {/* Main Container */}
+      {/* Main Card Container */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: 'easeOut' }}
-        className="w-full max-w-md bg-[#131B2E] border-2 border-[#2A3756] rounded-3xl p-8 sm:p-10 shadow-2xl relative z-10"
+        className="w-full max-w-md bg-[#1C1D21] border border-[#2D2A26] rounded-3xl p-8 sm:p-10 shadow-2xl shadow-black/60 relative z-10"
         id="login-card-container"
       >
         {/* Church Logo & Branding at the top */}
@@ -113,10 +114,10 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
           <motion.div 
             whileHover={{ scale: 1.05 }}
             onClick={onNavigateHome}
-            className="w-16 h-16 text-white cursor-pointer flex items-center justify-center bg-[#1E293B] border border-[#38BDF8]/40 rounded-2xl p-2.5 shadow-lg transition-all"
+            className="w-16 h-16 text-[#C28B57] cursor-pointer flex items-center justify-center bg-[#141416] border border-[#3A332B] hover:border-[#C28B57]/60 rounded-2xl p-3 shadow-lg shadow-black/40 transition-all"
             id="login-logo-wrapper"
           >
-            <svg viewBox="920 620 650 750" className="w-full h-full text-white" fill="currentColor">
+            <svg viewBox="920 620 650 750" className="w-full h-full" fill="currentColor">
               <path d="M1085.557,1321.922l25.142,0l0,-490.404l-31.046,22.771l5.904,467.633Zm49.213,24.071l-72.983,0l-6.358,-503.792l79.342,-58.183l0,561.975Z" />
               <path d="M1395.037,1321.922l25.146,0l5.9,-467.633l-31.046,-22.771l0,490.404Zm48.908,24.071l-72.979,0l0,-561.975l79.342,58.183l-6.362,503.792Z" />
               <path d="M1354.935,1345.993l-201.308,0l0,-596.846l97.483,-107.225l103.825,103.825l0,528.496l-119.129,0l0,-454.513l24.071,0l0,430.442l70.987,0l0,-494.454l-78.925,-78.925l-74.242,81.658l0,563.471l153.167,0l0,-24.763l24.071,0l0,48.833Z" />
@@ -125,21 +126,21 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
             </svg>
           </motion.div>
           
-          <h2 className="font-display font-black text-xl tracking-wider text-white uppercase mt-4" id="login-church-name">
+          <h2 className="font-cinzel font-bold text-xl tracking-wide text-white uppercase mt-4" id="login-church-name">
             God's Edifice Church
           </h2>
-          <p className="text-xs font-mono font-bold tracking-widest text-[#38BDF8] uppercase mt-1">
+          <p className="text-[11px] font-sans font-semibold tracking-[0.25em] text-[#C28B57] uppercase mt-1">
             Media Administration
           </p>
         </div>
 
         {/* Heading */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold font-church text-center text-white" id="login-heading">
+          <h1 className="text-2xl font-bold font-cinzel text-center text-white" id="login-heading">
             Admin Portal Access
           </h1>
-          <p className="text-sm font-medium text-[#CBD5E1] text-center mt-1.5">
-            Authenticate to access live registrations, media uploads, and analytics.
+          <p className="text-sm font-sans text-[#D5C9B8] text-center mt-1.5 leading-relaxed">
+            Authenticate to manage registrations, media content, and analytics.
           </p>
         </div>
 
@@ -147,11 +148,11 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
         <form onSubmit={handleSubmit} className="space-y-5" id="admin-login-form">
           {/* Email Input */}
           <div className="space-y-1.5">
-            <label className="block text-xs font-mono uppercase tracking-wider text-[#E2E8F0] font-semibold">
+            <label className="block text-xs font-sans uppercase tracking-wider text-[#D5C9B8] font-semibold">
               Email Address
             </label>
             <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#94A3B8]">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8A8E96]">
                 <Mail className="h-4 w-4" />
               </span>
               <input
@@ -160,7 +161,7 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="admin@gacedifice.com"
-                className="w-full bg-[#0A0E1A] border-2 border-[#2A3756] focus:border-[#38BDF8] rounded-2xl py-3.5 pl-11 pr-4 text-sm font-medium text-white placeholder-[#64748B] focus:outline-none transition-all duration-200"
+                className="w-full bg-[#141416] border border-[#332F2A] focus:border-[#C28B57] rounded-2xl py-3.5 pl-11 pr-4 text-sm font-sans text-white placeholder-[#8A8E96] focus:outline-none transition-all duration-200"
                 id="login-email-input"
               />
             </div>
@@ -168,11 +169,11 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
 
           {/* Password Input */}
           <div className="space-y-1.5">
-            <label className="block text-xs font-mono uppercase tracking-wider text-[#E2E8F0] font-semibold">
+            <label className="block text-xs font-sans uppercase tracking-wider text-[#D5C9B8] font-semibold">
               Password
             </label>
             <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#94A3B8]">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8A8E96]">
                 <Lock className="h-4 w-4" />
               </span>
               <input
@@ -181,13 +182,13 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-[#0A0E1A] border-2 border-[#2A3756] focus:border-[#38BDF8] rounded-2xl py-3.5 pl-11 pr-11 text-sm font-medium text-white placeholder-[#64748B] focus:outline-none transition-all duration-200"
+                className="w-full bg-[#141416] border border-[#332F2A] focus:border-[#C28B57] rounded-2xl py-3.5 pl-11 pr-11 text-sm font-sans text-white placeholder-[#8A8E96] focus:outline-none transition-all duration-200"
                 id="login-password-input"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-[#94A3B8] hover:text-white transition-colors cursor-pointer"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-[#8A8E96] hover:text-white transition-colors cursor-pointer"
                 id="login-toggle-password"
                 tabIndex={-1}
               >
@@ -201,7 +202,7 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
             <motion.div 
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="p-3.5 bg-emerald-950/80 border-2 border-emerald-500/50 rounded-2xl flex items-start gap-2.5 text-xs text-emerald-200 font-mono font-medium"
+              className="p-3.5 bg-emerald-950/80 border border-emerald-500/50 rounded-2xl flex items-start gap-2.5 text-xs text-emerald-200 font-sans font-medium"
               id="login-success-display"
             >
               <span className="leading-relaxed">{successMessage}</span>
@@ -213,7 +214,7 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
             <motion.div 
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="p-3.5 bg-red-950/80 border-2 border-red-500/50 rounded-2xl flex items-start gap-2.5 text-xs text-red-200 font-mono font-medium"
+              className="p-3.5 bg-red-950/80 border border-red-500/50 rounded-2xl flex items-start gap-2.5 text-xs text-red-200 font-sans font-medium"
               id="login-error-display"
             >
               <AlertCircle className="h-4.5 w-4.5 shrink-0 mt-0.5 text-red-400" />
@@ -225,13 +226,13 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-blue-600 to-sky-500 hover:from-sky-500 hover:to-blue-600 font-display font-bold text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all duration-300 text-white disabled:opacity-50 shadow-lg shadow-blue-500/25 cursor-pointer"
+            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[#A36B3B] to-[#C28B57] hover:from-[#8D5A30] hover:to-[#A36B3B] font-sans font-bold text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all duration-300 text-white disabled:opacity-50 shadow-lg shadow-[#A36B3B]/20 cursor-pointer"
             id="login-submit-button"
           >
             {loading ? (
               <>
                 <Loader2 className="h-4.5 w-4.5 animate-spin text-white" />
-                <span>{authMode === 'login' ? 'Signing In...' : 'Registering Account...'}</span>
+                <span>{authMode === 'login' ? 'Signing In...' : 'Creating Account...'}</span>
               </>
             ) : (
               <span>{authMode === 'login' ? 'Sign In to Admin Portal' : 'Create Admin Account'}</span>
@@ -240,7 +241,7 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
         </form>
 
         {/* Toggle Mode */}
-        <div className="mt-4 text-center">
+        <div className="mt-5 text-center">
           <button
             type="button"
             onClick={() => {
@@ -248,11 +249,11 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
               setError('');
               setSuccessMessage('');
             }}
-            className="text-xs text-sky-400 hover:text-sky-300 font-mono transition-colors cursor-pointer"
+            className="text-xs text-[#C28B57] hover:text-[#E6C35C] font-sans transition-colors cursor-pointer"
             id="login-toggle-mode-button"
           >
             {authMode === 'login'
-              ? "Don't have an admin auth user yet? Register account"
+              ? "Need an admin account? Register credentials"
               : "Already have an admin account? Sign In"}
           </button>
         </div>
@@ -261,16 +262,16 @@ export default function AdminLogin({ onLoginSuccess, onNavigateHome }: AdminLogi
         <div className="mt-6 text-center">
           <button
             onClick={onNavigateHome}
-            className="text-xs text-[#CBD5E1] hover:text-white transition-colors font-mono uppercase tracking-widest cursor-pointer font-semibold"
+            className="text-xs text-[#8A8E96] hover:text-white transition-colors font-sans uppercase tracking-widest cursor-pointer font-semibold"
             id="login-back-home-button"
           >
-            ← Back to Website
+            ← Back to Public Website
           </button>
         </div>
       </motion.div>
 
       {/* Footer Branding */}
-      <p className="absolute bottom-6 text-xs font-mono tracking-widest text-[#94A3B8] text-center select-none">
+      <p className="absolute bottom-6 text-xs font-sans tracking-widest text-[#8A8E96]/70 text-center select-none">
         © {new Date().getFullYear()} GOD'S EDIFICE CHURCH • MEDIA ADMINISTRATION
       </p>
     </div>
