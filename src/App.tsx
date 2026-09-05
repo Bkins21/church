@@ -384,7 +384,7 @@ export default function App() {
 
   return (
     <div 
-      className={`min-h-screen ${activeTab === 'songs' ? 'bg-[#180E07]' : 'bg-[#F7F5F0]'} text-[#141416] flex flex-col justify-between w-full max-w-full overflow-x-hidden transition-colors duration-300`} 
+      className="min-h-screen bg-[#F7F5F0] text-[#141416] flex flex-col justify-between w-full max-w-full overflow-x-hidden" 
       id="app-root-container"
     >
       
@@ -495,21 +495,7 @@ export default function App() {
             whileHover={{ y: -4 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            style={
-              activeTab === 'songs'
-                ? {
-                    background: '#FFC801',
-                    borderColor: '#FFC801',
-                    color: '#172836',
-                    boxShadow: '0 10px 25px rgba(255, 200, 1, 0.4)'
-                  }
-                : undefined
-            }
-            className={`fixed bottom-6 right-6 z-50 p-3.5 rounded-full shadow-xl transition-all duration-300 cursor-pointer flex items-center justify-center border ${
-              activeTab === 'songs'
-                ? 'hover:bg-[#FFC801]/90 text-[#172836]'
-                : 'bg-[#A36B3B] hover:bg-[#8D5A30] text-white shadow-[#A36B3B]/25 border-[#C28B57]/30'
-            }`}
+            className="fixed bottom-6 right-6 z-50 p-3.5 rounded-full shadow-xl transition-all duration-300 cursor-pointer flex items-center justify-center border bg-[#A36B3B] hover:bg-[#8D5A30] text-white shadow-[#A36B3B]/25 border-[#C28B57]/30"
             id="floating-back-to-top"
             title="Scroll to top"
           >
